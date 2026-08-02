@@ -1,0 +1,89 @@
+SyncMe — START HERE
+Copyright © 2026 Bradford Lotriet (brad@web-zilla.co.za)
+Free to use — keep this credit. See LICENSE.txt
+================================
+
+WHAT THIS IS
+  SyncMe backs up source files/folders to this Backup PC using restic.
+  It is a simple file-level backup tool (LAN and/or Tailscale, local disk,
+  NAS, or cloud via rclone — e.g. OneDrive OAuth).
+  It is NOT bare-metal imaging, antivirus, or ransomware protection.
+  You use a web console in your browser. No database, no PHP.
+
+WHERE TO INSTALL
+  Install SyncMe ONLY on the Backup PC (Windows 10/11 PC or Windows Server).
+  Source desktops only need a shared folder (+ Tailscale if offsite).
+  You do NOT run SyncMe on every PC.
+
+USER GUIDE
+  For the full guide (exit codes, restore, email, limitations, troubleshooting):
+    open UserGuide.html in this folder
+  SyncMe.bat asks whether to open the guide before starting the console.
+
+CUSTOMER PACKAGE (minimal)
+  Hand customers ONLY: SyncMe-Setup.cmd + SyncMe-Payload.zip (+ START-HERE).
+  Build with: .\Build-SyncMeSetup.ps1
+  Setup unpacks into C:\SyncMe and launches the wizard. Existing Config.ps1 is kept.
+
+UPDATE FROM THIS PROJECT (technicians)
+  On the Backup PC, from THIS SyncMe folder:
+    .\Deploy-SyncMe.ps1 -Target C:\SyncMe
+  That keeps your existing Config.ps1 and copies tools\restic.exe when present.
+  Then run SyncMe.bat.
+  Do NOT copy from D:\Projects\Scripts\Backup-OfficeToHome (stale).
+
+WINDOWS SERVER (customer / unattended)
+  1. Use a dedicated Windows account for SyncMe (e.g. DOMAIN\syncme-backup).
+  2. Log on as that account, run setup + wizard under it.
+  3. In Schedule, keep "Run whether logged on or not" checked and enter that
+     account's Windows password (stored in Task Scheduler).
+  4. Credential Manager secrets (restic / share / SMTP) must be for the SAME account.
+  5. Console is http://127.0.0.1:17845 only — manage via RDP (not a LAN website).
+  6. Prefer email notifications; toasts are off by default.
+  7. One backup set per user is supported — stagger run times; Disk 2 paths must be
+     dedicated subfolders with a FIXED drive letter (never a drive root like E:\).
+  8. After reboot, confirm overnight jobs still run WITHOUT staying logged on.
+
+BEFORE YOU BEGIN (once)
+  1. Share the folder(s) on the source PC so this PC can open \\source\share.
+  2. LAN only: ensure this Backup PC can reach the share by UNC.
+     Offsite: install Tailscale on source + Backup PC.
+  3. restic is installed by the wizard if missing (or install yourself).
+  4. For OneDrive/Google Drive destinations: install rclone and run OAuth from the console.
+
+RUN
+  Double-click SyncMe.bat
+  Optionally open the User Guide when prompted.
+  Browser opens http://127.0.0.1:17845/
+  Keep the SyncMe window open while you use the console.
+  Close that window when finished with the UI.
+
+SCHEDULED BACKUPS
+  After setup, Windows Task Scheduler runs backups (default: whether logged on or not).
+  You do NOT need to leave SyncMe or the browser open overnight.
+
+FIRST TIME
+  SyncMe opens the setup wizard until you finish Apply once.
+  Wizard covers: set name, restic, LAN/Tailscale + folders, destination,
+  passwords, email (optional), schedule → Task Scheduler.
+
+MULTIPLE SETS / FOLDERS
+  One backup set can include several UNC folders.
+  Use "Add backup set" for another PC or user (separate schedule/destination).
+  The SyncMe-Watchdog task checks ALL sets for overdue last-success stamps.
+
+DAY TO DAY
+  SyncMe.bat → Dashboard (or SyncMe-Menu.bat to open management view)
+  Use Restore workspace on Operations when you need files back.
+
+DO NOT
+  Edit Config.ps1 unless a technician asks you to.
+  Put passwords in any text file.
+  Restore into the live restic repository folder.
+  Point Disk 2 ArchivePath at a drive root (SyncMe clears that folder before refresh).
+  Rely on SyncMe alone against ransomware — keep offline/immutable copies separately.
+
+NEED HELP
+  Open UserGuide.html or RecoveryChecklist.txt in this folder.
+  License / liability: LICENSE.txt
+  Contact: brad@web-zilla.co.za

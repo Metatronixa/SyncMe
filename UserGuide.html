@@ -1,0 +1,1405 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SyncMe — Complete User Guide</title>
+  <style>
+    :root {
+      --ink: #1c1c1c;
+      --muted: #555;
+      --line: #d8d8d4;
+      --bg: #f4f2ec;
+      --card: #fffcf7;
+      --accent: #0b6e4f;
+      --accent-soft: #e3f2ec;
+      --warn-bg: #fff6e5;
+      --warn-border: #d4a017;
+      --danger-bg: #fdecea;
+      --danger-border: #b00020;
+      --info-bg: #eaf2fb;
+      --info-border: #2a6fbb;
+      --code-bg: #1e1e1e;
+      --code-fg: #e8e8e8;
+      --step: #0b6e4f;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse at top left, #efe8d8 0%, transparent 50%),
+        linear-gradient(180deg, #f7f5ef 0%, var(--bg) 100%);
+      line-height: 1.55;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+    header.hero {
+      border-bottom: 3px solid var(--accent);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    header.hero h1 {
+      font-size: clamp(1.8rem, 4vw, 2.4rem);
+      margin: 0 0 0.5rem;
+      letter-spacing: -0.02em;
+    }
+    header.hero p.lede {
+      font-size: 1.1rem;
+      color: var(--muted);
+      margin: 0;
+      max-width: 40em;
+    }
+    .meta {
+      margin-top: 1rem;
+      font-size: 0.95rem;
+      color: var(--muted);
+    }
+    nav.toc {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 2.5rem;
+    }
+    nav.toc h2 { margin: 0 0 0.75rem; font-size: 1.15rem; }
+    nav.toc ol { margin: 0; padding-left: 1.35rem; }
+    nav.toc li { margin: 0.25rem 0; }
+    nav.toc a { color: var(--accent); text-decoration: none; }
+    nav.toc a:hover { text-decoration: underline; }
+    section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 1.5rem 1.6rem 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+    section h2 {
+      margin: 0 0 0.75rem;
+      font-size: 1.45rem;
+      color: var(--accent);
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 0.5rem;
+    }
+    section h3 {
+      margin: 1.4rem 0 0.5rem;
+      font-size: 1.15rem;
+    }
+    section h4 {
+      margin: 1.1rem 0 0.4rem;
+      font-size: 1.02rem;
+    }
+    p { margin: 0.6rem 0; }
+    ul, ol { margin: 0.5rem 0 0.75rem; padding-left: 1.4rem; }
+    li { margin: 0.3rem 0; }
+    .step-num {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 0.8rem;
+      font-weight: 700;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      margin-right: 0.35rem;
+      vertical-align: middle;
+    }
+    .callout {
+      border-left: 4px solid var(--info-border);
+      background: var(--info-bg);
+      padding: 0.85rem 1rem;
+      margin: 1rem 0;
+      border-radius: 0 6px 6px 0;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 0.95rem;
+    }
+    .callout.warn {
+      border-left-color: var(--warn-border);
+      background: var(--warn-bg);
+    }
+    .callout.danger {
+      border-left-color: var(--danger-border);
+      background: var(--danger-bg);
+    }
+    .callout strong { display: block; margin-bottom: 0.25rem; }
+    pre, code {
+      font-family: Consolas, "Cascadia Mono", "Courier New", monospace;
+    }
+    code {
+      background: #eeeae2;
+      padding: 0.1rem 0.35rem;
+      border-radius: 3px;
+      font-size: 0.92em;
+    }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      padding: 1rem 1.1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.88rem;
+      line-height: 1.45;
+      margin: 0.75rem 0 1rem;
+    }
+    pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+      font-size: inherit;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 0.92rem;
+      margin: 0.75rem 0 1rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.65rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: var(--accent-soft); }
+    .diagram {
+      font-family: Consolas, monospace;
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 1rem 1.1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 0.85rem;
+      margin: 0.75rem 0 1rem;
+    }
+    .checklist label {
+      display: block;
+      margin: 0.35rem 0;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 0.95rem;
+    }
+    footer {
+      margin-top: 2rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+    .where {
+      display: inline-block;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      background: var(--accent-soft);
+      color: var(--accent);
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      margin-right: 0.35rem;
+    }
+    .where.a { background: #e8eef8; color: #1e4a8a; }
+    .where.b { background: var(--accent-soft); color: var(--accent); }
+    .where.both { background: #f0e8f8; color: #5a2d8a; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="hero">
+      <h1>SyncMe<br />Complete Step-by-Step User Guide</h1>
+      <p class="lede">
+        <strong>SyncMe</strong> — Copyright © 2026 Bradford Lotriet (<a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a>).
+        Free to use — keep this credit (see <code>LICENSE.txt</code>).
+        Simple <strong>file-level</strong> backup from source PCs to a Backup PC with restic (Disk 1).
+        Optional plain Disk 2 copy. LAN and/or Tailscale. Optional NAS or cloud (rclone / OneDrive OAuth).
+        Install SyncMe only on the Backup PC. Console: <code>SyncMe.bat</code> →
+        <code>http://127.0.0.1:17845/</code>. No PHP, no database.
+        Start with <code>START-HERE.txt</code> in the package.
+      </p>
+      <p class="meta">
+        Product: <code>SyncMe</code> &middot;
+        Open this file in any browser &middot;
+        Not bare-metal / antivirus / ransomware protection
+      </p>
+    </header>
+
+    <nav class="toc" aria-label="Table of contents">
+      <h2>Contents</h2>
+      <ol>
+        <li><a href="#overview">What this system does</a></li>
+        <li><a href="#limitations">Purpose, limitations &amp; liability</a></li>
+        <li><a href="#exit-codes">Backup results, exit codes &amp; file failures</a></li>
+        <li><a href="#logs">Logs &amp; reports</a></li>
+        <li><a href="#what-you-need">What you need before starting</a></li>
+        <li><a href="#glossary">Names and paths used in this guide</a></li>
+        <li><a href="#wizard"><strong>Recommended: Guided setup wizard</strong></a></li>
+        <li><a href="#menu">Management hub (SyncMe-Menu.bat)</a></li>
+        <li><a href="#shadow">Shadow Copies for open Office files</a></li>
+        <li><a href="#email">Email notifications (SMTP)</a></li>
+        <li><a href="#repocheck">Repository integrity checks</a></li>
+        <li><a href="#manual">Manual setup path (optional)</a></li>
+        <li><a href="#step1">Step 1 — Install and connect Tailscale (both PCs)</a></li>
+        <li><a href="#step2">Step 2 — Prepare Location A (office): user + folder share</a></li>
+        <li><a href="#step3">Step 3 — Prepare Location B (home): disks + folders</a></li>
+        <li><a href="#step4">Step 4 — Install restic on Location B</a></li>
+        <li><a href="#step5">Step 5 — Copy the backup scripts to Location B</a></li>
+        <li><a href="#step6">Step 6 — Verify you can open the office share from home</a></li>
+        <li><a href="#step7">Step 7 — Store passwords in Windows Credential Manager</a></li>
+        <li><a href="#step8">Step 8 — Initialize the restic repository (once)</a></li>
+        <li><a href="#step9">Step 9 — Edit Config.ps1</a></li>
+        <li><a href="#step10">Step 10 — Optional: install BurntToast notifications</a></li>
+        <li><a href="#step11">Step 11 — Smoke test with a small folder</a></li>
+        <li><a href="#step12">Step 12 — First full backup (~1.8 TB)</a></li>
+        <li><a href="#step13">Step 13 — Force the Disk2 archive once</a></li>
+        <li><a href="#step14">Step 14 — Schedule the daily automatic run</a></li>
+        <li><a href="#step15">Step 15 — Keep both PCs awake for the backup window</a></li>
+        <li><a href="#day-to-day">Day-to-day use</a></li>
+        <li><a href="#restore">How to restore files</a></li>
+        <li><a href="#switches">Script command-line switches</a></li>
+        <li><a href="#config-ref">Full Config.ps1 reference</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#checklist">Final checklist</a></li>
+      </ol>
+    </nav>
+
+    <!-- ========== OVERVIEW ========== -->
+    <section id="overview">
+      <h2>1. What this system does</h2>
+      <p>
+        Every day (once scheduled), your <strong>home PC</strong> reaches across Tailscale to the
+        <strong>office PC</strong>, reads the shared folders, and stores an incremental,
+        versioned backup in a <strong>restic</strong> repository on Disk 1 at home.
+      </p>
+      <p>
+        About every <strong>14 days</strong>, the same script also writes a plain, Explorer-readable
+        full copy of the latest backup onto Disk 2 at home (overwriting the previous Disk 2 copy).
+        That second disk is your safekeeping copy if something goes wrong with Disk 1.
+      </p>
+      <div class="diagram">Location A (Office)                    Location B (Home)
+==================                    =================
+  Source folders                         Disk 1: restic repo
+  e.g. D:\Data                           (versioned / incremental)
+       |                                        ^
+       |  Windows file share                    |
+       +-------- Tailscale (SMB) ---------------+
+                                                |
+                                                | every 14 days
+                                                v
+                                         Disk 2: plain full copy
+                                         (overwrite / browse in Explorer)
+
+  The PowerShell script ALWAYS runs on Location B.</div>
+      <div class="callout">
+        <strong>Important design choice</strong>
+        The job runs on home (B), not office (A). Home owns both backup disks, so after the network
+        pull finishes it can refresh Disk 2 locally without another long network transfer.
+      </div>
+      <h3>What &ldquo;incremental&rdquo; means here</h3>
+      <ul>
+        <li>The <strong>first</strong> run copies essentially everything (~1.8 TB). That takes a long time.</li>
+        <li>Later runs only send <strong>new or changed file content</strong>. Unchanged files are not re-uploaded.</li>
+        <li>restic keeps <strong>snapshots</strong> (points in time), so you can restore yesterday&rsquo;s version of a file even if it was overwritten or deleted at the office.</li>
+      </ul>
+    </section>
+
+    <!-- ========== LIMITATIONS ========== -->
+    <section id="limitations">
+      <h2>2. Purpose, limitations &amp; liability</h2>
+      <p><strong>SyncMe is meant to be a simple way to back up files</strong> — shared folders over LAN or Tailscale into a restic repository, with optional Disk 2 plain copy and optional cloud destinations (rclone OAuth for OneDrive / Google Drive).</p>
+      <h3>What SyncMe does</h3>
+      <ul>
+        <li>File/folder backup into a versioned restic repository (Disk 1).</li>
+        <li>Optional latest-files mirror on Disk 2.</li>
+        <li>HTML console for setup, schedule, restore, and cloud OAuth testing.</li>
+        <li>Email/toast notifications and basic repository integrity checks.</li>
+      </ul>
+      <h3>What SyncMe does <em>not</em> do</h3>
+      <ul>
+        <li><strong>Not bare-metal / full-disk imaging</strong> — it will not reinstall Windows or restore an entire system drive. Use a separate imaging tool (e.g. Acronis) for that.</li>
+        <li><strong>Not antivirus or ransomware protection</strong> — malware that encrypts source shares or backup disks can still destroy or encrypt data SyncMe can reach. Offline or immutable copies are your responsibility.</li>
+        <li><strong>Not a guarantee of complete backups</strong> — locked/unread files (restic exit 3), network drops, disk errors, or cloud throttling can leave gaps.</li>
+        <li><strong>Not a multi-tenant SaaS product</strong> — console binds to localhost only; you operate it on your Backup PC.</li>
+      </ul>
+      <div class="callout warn">
+        <strong>Ransomware &amp; liability</strong>
+        SyncMe cannot stop ransomware. If attackers encrypt your PCs, shares, or backup media, SyncMe and its author are not responsible for resulting loss.
+        See <code>LICENSE.txt</code>: software is provided AS IS; no warranty; liability excludes data loss, ransomware, malware, and related claims to the maximum extent permitted by law.
+        Contact: <a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a>
+      </div>
+    </section>
+
+    <!-- ========== EXIT CODES ========== -->
+    <section id="exit-codes">
+      <h2>3. Backup results, exit codes &amp; file failures</h2>
+      <h3>If a source file cannot be read</h3>
+      <p>
+        restic continues and still creates a <strong>snapshot</strong> of everything it could read.
+        Unreadable files are skipped. restic returns <strong>exit code 3</strong> (incomplete).
+        SyncMe logs this as a <strong>WARN</strong>, marks the run summary with <code>EXIT3</code>,
+        and (when otherwise successful) still runs prune/archive and updates the last-success stamp.
+        Check the log for which paths were skipped. Prefer Shadow Copies / OfficeAgent for open Office files.
+      </p>
+      <h3>If the backup stops halfway</h3>
+      <p>
+        Snapshots are committed only when the backup step finishes. A killed or crashed run does
+        <strong>not</strong> leave a half-finished snapshot you can restore. Chunks already stored
+        may remain; the next run deduplicates so unchanged content is not re-uploaded.
+        SyncMe uses a run lock so two backups do not overlap (stale locks clear after ~36 hours by default).
+      </p>
+      <h3>restic exit codes (as SyncMe treats them)</h3>
+      <table>
+        <thead><tr><th>Code</th><th>Meaning</th><th>What SyncMe does / warning</th></tr></thead>
+        <tbody>
+          <tr><td><code>0</code></td><td>Success</td><td>OK — snapshot complete.</td></tr>
+          <tr><td><code>1</code></td><td>Fatal error</td><td>Run <strong>FAILED</strong>; prune/archive skipped for that run.</td></tr>
+          <tr><td><code>2</code></td><td>Go runtime error</td><td>Run <strong>FAILED</strong>.</td></tr>
+          <tr><td><code>3</code></td><td>Incomplete — some source files unread</td><td><strong>WARN / EXIT3</strong> — snapshot often still usable; review skipped paths.</td></tr>
+          <tr><td><code>10</code></td><td>Repository does not exist</td><td><strong>FAILED</strong> — create/init the repo (wizard usually does this).</td></tr>
+          <tr><td><code>11</code></td><td>Repository already exists</td><td>Usually only during <code>init</code>; harmless if repo is already set up.</td></tr>
+          <tr><td><code>12</code></td><td>Wrong password</td><td><strong>FAILED</strong> — fix Credential Manager (Operations → Store password).</td></tr>
+          <tr><td><code>130</code></td><td>Interrupted (Ctrl+C / cancelled)</td><td>No new snapshot; next run continues with dedupe.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        SyncMe process exit is usually <code>0</code> on success (including EXIT3 and “already running” lock skip)
+        and <code>1</code> on hard failure. Email subjects use <code>STARTED</code>, <code>SUCCESS</code>,
+        <code>FAILED</code>, or <code>CRITICAL</code> (repository integrity check failure).
+      </p>
+    </section>
+
+    <!-- ========== LOGS ========== -->
+    <section id="logs">
+      <h2>4. Logs &amp; reports</h2>
+      <p>Each run writes artifacts under <code>Logs\</code> (often <code>Logs\sets\&lt;setId&gt;\</code>) and <code>Reports\</code>:</p>
+      <table>
+        <thead><tr><th>Artifact</th><th>What it is</th></tr></thead>
+        <tbody>
+          <tr><td><code>backup-YYYYMMDD-HHmmss.log</code></td><td>Human log lines: <code>[timestamp] [INFO|WARN|ERROR] message</code></td></tr>
+          <tr><td><code>restic-YYYYMMDD-HHmmss.jsonl</code></td><td>Raw restic <code>--json</code> lines (progress / summary)</td></tr>
+          <tr><td><code>Reports\backup-*.html</code></td><td>End-of-run HTML summary (also email attachment when enabled)</td></tr>
+          <tr><td><code>live-progress.json</code></td><td>Live UI progress only</td></tr>
+          <tr><td><code>last-success-utc.txt</code></td><td>Watchdog “overdue” stamp</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Anomalies such as EXIT3, shadow-copy fallback, or stale locks appear as WARN/ERROR text today —
+        not a separate machine event schema. Future log ingestion can parse these files; there is no SIEM exporter yet.
+      </p>
+    </section>
+
+    <!-- ========== WHAT YOU NEED ========== -->
+    <section id="what-you-need">
+      <h2>5. What you need before starting</h2>
+      <ul>
+        <li>Two Windows PCs (office = A, home = B).</li>
+        <li>Both PCs connected to the internet and able to install software.</li>
+        <li>A free <a href="https://tailscale.com/" target="_blank" rel="noopener">Tailscale</a> account (same account/login on both PCs, or same Tailnet).</li>
+        <li>At home: a primary HDD/SSD for the restic repo (Disk 1) with enough free space for the data plus restic overhead (plan for roughly the size of your data, often a bit less over time thanks to deduplication, but leave headroom — e.g. 2.5 TB+ free for 1.8 TB of data is safer).</li>
+        <li>At the Backup PC: space for Disk 1 (restic). Disk 2 (plain copy) is optional.</li>
+        <li>Administrator rights on both PCs (needed for creating users, shares, installing software, and optionally Task Scheduler options).</li>
+        <li>The <code>SyncMe</code> install folder from this project.</li>
+        <li>Time for the first seed backup (can be many hours or days depending on office upload speed).</li>
+      </ul>
+      <div class="callout warn">
+        <strong>Password safety</strong>
+        You will choose a strong restic repository password. If you lose it, you cannot restore from Disk 1.
+        Store it in a password manager. Do <em>not</em> put it in <code>Config.ps1</code>.
+      </div>
+    </section>
+
+    <!-- ========== GLOSSARY ========== -->
+    <section id="glossary">
+      <h2>3. Names and paths used in this guide</h2>
+      <p>
+        Replace these examples with your real names. Write your real values down before you start.
+      </p>
+      <table>
+        <thead>
+          <tr><th>Concept</th><th>Example in this guide</th><th>Your value</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Office PC Tailscale / MagicDNS name</td><td><code>office-pc</code></td><td></td></tr>
+          <tr><td>Home PC Tailscale name</td><td><code>home-pc</code></td><td></td></tr>
+          <tr><td>Office folder to back up</td><td><code>D:\Data</code></td><td></td></tr>
+          <tr><td>Office share name</td><td><code>Data</code></td><td></td></tr>
+          <tr><td>UNC path from home (Tailscale / LAN)</td><td><code>\\pc-name\C$\Users\…</code> or <code>\\pc-name\Data</code></td><td></td></tr>
+          <tr><td>Office backup Windows user</td><td><code>BackupUser</code> (if required)</td><td></td></tr>
+          <tr><td>Disk 1 restic repo (Backup PC)</td><td><em>your</em> full path, e.g. <code>D:\Backups\repo</code></td><td></td></tr>
+          <tr><td>Disk 2 archive folder (optional)</td><td>Leave blank for restic-only, or your path</td><td></td></tr>
+          <tr><td>Scripts folder on home</td><td><code>C:\SyncMe</code></td><td></td></tr>
+          <tr><td>Credential Manager name for restic password</td><td><code>SyncMeRestic</code> (or <code>SyncMeRestic-&lt;setId&gt;</code>)</td><td></td></tr>
+          <tr><td>Credential Manager name for SMB (optional)</td><td><code>SyncMeShare</code></td><td></td></tr>
+          <tr><td>Credential Manager name for SMTP</td><td><code>SyncMeSmtp</code></td><td></td></tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <strong>How to find the Tailscale machine name</strong>
+        On each PC: open the Tailscale app, or run <code>tailscale status</code> in PowerShell / Command Prompt.
+        Use the short name shown there (MagicDNS), not only the 100.x.x.x IP — names are easier in config.
+      </div>
+    </section>
+
+    <!-- ========== WIZARD ========== -->
+    <section id="wizard">
+      <h2>Recommended: Guided setup wizard (SyncMe)</h2>
+      <p><span class="where b">Backup PC only</span></p>
+      <p>
+        <strong>SyncMe</strong> — Copyright © 2026 Bradford Lotriet.
+        Double-click <code>SyncMe.bat</code>. The browser opens the HTML console.
+        First run shows the setup wizard; after that you land on the dashboard
+        (or use <code>SyncMe-Menu.bat</code> for the management view).
+      </p>
+      <p>
+        Install SyncMe only on the Backup PC. Source PCs need shared folders
+        (LAN and/or Tailscale). Scheduled backups and manual <strong>Run now</strong>
+        continue if you close the SyncMe console.
+      </p>
+      <h3>Before the wizard</h3>
+      <ul>
+        <li>Share the source folder(s) so this PC can open <code>\\pc\share</code>.</li>
+        <li>LAN-only is fine; Tailscale is optional for offsite.</li>
+        <li>restic can be installed from the wizard. rclone is optional (cloud).</li>
+      </ul>
+      <h3>Wizard pages</h3>
+      <ol>
+        <li>Welcome — name, backup-set name, confirm Backup PC</li>
+        <li>Prerequisites — Tailscale status, Install restic / Install rclone</li>
+        <li>Sources — network mode, host, multi UNC folders, shadow preference, optional WoL MAC</li>
+        <li>Destination — local, NAS UNC, or rclone cloud</li>
+        <li>Passwords — Credential Manager (leave blank when editing to keep existing)</li>
+        <li>Email (optional)</li>
+        <li>Schedule → Task Scheduler</li>
+        <li>Review &amp; Apply</li>
+      </ol>
+      <div class="callout">
+        <strong>Passwords are never written into Config.ps1</strong>
+        Save the restic password in a password manager — without it you cannot restore Disk 1.
+      </div>
+      <h3>After Apply</h3>
+      <ol>
+        <li>Dashboard: progress, last-run summary, Cloud &amp; Retention modals, low-disk warning (&lt;15% free).</li>
+        <li>Operations: backup actions, active sets (edit/delete), restore (uses the <em>active</em> backup set from the switcher).</li>
+        <li>Source PC: run <code>OfficeAgent</code> scripts for shadow copies if needed.</li>
+        <li><strong>Cloud (rclone)</strong> on the dashboard or wizard: Add OneDrive / Google Drive (browser OAuth), pick folder, set bandwidth (e.g. <code>2M</code>), Save — no hand-editing of rclone.conf.</li>
+        <li><strong>Retention &amp; integrity</strong>: edit Keep* and check day; Prune now / Check / Data check.</li>
+        <li><strong>Mount repo</strong> — if WinFsp is missing, click <strong>Install WinFsp</strong> on Operations (or Prerequisites). If the password is missing, click <strong>Store password</strong>. Mount is for browsing; use Restore for permanent recovery.</li>
+        <li>Sync/Bisync folder mirroring is not in this release (coming later).</li>
+      </ol>
+      <p>Manual Steps 1–15 below remain as a deep reference if you skip the wizard.</p>
+    </section>
+
+<section id="menu">
+      <h2>Management hub</h2>
+      <p><span class="where b">Backup PC</span></p>
+      <p>Double-click <code>SyncMe-Menu.bat</code> (or <code>SyncMe.bat</code>) to open the HTML management console:</p>
+      <ul>
+        <li>Run backup / dry run / force Disk 2 archive / prune now</li>
+        <li>Structural <code>restic check</code> and weekly data-subset check</li>
+        <li>Cloud (rclone) OAuth remotes, bandwidth, Save cloud dest</li>
+        <li>Retention policy editor; Mount / Unmount (Install WinFsp / Store password when needed)</li>
+        <li><strong>Operations</strong> (backup actions, set management, snapshots, restore, Disk 2)</li>
+        <li>Open Reports / Logs / Recovery Checklist / User Guide</li>
+        <li>Re-run setup; update scheduled task (<code>SyncMe-Backup</code> + watchdog)</li>
+      </ul>
+      <p>Entry points: <code>SyncMe.bat</code> (auto wizard/dashboard) and <code>SyncMe-Menu.bat</code> (management view).</p>
+    </section>
+
+    <section id="shadow">
+      <h2>Shadow Copies for open Office files</h2>
+      <p><span class="where a">Location A — Office</span> then consumed from home</p>
+      <p>
+        VSS cannot be created across SMB from home. Enable <strong>Shadow Copies for Shared Folders</strong> on the office
+        data volume, then run the OfficeAgent scripts so a pointer file tells home which <code>@GMT-…</code> path to back up.
+      </p>
+      <ol>
+        <li>On office: drive Properties → <strong>Configure Shadow Copies</strong> → Enable for the data volume.</li>
+        <li>On office (elevated): <code>OfficeAgent\Enable-SyncMeShadowCopies.ps1</code> — see <code>OfficeAgent\README.md</code>.</li>
+        <li>Confirm <code>.monarch-latest-shadow.txt</code> appears in the share root (readable from home).</li>
+        <li>Home config: <code>UseShadowCopySources = $true</code> (wizard asks this). Schedule home backup <em>after</em> the office pointer task (default 00:30).</li>
+      </ol>
+      <div class="callout warn">
+        <strong>restic exit code 3</strong>
+        Means some files were unread (often open .xlsx/.docx/.pst on a <em>live</em> share). Snapshot may still exist.
+        Reports show Open-file risk and Source mode. Prefer ShadowCopy mode over LiveFallback.
+        Full exit-code table: <a href="#exit-codes">Backup results, exit codes &amp; file failures</a>.
+      </div>
+    </section>
+
+    <section id="repocheck">
+      <h2>Repository integrity checks</h2>
+      <p><span class="where b">Location B — Home</span></p>
+      <ul>
+        <li><strong>Daily:</strong> <code>restic check</code> (structural — indexes/snapshots).</li>
+        <li><strong>Weekly (Sunday by default):</strong> <code>restic check --read-data-subset=n/7</code> rotating by weekday so pack data is verified over a week.</li>
+        <li>Failures set repo status to CHECK_FAILED / CORRUPTED, fail the run, and email with CRITICAL when applicable.</li>
+        <li>Switches: <code>-SkipCheck</code>, <code>-RunDataCheck</code>, <code>-CheckOnly</code> (menu uses these).</li>
+      </ul>
+    </section>
+
+    <!-- ========== EMAIL ========== -->
+    <section id="email">
+      <h2>Email notifications (SMTP)</h2>
+      <p>
+        When email is enabled, each backup run can notify you by mail in addition to Windows toasts.
+      </p>
+      <table>
+        <thead><tr><th>Event</th><th>What you receive</th></tr></thead>
+        <tbody>
+          <tr><td>Start</td><td>Short plain-text email: computer name, time, source paths. Subject contains <code>STARTED</code>.</td></tr>
+          <tr><td>Complete</td><td>Plain-text summary (SUCCESS or FAILED) plus the <strong>HTML report attached</strong>. Subject contains <code>SUCCESS</code> or <code>FAILED</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Config settings (no passwords)</h3>
+      <table>
+        <thead><tr><th>Setting</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>EnableEmailNotifications</code></td><td>Master switch for email.</td></tr>
+          <tr><td><code>SmtpServer</code> / <code>SmtpPort</code> / <code>SmtpUseSsl</code></td><td>SMTP endpoint (often port 587 with SSL/TLS).</td></tr>
+          <tr><td><code>MailFrom</code> / <code>MailTo</code></td><td>Sender and recipient address(es).</td></tr>
+          <tr><td><code>SmtpCredentialName</code></td><td>Credential Manager target (default <code>SyncMeSmtp</code>).</td></tr>
+          <tr><td><code>EmailOnStart</code> / <code>EmailOnComplete</code></td><td>Which events send mail.</td></tr>
+        </tbody>
+      </table>
+      <p>Prefer the SyncMe wizard for SMTP. Advanced / manual fallback:</p>
+      <pre><code>cmdkey /generic:SyncMeSmtp /user:smtp_login@example.com /pass:YOUR_SMTP_OR_APP_PASSWORD</code></pre>
+
+      <h3>Provider notes</h3>
+      <ul>
+        <li><strong>Microsoft 365 / Outlook:</strong> often <code>smtp.office365.com</code>, port <code>587</code>, SSL/TLS on.
+          The mailbox may need Authenticated SMTP enabled (ask your admin if send fails).</li>
+        <li><strong>Gmail:</strong> <code>smtp.gmail.com</code>, port <code>587</code>. With 2-Step Verification, create an
+          <strong>App Password</strong> and use that — a normal account password is usually rejected.</li>
+        <li><strong>Corporate SMTP:</strong> ask IT for host, port, SSL requirement, and whether a login is required.</li>
+      </ul>
+
+      <div class="callout warn">
+        <strong>Email failures do not fail the backup</strong>
+        If SMTP is wrong, the backup can still succeed. Check <code>Logs\backup-*.log</code> for mail warnings.
+        The switch <code>-NoNotify</code> disables both toast and email for that run.
+      </div>
+    </section>
+
+    <!-- ========== MANUAL INTRO ========== -->
+    <section id="manual">
+      <h2>Manual setup path (optional)</h2>
+      <p>
+        If you prefer not to use the wizard, follow Steps 1–15 below in order.
+        If you already used the wizard, you only need Steps 1–6 as prerequisites, then jump to
+        <a href="#step12">Step 12</a> (first full backup) and <a href="#step13">Step 13</a> (Disk 2 archive).
+        The wizard already covers Credentials, restic init, Config.ps1, schedule, and SMTP (manual Steps 7–9 and 14).
+      </p>
+    </section>
+
+    <!-- ========== STEP 1 ========== -->
+    <section id="step1">
+      <h2>4. Step 1 — Install and connect Tailscale</h2>
+      <p><span class="where both">Both PCs</span></p>
+
+      <h3><span class="step-num">1.1</span> Install Tailscale</h3>
+      <ol>
+        <li>On the office PC and the home PC, open a browser and go to
+          <a href="https://tailscale.com/download/windows" target="_blank" rel="noopener">https://tailscale.com/download/windows</a>.</li>
+        <li>Download and run the Windows installer.</li>
+        <li>Sign in with the <strong>same Tailscale account / organization</strong> on both machines so they can see each other.</li>
+        <li>Leave Tailscale running (system tray icon).</li>
+      </ol>
+
+      <h3><span class="step-num">1.2</span> Turn on MagicDNS (recommended)</h3>
+      <ol>
+        <li>In a browser, open the Tailscale admin console:
+          <a href="https://login.tailscale.com/admin/dns" target="_blank" rel="noopener">https://login.tailscale.com/admin/dns</a>.</li>
+        <li>Ensure <strong>MagicDNS</strong> is enabled.</li>
+        <li>Optionally rename machines to clear names like <code>office-pc</code> and <code>home-pc</code> under Machines.</li>
+      </ol>
+
+      <h3><span class="step-num">1.3</span> Verify connectivity</h3>
+      <p>On the <strong>home</strong> PC, open PowerShell and run (replace with your office name):</p>
+      <pre><code>tailscale status
+Test-Connection office-pc -Count 2</code></pre>
+      <p>You should see the office machine listed and ping replies (or at least a successful route). If this fails, fix Tailscale before continuing — the backup cannot work without it.</p>
+      <div class="callout warn">
+        <strong>Firewall note</strong>
+        Tailscale usually handles connectivity without opening router ports. If ping fails, check that Tailscale is logged in on both sides and that neither machine is stuck offline or needing an ACL approval in the admin console.
+      </div>
+    </section>
+
+    <!-- ========== STEP 2 ========== -->
+    <section id="step2">
+      <h2>5. Step 2 — Prepare Location A (office): user + folder share</h2>
+      <p><span class="where a">Location A — Office</span></p>
+
+      <h3><span class="step-num">2.1</span> Create a dedicated backup user</h3>
+      <p>Using a dedicated account is safer than sharing your personal login.</p>
+      <ol>
+        <li>Press <kbd>Win</kbd> + <kbd>R</kbd>, type <code>lusrmgr.msc</code>, press Enter.
+          (On Windows Home, lusrmgr may be missing — use Settings &rarr; Accounts &rarr; Other users &rarr; Add account,
+          or run the PowerShell below.)</li>
+        <li>Create a local user, for example <code>BackupUser</code>.</li>
+        <li>Set a strong password. Save it in your password manager.</li>
+        <li>You do <strong>not</strong> need this user to be an Administrator for a read-only backup.</li>
+      </ol>
+      <p>PowerShell alternative (run as Administrator on the office PC):</p>
+      <pre><code>$password = Read-Host -AsSecureString "Password for BackupUser"
+New-LocalUser -Name "BackupUser" -Password $password -FullName "Backup User" -Description "Read-only backup over Tailscale"
+# Optional: ensure the account is not expired / disabled
+Enable-LocalUser -Name "BackupUser"</code></pre>
+
+      <h3><span class="step-num">2.2</span> Decide which folders to back up</h3>
+      <p>Example: everything under <code>D:\Data</code>. You can share one parent folder or several folders (each becomes its own share, or one parent share covering all).</p>
+      <div class="callout">
+        <strong>Tip for the first test</strong>
+        Create a tiny folder such as <code>D:\BackupTest</code> with a few documents. Share that first and run a smoke test (Step 11) before pointing at the full 1.8 TB.
+      </div>
+
+      <h3><span class="step-num">2.3</span> Share the folder</h3>
+      <ol>
+        <li>In File Explorer, right-click the folder (e.g. <code>D:\Data</code>) &rarr; <strong>Properties</strong> &rarr; <strong>Sharing</strong> tab.</li>
+        <li>Click <strong>Advanced Sharing&hellip;</strong></li>
+        <li>Check <strong>Share this folder</strong>.</li>
+        <li>Share name: e.g. <code>Data</code> (this becomes <code>\\office-pc\Data</code>).</li>
+        <li>Click <strong>Permissions</strong>.
+          <ul>
+            <li>Remove broad groups if you want tighter control (optional).</li>
+            <li>Add <code>BackupUser</code>.</li>
+            <li>Give <code>BackupUser</code> <strong>Read</strong> only (sufficient for backup).</li>
+            <li>Apply / OK.</li>
+          </ul>
+        </li>
+        <li>Also check the <strong>Security</strong> (NTFS) tab: <code>BackupUser</code> needs at least <strong>Read &amp; execute</strong>, <strong>List folder contents</strong>, and <strong>Read</strong> on the folder and files. If inheritance does not grant it, Add the user and allow those rights.</li>
+      </ol>
+      <p>PowerShell alternative (Administrator on office PC):</p>
+      <pre><code>$folder = "D:\Data"
+$shareName = "Data"
+New-SmbShare -Name $shareName -Path $folder -ReadAccess "BackupUser"
+# Ensure NTFS read for BackupUser on the folder tree
+icacls $folder /grant "BackupUser:(OI)(CI)R" /T</code></pre>
+
+      <h3><span class="step-num">2.4</span> Allow file sharing through the firewall (if needed)</h3>
+      <ol>
+        <li>Windows Security &rarr; Firewall &rarr; Allow an app through firewall.</li>
+        <li>Ensure <strong>File and Printer Sharing</strong> is allowed on the relevant profiles.
+          Tailscale often uses a profile that already permits this between Tailscale IPs; if home cannot connect later, revisit this.</li>
+      </ol>
+
+      <h3><span class="step-num">2.5</span> Note the exact UNC path</h3>
+      <p>From home you will use:</p>
+      <pre><code>\\office-pc\Data</code></pre>
+      <p>If Tailscale shows a different hostname, use that name instead of <code>office-pc</code>.</p>
+    </section>
+
+    <!-- ========== STEP 3 ========== -->
+    <section id="step3">
+      <h2>6. Step 3 — Prepare Location B (home): disks + folders</h2>
+      <p><span class="where b">Location B — Home</span></p>
+
+      <h3><span class="step-num">3.1</span> Identify Disk 1 and (optional) Disk 2</h3>
+      <ul>
+        <li><strong>Disk 1</strong> — holds the restic repository (versioned backup) on this Backup PC. Use any drive letter that exists on <em>your</em> machine.</li>
+        <li><strong>Disk 2</strong> — optional plain full copy. Leave blank in the SyncMe wizard for restic-only.</li>
+      </ul>
+      <p>Examples in this guide use <code>D:</code> / <code>E:</code> for illustration only — configs ship empty so SyncMe is portable across servers.</p>
+
+      <h3><span class="step-num">3.2</span> Create the destination folders</h3>
+      <p>Open PowerShell on the Backup PC (adjust letters to match your disks):</p>
+      <pre><code>New-Item -ItemType Directory -Path "D:\Backups\repo" -Force
+# Optional Disk 2:
+# New-Item -ItemType Directory -Path "E:\Archive\Latest" -Force</code></pre>
+      <div class="callout warn">
+        <strong>Do not store other important files inside these folders</strong>
+        The archive step can <em>delete everything</em> under Disk 2 when it is configured
+        (<code>ClearArchiveBeforeRestore = $true</code>). Keep only the backup mirror there.
+      </div>
+
+      <h3><span class="step-num">3.3</span> Confirm free space</h3>
+      <pre><code>Get-PSDrive | Where-Object { $_.Provider.Name -eq 'FileSystem' } | Format-Table Name, Used, Free</code></pre>
+      <p>Disk 1 needs substantial free space for the restic repo. If you use Disk 2, its free space should exceed your total source data size.</p>
+    </section>
+
+    <!-- ========== STEP 4 ========== -->
+    <section id="step4">
+      <h2>7. Step 4 — Install restic on Location B</h2>
+      <p><span class="where b">Location B — Home</span></p>
+
+      <h3><span class="step-num">4.1</span> Download restic</h3>
+      <ol>
+        <li>Open <a href="https://github.com/restic/restic/releases/latest" target="_blank" rel="noopener">https://github.com/restic/restic/releases/latest</a>.</li>
+        <li>Download the Windows AMD64 zip, e.g. <code>restic_X.Y.Z_windows_amd64.zip</code>.</li>
+        <li>Extract <code>restic.exe</code>.</li>
+      </ol>
+
+      <h3><span class="step-num">4.2</span> Place it on your PATH (recommended)</h3>
+      <ol>
+        <li>Create a folder such as <code>C:\Tools\restic\</code>.</li>
+        <li>Move <code>restic.exe</code> into that folder.</li>
+        <li>Add that folder to the system or user PATH:
+          <ul>
+            <li>Settings &rarr; System &rarr; About &rarr; Advanced system settings &rarr; Environment Variables.</li>
+            <li>Under User or System variables, edit <code>Path</code> &rarr; New &rarr; <code>C:\Tools\restic</code> &rarr; OK.</li>
+          </ul>
+        </li>
+        <li><strong>Close and reopen</strong> PowerShell so PATH updates.</li>
+      </ol>
+      <p>Verify:</p>
+      <pre><code>restic version</code></pre>
+      <p>You should see a version number. If the command is not found, either fix PATH or set the full path later in <code>Config.ps1</code>:</p>
+      <pre><code>ResticPath = 'C:\Tools\restic\restic.exe'</code></pre>
+
+      <h3><span class="step-num">4.3</span> Alternative: install via winget (if available)</h3>
+      <pre><code>winget search restic
+# Install using the Id shown in the search results, for example:
+# winget install --id Restoric.Restic -e
+# (Ids can change — always confirm from search output.)</code></pre>
+      <p>After install, open a <strong>new</strong> PowerShell window and run <code>restic version</code>. If winget has no package, use the GitHub zip method in 4.1–4.2.</p>
+    </section>
+
+    <!-- ========== STEP 5 ========== -->
+    <section id="step5">
+      <h2>8. Step 5 — Copy the backup scripts to Location B</h2>
+      <p><span class="where b">Location B — Home</span></p>
+      <ol>
+        <li>Install the <code>SyncMe</code> package to the home PC, for example:
+          <code>C:\SyncMe</code></li>
+        <li>Confirm these files exist:</li>
+      </ol>
+      <pre><code>SyncMe\
+  SyncMe.bat                   &lt;-- start HTML console (wizard or dashboard)
+  SyncMe-Menu.bat              &lt;-- open management console
+  SyncMe-Host.ps1              &lt;-- localhost host + API
+  SyncMe-Backup.ps1      &lt;-- main backup script
+  SyncMe-Watchdog.ps1   &lt;-- overdue email
+  RecoveryChecklist.txt
+  Config.ps1                   &lt;-- written by wizard or edited by hand
+  Register-BackupTask.ps1      &lt;-- scheduler helper
+  README.md
+  UserGuide.html               &lt;-- this guide
+  Modules\
+    Common.ps1
+    Sets.ps1
+    Notify.ps1                 &lt;-- toast + SMTP email
+    Report.ps1
+  Reports\                     &lt;-- HTML reports appear here
+  Logs\                        &lt;-- log files appear here</code></pre>
+      <div class="callout">
+        <strong>After copying the folder</strong>
+        Prefer <a href="#wizard">SyncMe.bat</a> for configuration. Manual Steps 7–9 and 14 are only needed if you skip the wizard.
+      </div>
+      <h3><span class="step-num">5.1</span> Allow PowerShell to run local scripts</h3>
+      <p>On the home PC, open PowerShell and check:</p>
+      <pre><code>Get-ExecutionPolicy -List</code></pre>
+      <p>If scripts are blocked, for the current user you can set:</p>
+      <pre><code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code></pre>
+      <p>Confirm with <code>Y</code>. The scheduled task helper also uses <code>-ExecutionPolicy Bypass</code> for the task action, which avoids policy issues for the scheduled run.</p>
+    </section>
+
+    <!-- ========== STEP 6 ========== -->
+    <section id="step6">
+      <h2>9. Step 6 — Verify you can open the office share from home</h2>
+      <p><span class="where b">Location B — Home</span></p>
+      <p>This step must succeed before restic will work.</p>
+      <ol>
+        <li>On the home PC, open File Explorer.</li>
+        <li>In the address bar type: <code>\\office-pc\Data</code> (use your real names) and press Enter.</li>
+        <li>When prompted, sign in as <code>office-pc\BackupUser</code> (or <code>OFFICE-PC\BackupUser</code>) with the password you created.
+          Check <strong>Remember my credentials</strong> if offered.</li>
+        <li>Confirm you can browse files.</li>
+      </ol>
+      <p>PowerShell checks:</p>
+      <pre><code>Test-Path "\\office-pc\Data"
+Get-ChildItem "\\office-pc\Data" | Select-Object -First 10</code></pre>
+      <div class="callout danger">
+        <strong>If this fails, stop here</strong>
+        Fix share permissions, Tailscale connectivity, firewall, or credentials first.
+        The backup script will fail at preflight if the source is unreachable.
+      </div>
+      <h3>Common connection fixes</h3>
+      <ul>
+        <li>Use the Tailscale IP temporarily: <code>\\100.x.x.x\Data</code> — if that works but the name does not, MagicDNS/name is the issue.</li>
+        <li>On office PC: confirm the share exists — <code>Get-SmbShare</code>.</li>
+        <li>On office PC: confirm BackupUser can log on locally / is not locked out.</li>
+        <li>Try: <code>net use \\office-pc\Data /user:office-pc\BackupUser *</code> and enter the password when prompted.</li>
+      </ul>
+    </section>
+
+    <!-- ========== STEP 7 ========== -->
+    <section id="step7">
+      <h2>10. Step 7 — Store passwords in Windows Credential Manager</h2>
+      <p><span class="where b">Location B — Home</span></p>
+      <p>
+        SyncMe reads secrets from Windows Credential Manager. Never put the restic password in
+        <code>Config.ps1</code>. Prefer the SyncMe UI — you usually do not need cmdkey.
+      </p>
+
+      <h3><span class="step-num">7.1</span> Choose a strong restic password</h3>
+      <p>
+        Use a long random password (password manager generated). This password encrypts the entire
+        restic repository. Losing it means losing access to Disk 1 backups.
+      </p>
+
+      <h3><span class="step-num">7.2</span> Store the restic password</h3>
+      <p><strong>Recommended:</strong> In SyncMe, use the setup wizard Passwords step, or
+        <strong>Operations → Store password</strong> (same password used when the repo was created).</p>
+      <p>Advanced / manual fallback (Command Prompt):</p>
+      <pre><code>cmdkey /generic:SyncMeRestic /user:restic /pass:PASTE_YOUR_STRONG_PASSWORD_HERE</code></pre>
+      <div class="callout warn">
+        <strong>Command history tip</strong>
+        Putting a password on the command line may leave it in history. Prefer Operations → Store password.
+        If you use cmdkey, the target must be exactly <code>SyncMeRestic</code> (or <code>SyncMeRestic-&lt;setId&gt;</code> for extra sets)
+        unless you change <code>ResticCredentialName</code> in config. User can be <code>restic</code>; password is your repo password.
+      </div>
+      <p>Verify the entry exists:</p>
+      <pre><code>cmdkey /list</code></pre>
+      <p>You should see a target named <code>SyncMeRestic</code>.</p>
+
+      <h3><span class="step-num">7.3</span> Optional — store SMB share credentials</h3>
+      <p>
+        Prefer the SyncMe wizard Passwords step (share credentials checkbox).
+        If File Explorer remembered the share login and the same Windows user will run the scheduled
+        task, you may leave <code>ShareCredentialName = ''</code> in config (default).
+      </p>
+      <p>Advanced fallback if the scheduled task cannot access <code>\\office-pc\Data</code> automatically:</p>
+      <pre><code>cmdkey /generic:SyncMeShare /user:office-pc\BackupUser /pass:BACKUPUSER_PASSWORD_HERE</code></pre>
+      <p>Then in <code>Config.ps1</code> set:</p>
+      <pre><code>ShareCredentialName = 'SyncMeShare'</code></pre>
+      <p>
+        Optional: set <code>ShareDriveLetter = 'Z'</code> if you prefer mapping a drive letter during the run;
+        leave empty to connect without a drive letter.
+      </p>
+
+      <h3><span class="step-num">7.4</span> Store SMTP credentials (manual path)</h3>
+      <p>Prefer <a href="#wizard">SyncMe.bat</a> which collects SMTP in the wizard. Advanced fallback:</p>
+      <pre><code>cmdkey /generic:SyncMeSmtp /user:smtp_login@example.com /pass:YOUR_SMTP_OR_APP_PASSWORD</code></pre>
+      <p>Then set the email fields in <code>Config.ps1</code> (see <a href="#email">Email notifications</a>).</p>
+    </section>
+
+    <!-- ========== STEP 8 ========== -->
+    <section id="step8">
+      <h2>11. Step 8 — Initialize the restic repository (once only)</h2>
+      <p><span class="where b">Location B — Home</span></p>
+      <p>This creates an empty encrypted repository on Disk 1. Do this <strong>once</strong>.</p>
+      <pre><code># Use the SAME password you stored in Credential Manager
+$env:RESTIC_PASSWORD = "PASTE_YOUR_STRONG_PASSWORD_HERE"
+restic init --repo "D:\Backup\restic-repo"
+Remove-Item Env:RESTIC_PASSWORD</code></pre>
+      <p>Expected success message looks like: <em>created restic repository &hellip; at D:\Backup\restic-repo</em></p>
+      <div class="callout danger">
+        <strong>Do not run init again on a repo that already has data</strong>
+        Re-initializing into a non-empty repo is wrong. If init says the directory is not empty / already a repository, stop and use the existing repo.
+      </div>
+      <p>Quick check:</p>
+      <pre><code>$env:RESTIC_PASSWORD = "PASTE_YOUR_STRONG_PASSWORD_HERE"
+restic -r "D:\Backup\restic-repo" snapshots
+Remove-Item Env:RESTIC_PASSWORD</code></pre>
+      <p>An empty new repo will show no snapshots yet — that is fine.</p>
+    </section>
+
+    <!-- ========== STEP 9 ========== -->
+    <section id="step9">
+      <h2>12. Step 9 — Edit Config.ps1</h2>
+      <p><span class="where b">Location B — Home</span></p>
+      <ol>
+        <li>Open <code>C:\SyncMe\Config.ps1</code> in Notepad, VS Code, or Cursor.</li>
+        <li>Change at least the values below to match your machines.</li>
+        <li>Save the file as UTF-8 (Cursor/VS Code default is fine).</li>
+      </ol>
+
+      <h3>Minimum required edits</h3>
+      <pre><code>SourcePaths = @(
+    '\\office-pc\Data'          # &lt;-- your UNC path(s)
+)
+
+SourceHost = 'office-pc'        # &lt;-- Tailscale name used for ping check
+
+ResticRepo   = 'D:\Backup\restic-repo'
+ArchivePath  = 'E:\Archive\OfficeMirror'
+
+ResticCredentialName = 'ResticOfficeBackup'   # must match cmdkey target</code></pre>
+
+      <h3>Multiple source folders</h3>
+      <pre><code>SourcePaths = @(
+    '\\office-pc\Data'
+    '\\office-pc\Projects'
+)</code></pre>
+
+      <h3>For the smoke test only</h3>
+      <p>Temporarily point at a small share:</p>
+      <pre><code>SourcePaths = @(
+    '\\office-pc\BackupTest'
+)
+SourceHost = 'office-pc'</code></pre>
+
+      <div class="callout">
+        <strong>Leave alone until you understand them</strong>
+        Retention (<code>KeepLast</code>, <code>KeepDaily</code>, &hellip;), excludes, and archive interval already have sensible defaults.
+        See the <a href="#config-ref">full config reference</a> later in this guide.
+      </div>
+    </section>
+
+    <!-- ========== STEP 10 ========== -->
+    <section id="step10">
+      <h2>13. Step 10 — Optional: install BurntToast notifications</h2>
+      <p><span class="where b">Location B — Home</span></p>
+      <p>
+        The script shows a start and finish notification. If the BurntToast module is installed you get
+        modern Windows toasts; otherwise it falls back to a tray balloon or console text.
+      </p>
+      <pre><code>Install-Module BurntToast -Scope CurrentUser
+# If prompted about NuGet / untrusted repository, accept to continue</code></pre>
+      <p>Verify:</p>
+      <pre><code>Import-Module BurntToast
+New-BurntToastNotification -Text "Backup guide", "BurntToast works"</code></pre>
+    </section>
+
+    <!-- ========== STEP 11 ========== -->
+    <section id="step11">
+      <h2>14. Step 11 — Smoke test with a small folder</h2>
+      <p><span class="where b">Location B — Home</span></p>
+      <div class="callout warn">
+        <strong>Do not start with 1.8 TB</strong>
+        Prove the whole path works with a few megabytes first.
+      </div>
+      <ol>
+        <li>On the office PC, ensure <code>D:\BackupTest</code> (or similar) is shared and has a few sample files.</li>
+        <li>On home, set <code>Config.ps1</code> <code>SourcePaths</code> to that test share.</li>
+        <li>Open PowerShell:</li>
+      </ol>
+      <pre><code>cd C:\SyncMe
+.\SyncMe-Backup.ps1 -SkipArchive</code></pre>
+      <p><code>-SkipArchive</code> skips the Disk 2 restore for this test so it finishes faster.</p>
+
+      <h3>What success looks like</h3>
+      <ul>
+        <li>A &ldquo;backup started&rdquo; notification.</li>
+        <li>Console log lines ending with a Finished summary.</li>
+        <li>A &ldquo;backup completed&rdquo; notification.</li>
+        <li>New files under <code>Logs\</code>:
+          <ul>
+            <li><code>backup-YYYYMMDD-HHmmss.log</code></li>
+            <li><code>restic-YYYYMMDD-HHmmss.jsonl</code></li>
+          </ul>
+        </li>
+        <li>New HTML report under <code>Reports\backup-YYYYMMDD-HHmmss.html</code> — open it in your browser.</li>
+        <li>Exit code 0 (no red fatal errors).</li>
+      </ul>
+      <p>Confirm a snapshot exists:</p>
+      <pre><code>$env:RESTIC_PASSWORD = "YOUR_PASSWORD"
+restic -r "D:\Backup\restic-repo" snapshots
+Remove-Item Env:RESTIC_PASSWORD</code></pre>
+
+      <h3>If the smoke test fails</h3>
+      <ol>
+        <li>Open the newest file in <code>Logs\</code> and read the ERROR lines.</li>
+        <li>Open the HTML report Errors section.</li>
+        <li>Jump to <a href="#troubleshooting">Troubleshooting</a>.</li>
+      </ol>
+    </section>
+
+    <!-- ========== STEP 12 ========== -->
+    <section id="step12">
+      <h2>15. Step 12 — First full backup (~1.8 TB)</h2>
+      <p><span class="where both">Both PCs must stay online</span></p>
+      <ol>
+        <li>Edit <code>Config.ps1</code> and set <code>SourcePaths</code> to your real office data share(s).</li>
+        <li>On both PCs, disable sleep for the duration (see <a href="#step15">Step 15</a>).</li>
+        <li>Start the backup on home:</li>
+      </ol>
+      <pre><code>cd C:\SyncMe
+.\SyncMe-Backup.ps1 -SkipArchive</code></pre>
+      <p>
+        Still skip archive on the first seed if you prefer; you can run <code>-ForceArchive</code> afterward
+        once Disk 1 has a complete snapshot (Step 13). Archiving restores the full tree to Disk 2 and
+        also takes a long time / lots of disk I/O.
+      </p>
+      <div class="callout warn">
+        <strong>Expect a long first run</strong>
+        Duration depends mainly on the <em>office upload</em> speed through your ISP and Tailscale.
+        Overnight or multi-day runs are normal for ~1.8 TB. Later daily runs should be much smaller.
+      </div>
+      <h3>While it runs</h3>
+      <ul>
+        <li>Do not turn off either PC.</li>
+        <li>You can watch the log file in <code>Logs\</code> growing.</li>
+        <li>If the network drops, fix connectivity and run the script again — restic will continue efficiently; already stored content is not re-sent from scratch.</li>
+      </ul>
+      <h3>When it finishes</h3>
+      <ul>
+        <li>Open the HTML report and confirm status SUCCESS (or review warnings).</li>
+        <li>Note: restic exit code <strong>3</strong> means some files could not be read (often locked Office files). The snapshot may still be usable; check the log for which files failed.</li>
+      </ul>
+    </section>
+
+    <!-- ========== STEP 13 ========== -->
+    <section id="step13">
+      <h2>16. Step 13 — Force the Disk 2 archive once</h2>
+      <p><span class="where b">Location B — Home</span></p>
+      <p>
+        After you have at least one good snapshot on Disk 1, create the first plain full copy on Disk 2:
+      </p>
+      <pre><code>cd C:\SyncMe
+.\SyncMe-Backup.ps1 -ForceArchive</code></pre>
+      <p>This will:</p>
+      <ol>
+        <li>Run a normal backup + prune (same as daily).</li>
+        <li>Clear <code>E:\Archive\OfficeMirror</code> (if <code>ClearArchiveBeforeRestore</code> is true).</li>
+        <li>Run <code>restic restore latest</code> into that folder.</li>
+        <li>Write a timestamp to <code>Logs\last-archive-utc.txt</code> so the next automatic archive waits ~14 days.</li>
+      </ol>
+      <div class="callout">
+        <strong>About folder nesting</strong>
+        Because sources are UNC paths, the restored tree under Disk 2 may include path segments reflecting
+        the original share path (not only a flat copy of file names at the root of <code>OfficeMirror</code>).
+        That is expected. Browse until you find your files; they are all under <code>ArchivePath</code>.
+      </div>
+      <p>Browse Disk 2 in Explorer to confirm files are present and readable without restic.</p>
+    </section>
+
+    <!-- ========== STEP 14 ========== -->
+    <section id="step14">
+      <h2>17. Step 14 — Schedule the automatic run</h2>
+      <p>
+        In the Setup wizard <strong>Schedule</strong> step, choose a <strong>start date</strong>,
+        <strong>time</strong>, and <strong>recurrence</strong> (Once, Daily, or Weekly with days of week).
+        Optionally set an <strong>end date</strong>. SyncMe registers a Windows Scheduled Task for the set.
+        After Apply, use <strong>Run dry run</strong> to verify the backup before relying on the schedule.
+      </p>
+      <p><span class="where b">Location B — Home</span></p>
+
+      <h3><span class="step-num">14.1</span> Register with the helper script</h3>
+      <pre><code>cd C:\SyncMe
+.\Register-BackupTask.ps1 -Time '01:00'</code></pre>
+      <p>
+        This creates a scheduled task named <code>SyncMe-Backup</code> that runs daily at 01:00
+        as your user, interactively (so toast notifications can appear while you are logged on).
+      </p>
+
+      <h3><span class="step-num">14.2</span> Verify the task</h3>
+      <ol>
+        <li>Press <kbd>Win</kbd> + <kbd>R</kbd>, type <code>taskschd.msc</code>, Enter.</li>
+        <li>Find <strong>SyncMe-Backup</strong> in the Task Scheduler Library.</li>
+        <li>Confirm Trigger (daily time) and Action (powershell.exe with <code>-File &hellip;SyncMe-Backup.ps1</code>).</li>
+        <li>Optional: right-click &rarr; <strong>Run</strong> to test once.</li>
+      </ol>
+
+      <h3><span class="step-num">14.3</span> Run whether user is logged on or not (optional)</h3>
+      <ol>
+        <li>Open the task &rarr; <strong>General</strong> tab.</li>
+        <li>Select <strong>Run whether user is logged on or not</strong>.</li>
+        <li>Enter your Windows account password when prompted.</li>
+        <li>Understand that toast popups may not show in this mode; rely on <code>Reports\</code> and <code>Logs\</code>.</li>
+        <li>Ensure that account can still read <code>\\office-pc\Data</code> (you may need the optional <code>OfficeBackupShare</code> credential from Step 7.3).</li>
+      </ol>
+
+      <h3><span class="step-num">14.4</span> Manual registration (alternative)</h3>
+      <pre><code>$script = 'C:\SyncMe\SyncMe-Backup.ps1'
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$script`""
+$trigger = New-ScheduledTaskTrigger -Daily -At 01:00
+Register-ScheduledTask -TaskName 'SyncMe-Backup' -Action $action -Trigger $trigger -Force</code></pre>
+
+      <h3><span class="step-num">14.5</span> Unregister</h3>
+      <pre><code>.\Register-BackupTask.ps1 -Unregister</code></pre>
+
+      <div class="callout">
+        <strong>Biweekly Disk 2 archive needs no second task</strong>
+        The daily script checks <code>Logs\last-archive-utc.txt</code>. When 14 or more days have passed
+        (configurable), it automatically restores to Disk 2 during that night&rsquo;s run.
+      </div>
+    </section>
+
+    <!-- ========== STEP 15 ========== -->
+    <section id="step15">
+      <h2>18. Step 15 — Keep both PCs awake for the backup window</h2>
+      <p><span class="where both">Both PCs</span></p>
+      <p>If either PC sleeps, the backup will fail or stall.</p>
+
+      <h3>Quick settings (GUI)</h3>
+      <ol>
+        <li>Settings &rarr; System &rarr; Power &amp; sleep.</li>
+        <li>Set Sleep to <strong>Never</strong> while plugged in (at least during the backup window / first seed).</li>
+        <li>On laptops, keep AC power connected.</li>
+      </ol>
+
+      <h3>PowerShell examples (plugged in)</h3>
+      <pre><code># Show current scheme
+powercfg /getactivescheme
+
+# Example: never sleep on AC (0 = never). Adjust as you prefer after the seed completes.
+powercfg /change standby-timeout-ac 0
+powercfg /change hibernate-timeout-ac 0
+powercfg /change monitor-timeout-ac 30</code></pre>
+
+      <h3>Office PC considerations</h3>
+      <ul>
+        <li>Must be powered on and Tailscale connected when home starts the job.</li>
+        <li>Disks containing source data must be mounted (if you use external drives at the office, they must be plugged in).</li>
+      </ul>
+    </section>
+
+    <!-- ========== DAY TO DAY ========== -->
+    <section id="day-to-day">
+      <h2>19. Day-to-day use</h2>
+      <ul>
+        <li>Let the scheduled task run daily. You should get start/finish <strong>toasts</strong> (if logged on and toasts enabled) and/or <strong>emails</strong> (if SMTP is configured).</li>
+        <li>If the task runs while you are logged off, rely on email and <code>Reports\</code> rather than toasts.</li>
+        <li>Open <code>Reports\</code> occasionally (or the HTML attachment on complete emails): data added, snapshot id, whether archive ran, any errors.</li>
+        <li>About every two weeks, Disk 2 refreshes automatically. Confirm occasionally that <code>E:\Archive\OfficeMirror</code> still looks populated.</li>
+        <li>After major office folder moves/renames, check one report to ensure sources still resolve.</li>
+      </ul>
+      <h3>Manual run anytime</h3>
+      <pre><code>cd C:\SyncMe
+.\SyncMe-Backup.ps1</code></pre>
+    </section>
+
+    <!-- ========== RESTORE ========== -->
+    <section id="restore">
+      <h2>20. How to restore files</h2>
+      <p><span class="where b">Backup PC</span></p>
+
+      <h3>Option A — SyncMe GUI (recommended)</h3>
+      <ol>
+        <li>Open SyncMe → <strong>Operations</strong>.</li>
+        <li>Click <strong>Refresh snapshots</strong>.</li>
+        <li>Choose <strong>Restore latest</strong> or select a row and <strong>Restore selected</strong>.</li>
+        <li>Pick a target folder outside the restic repo (use <strong>Suggest</strong> for <code>E:\SyncMe-Restore\…</code>).</li>
+        <li>Or click <strong>Open Disk 2 archive</strong> for the latest plain copy.</li>
+      </ol>
+
+      <h3>Option B — Latest plain copy from Disk 2 (Explorer)</h3>
+      <ol>
+        <li>Open <code>E:\Archive\OfficeMirror</code> in Explorer (or use the GUI button).</li>
+        <li>Copy the files you need to wherever you want them.</li>
+        <li>Remember: Disk 2 is only as fresh as the last biweekly (or forced) archive.</li>
+      </ol>
+
+      <h3>Option C — Any snapshot from Disk 1 (restic CLI)</h3>
+      <pre><code>$env:RESTIC_PASSWORD = "YOUR_PASSWORD"
+restic -r "D:\Backup\restic-repo" snapshots
+
+# Restore an entire snapshot into a temporary folder
+restic -r "D:\Backup\restic-repo" restore SNAPSHOT_ID --target "E:\SyncMe-Restore\temp"
+
+# Restore only a specific path (example — adjust to your stored paths)
+restic -r "D:\Backup\restic-repo" restore SNAPSHOT_ID --target "E:\SyncMe-Restore\temp" --include "/path/inside/snapshot"
+
+Remove-Item Env:RESTIC_PASSWORD</code></pre>
+      <p>
+        Use <code>latest</code> instead of a snapshot ID to restore the most recent snapshot.
+        Never restore into the live restic repository folder.
+      </p>
+
+      <h3>Option D — Mount a snapshot (advanced)</h3>
+      <p>
+        From SyncMe <strong>Operations</strong>, use <strong>Mount repo</strong> / <strong>Unmount</strong>.
+        If WinFsp is missing, click <strong>Install WinFsp</strong> (Windows may ask for permission).
+        If the repository password is missing, click <strong>Store password</strong>.
+        Mounts appear under <code>Logs\mount\&lt;setId&gt;</code> by default. Mount is for browsing;
+        use Operations restore for a permanent copy.
+      </p>
+    </section>
+
+    <!-- ========== SWITCHES ========== -->
+    <section id="switches">
+      <h2>21. Script command-line switches</h2>
+      <p>All switches are optional. Run from the script directory on Location B.</p>
+      <table>
+        <thead>
+          <tr><th>Switch</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>-PruneOnly</code></td><td>Run <code>restic forget --prune</code> only (no backup/archive).</td></tr>
+          <tr><td><code>-SkipArchive</code></td><td>Do not restore to Disk 2 on this run, even if due.</td></tr>
+          <tr><td><code>-ForceArchive</code></td><td>Restore to Disk 2 on this run regardless of the 14-day stamp.</td></tr>
+          <tr><td><code>-SkipPrune</code></td><td>Skip <code>restic forget --prune</code> (keeps all snapshots; repo grows).</td></tr>
+          <tr><td><code>-NoNotify</code></td><td>Disable toast <strong>and</strong> email notifications for this run.</td></tr>
+          <tr><td><code>-WhatIf</code></td><td>Log intended actions without running restic / share mapping / archive clear.</td></tr>
+          <tr><td><code>-SkipCheck</code></td><td>Skip daily/weekly <code>restic check</code>.</td></tr>
+          <tr><td><code>-RunDataCheck</code></td><td>Force weekly <code>--read-data-subset=n/7</code> check this run.</td></tr>
+          <tr><td><code>-CheckOnly</code></td><td>Skip backup/prune/archive; run repository checks only (used by menu).</td></tr>
+        </tbody>
+      </table>
+      <pre><code>.\SyncMe-Backup.ps1 -SkipArchive -NoNotify
+.\SyncMe-Backup.ps1 -ForceArchive
+.\SyncMe-Backup.ps1 -WhatIf</code></pre>
+    </section>
+
+    <!-- ========== CONFIG REF ========== -->
+    <section id="config-ref">
+      <h2>22. Full Config.ps1 reference</h2>
+      <table>
+        <thead>
+          <tr><th>Setting</th><th>Default (example)</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>SourcePaths</code></td><td><code>\\office-pc\Data</code></td><td>One or more UNC folders to back up.</td></tr>
+          <tr><td><code>ShareCredentialName</code></td><td><code>''</code> (empty)</td><td>Credential Manager target for SMB. Empty = rely on existing Windows session/creds.</td></tr>
+          <tr><td><code>ShareDriveLetter</code></td><td><code>''</code></td><td>Optional letter (e.g. <code>Z</code>) to map during the run.</td></tr>
+          <tr><td><code>ResticRepo</code></td><td><code>D:\Backup\restic-repo</code></td><td>Disk 1 repository path.</td></tr>
+          <tr><td><code>ArchivePath</code></td><td><code>E:\Archive\OfficeMirror</code></td><td>Disk 2 plain full-copy folder.</td></tr>
+          <tr><td><code>ResticCredentialName</code></td><td><code>SyncMeRestic</code></td><td>Credential Manager target holding the repo password.</td></tr>
+          <tr><td><code>ResticPath</code></td><td><code>restic</code></td><td>Executable name or full path to <code>restic.exe</code>.</td></tr>
+          <tr><td><code>KeepLast</code></td><td><code>7</code></td><td>Always keep the last N snapshots.</td></tr>
+          <tr><td><code>KeepDaily</code></td><td><code>14</code></td><td>Keep up to N daily snapshots.</td></tr>
+          <tr><td><code>KeepWeekly</code></td><td><code>8</code></td><td>Keep up to N weekly snapshots.</td></tr>
+          <tr><td><code>KeepMonthly</code></td><td><code>6</code></td><td>Keep up to N monthly snapshots.</td></tr>
+          <tr><td><code>ArchiveEveryDays</code></td><td><code>14</code></td><td>Minimum days between Disk 2 full refreshes.</td></tr>
+          <tr><td><code>ArchiveStampFile</code></td><td><code>Logs\last-archive-utc.txt</code></td><td>Timestamp file for archive schedule.</td></tr>
+          <tr><td><code>ClearArchiveBeforeRestore</code></td><td><code>$true</code></td><td>Delete existing Disk 2 contents before restore (true overwrite).</td></tr>
+          <tr><td><code>ExcludePatterns</code></td><td>Office temps, <code>Thumbs.db</code>, etc.</td><td>Paths/patterns restic skips.</td></tr>
+          <tr><td><code>SnapshotTags</code></td><td><code>office-to-home</code>, <code>location-a</code></td><td>Tags applied to snapshots; prune uses the same tags.</td></tr>
+          <tr><td><code>EnableToastNotifications</code></td><td><code>$true</code></td><td>Windows toast / balloon notifications.</td></tr>
+          <tr><td><code>ToastAppId</code></td><td><code>SyncMe</code></td><td>App id passed to BurntToast.</td></tr>
+          <tr><td><code>EnableEmailNotifications</code></td><td><code>$true</code></td><td>Master switch for SMTP email.</td></tr>
+          <tr><td><code>SmtpServer</code></td><td><code>smtp.office365.com</code></td><td>SMTP hostname.</td></tr>
+          <tr><td><code>SmtpPort</code></td><td><code>587</code></td><td>SMTP port (587 common with TLS).</td></tr>
+          <tr><td><code>SmtpUseSsl</code></td><td><code>$true</code></td><td>Enable SSL/TLS for SMTP.</td></tr>
+          <tr><td><code>MailFrom</code></td><td>sender address</td><td>From address on outbound mail.</td></tr>
+          <tr><td><code>MailTo</code></td><td>recipient array</td><td>One or more To addresses.</td></tr>
+          <tr><td><code>SmtpCredentialName</code></td><td><code>SyncMeSmtp</code></td><td>Credential Manager target for SMTP login/password.</td></tr>
+          <tr><td><code>EmailOnStart</code></td><td><code>$true</code></td><td>Send email when backup starts.</td></tr>
+          <tr><td><code>EmailOnComplete</code></td><td><code>$true</code></td><td>Send email when backup finishes (HTML report attached).</td></tr>
+          <tr><td><code>ReportsDir</code></td><td><code>Reports</code></td><td>HTML report folder (relative to script root unless absolute).</td></tr>
+          <tr><td><code>LogsDir</code></td><td><code>Logs</code></td><td>Log folder.</td></tr>
+          <tr><td><code>SourceHost</code></td><td><code>office-pc</code></td><td>Host pinged before backup; also used as restic <code>--host</code>.</td></tr>
+          <tr><td><code>RequireSourceReachable</code></td><td><code>$true</code></td><td>Fail the run if host/paths are unreachable.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ========== TROUBLESHOOTING ========== -->
+    <section id="troubleshooting">
+      <h2>23. Troubleshooting</h2>
+      <table>
+        <thead>
+          <tr><th>Symptom</th><th>What to check / do</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Repository password not stored / Credential Manager target not found</td>
+            <td>In SyncMe: <strong>Operations → Store password</strong> (or Edit set → Passwords). Advanced: <code>cmdkey /list</code> and recreate <code>SyncMeRestic</code> / <code>SyncMeSmtp</code>. Names must match config.</td>
+          </tr>
+          <tr>
+            <td>No email / SMTP auth failed</td>
+            <td>Confirm server/port/SSL; use an app password for Gmail; enable Authenticated SMTP for M365; recreate <code>SyncMeSmtp</code> via the wizard; check log WARN lines.</td>
+          </tr>
+          <tr>
+            <td>Complete email missing HTML attachment</td>
+            <td>Report must exist under <code>Reports\</code>. If report generation failed, email still sends without attachment — check log.</td>
+          </tr>
+          <tr>
+            <td>Emails go to spam</td>
+            <td>Whitelist the From address; prefer sending from a real mailbox you control (not a forged From).</td>
+          </tr>
+          <tr>
+            <td>Cannot reach source host / Test-Connection fails</td>
+            <td>Both Tailscale clients logged in? <code>tailscale status</code> on both PCs. Correct <code>SourceHost</code> name?</td>
+          </tr>
+          <tr>
+            <td><code>Test-Path \\office-pc\Data</code> is False</td>
+            <td>Share missing/permissions; wrong share name; SMB credentials; try <code>net use</code>; check office firewall.</td>
+          </tr>
+          <tr>
+            <td>restic not found</td>
+            <td>Install restic; restart PowerShell; or set full <code>ResticPath</code> in config.</td>
+          </tr>
+          <tr>
+            <td>Repository path does not exist</td>
+            <td>Create <code>D:\Backup\restic-repo</code> and run <code>restic init</code> (Steps 3 and 8).</td>
+          </tr>
+          <tr>
+            <td>Wrong password / repository cannot be opened</td>
+            <td>Password in Credential Manager must match the password used at <code>restic init</code>. Use Operations → Store password to update it.</td>
+          </tr>
+          <tr>
+            <td>Mount needs WinFsp / mount fails</td>
+            <td>On Operations click <strong>Install WinFsp</strong> and approve the Windows security prompt. Then Mount repo again.</td>
+          </tr>
+          <tr>
+            <td>Exit code 3 from restic backup</td>
+            <td>Some source files unread (often locked Office). Snapshot may still be OK. See <a href="#exit-codes">exit codes</a>; prefer Shadow Copies.</td>
+          </tr>
+          <tr>
+            <td>Exit code 1 / 2 / 12 / other non-3</td>
+            <td>Backup failed — open the newest <code>Logs\</code> ERROR lines. Code 12 = wrong restic password. Code 10 = repo missing.</td>
+          </tr>
+          <tr>
+            <td>Backup cancelled / killed mid-run</td>
+            <td>No new snapshot. Re-run; restic dedupes already stored chunks. See <a href="#exit-codes">interrupted backups</a>.</td>
+          </tr>
+          <tr>
+            <td>Script blocked by execution policy</td>
+            <td><code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code> or run via the scheduled task which uses Bypass.</td>
+          </tr>
+          <tr>
+            <td>No toast notifications</td>
+            <td>Install BurntToast; ensure you are logged on; task may be set to run whether logged on or not; try <code>-NoNotify</code> off; check Focus Assist.</td>
+          </tr>
+          <tr>
+            <td>Disk 2 empty / unexpected nesting</td>
+            <td>Run with <code>-ForceArchive</code>; wait for restore to finish; browse subfolders under <code>ArchivePath</code> for UNC-style nesting.</td>
+          </tr>
+          <tr>
+            <td>Archive deleted files I left on Disk 2</td>
+            <td>Expected when <code>ClearArchiveBeforeRestore = $true</code>. Do not store unique data only in the archive folder.</td>
+          </tr>
+          <tr>
+            <td>First backup extremely slow</td>
+            <td>Normal for multi-TB seed. Check office upload speed; keep both PCs awake; subsequent runs are incremental.</td>
+          </tr>
+          <tr>
+            <td>Scheduled task runs but cannot see the share</td>
+            <td>Configure <code>ShareCredentialName</code> / <code>OfficeBackupShare</code>; or run task as the same user that can open the UNC path interactively.</td>
+          </tr>
+          <tr>
+            <td>Want to see what would happen without writing</td>
+            <td>Run <code>.\SyncMe-Backup.ps1 -WhatIf</code> (still may need credentials/config valid for preflight).</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Where to look first when something fails</h3>
+      <ol>
+        <li><code>Logs\backup-*.log</code> — human-readable transcript.</li>
+        <li><code>Reports\backup-*.html</code> — summary + errors.</li>
+        <li><code>Logs\restic-*.jsonl</code> — raw restic JSON lines.</li>
+        <li>Task Scheduler &rarr; task History tab (if enabled) for scheduled runs.</li>
+      </ol>
+    </section>
+
+    <!-- ========== CHECKLIST ========== -->
+    <section id="checklist">
+      <h2>24. Final checklist</h2>
+      <div class="checklist">
+        <label><input type="checkbox" /> Tailscale installed and connected on office and home</label>
+        <label><input type="checkbox" /> <code>Test-Connection</code> to office hostname works from home</label>
+        <label><input type="checkbox" /> Office folder shared; <code>BackupUser</code> has Read share + NTFS rights</label>
+        <label><input type="checkbox" /> From home, Explorer can open <code>\\office-pc\Data</code></label>
+        <label><input type="checkbox" /> Disk 1 folder created (restic repo) with plenty of free space</label>
+        <label><input type="checkbox" /> Disk 2 folder created (archive) with enough free space for a full copy</label>
+        <label><input type="checkbox" /> restic installed; <code>restic version</code> works</label>
+        <label><input type="checkbox" /> Scripts copied to home PC</label>
+        <label><input type="checkbox" /> <strong>Recommended:</strong> ran <code>SyncMe.bat</code> setup wizard (config, credentials, restic init, task, SMTP)</label>
+        <label><input type="checkbox" /> Or manually: <code>cmdkey</code> <code>ResticOfficeBackup</code> + optional SMB + <code>BackupSmtp</code>; <code>restic init</code>; edited <code>Config.ps1</code>; registered task</label>
+        <label><input type="checkbox" /> Test email received (if SMTP enabled)</label>
+        <label><input type="checkbox" /> Smoke test succeeded (<code>-SkipArchive</code>) with HTML report SUCCESS</label>
+        <label><input type="checkbox" /> Full backup completed (or in progress with both PCs awake)</label>
+        <label><input type="checkbox" /> Disk 2 populated once via <code>-ForceArchive</code></label>
+        <label><input type="checkbox" /> Daily scheduled task registered and tested</label>
+        <label><input type="checkbox" /> Sleep settings adjusted for the backup window</label>
+      </div>
+      <div class="callout" style="margin-top:1.25rem;">
+        <strong>You are done when</strong>
+        Daily reports (and emails) show successful incremental backups, snapshots list grows then prunes sanely,
+        and Disk 2 refreshes about every two weeks with browseable files.
+      </div>
+    </section>
+
+    <footer>
+      SyncMe — Copyright © 2026 Bradford Lotriet (<a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a>)<br />
+      Free to use — keep this credit. See <code>LICENSE.txt</code> (no warranty; ransomware and data-loss liability excluded).<br />
+      Open <code>UserGuide.html</code> anytime · Related: <code>SyncMe.bat</code>, <code>START-HERE.txt</code>, <code>RecoveryChecklist.txt</code>
+    </footer>
+  </div>
+</body>
+</html>
+
+

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ops 01 — Three zones · SyncMe mockup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="mockup.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-brand">
+        <div class="mark">SM</div>
+        <div><h1>SyncMe</h1><div class="by">By Bradford Lotriet</div></div>
+      </div>
+      <nav>
+        <a href="#">Setup wizard</a>
+        <a href="dash-01-activity-hero.html">Dashboard</a>
+        <a class="active" href="#">Operations</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <p class="back"><a href="index.html">← All mockups</a> · Ops 01 — Three zones</p>
+      <p class="mock-banner">Mockup — not wired. Run · Maintain · Recover as separate zones.</p>
+      <div class="set-switcher">
+        <span class="set-pill active">Finance-PC</span>
+        <span class="set-pill">Reception</span>
+      </div>
+
+      <div class="grid-3" style="margin-bottom:16px;">
+        <div class="zone">
+          <div class="zone-label">Run</div>
+          <h2 style="margin:0 0 8px;font-size:1.1rem;">Backup now</h2>
+          <p class="sub">Start or stop a job for this set.</p>
+          <div class="actions" style="flex-direction:column;align-items:stretch;">
+            <button type="button" class="btn primary">Run backup</button>
+            <button type="button" class="btn soft">Dry run</button>
+            <button type="button" class="btn soft">Run + archive</button>
+            <button type="button" class="btn danger">Cancel</button>
+          </div>
+        </div>
+        <div class="zone">
+          <div class="zone-label">Maintain</div>
+          <h2 style="margin:0 0 8px;font-size:1.1rem;">Repo &amp; source</h2>
+          <p class="sub">Checks, prune, mount, wake.</p>
+          <div class="actions" style="flex-direction:column;align-items:stretch;">
+            <button type="button" class="btn soft">Check</button>
+            <button type="button" class="btn soft">Data check</button>
+            <button type="button" class="btn soft">Prune now</button>
+            <button type="button" class="btn soft">Wake source</button>
+            <button type="button" class="btn soft">Mount repo</button>
+            <button type="button" class="btn ghost">Unmount</button>
+          </div>
+        </div>
+        <div class="zone">
+          <div class="zone-label">Sets</div>
+          <h2 style="margin:0 0 8px;font-size:1.1rem;">Backup sets</h2>
+          <p class="sub">Select active set.</p>
+          <ul class="list">
+            <li class="selected"><strong>Finance-PC</strong><br/><span class="muted">Daily 01:00</span></li>
+            <li><strong>Reception</strong><br/><span class="muted">Daily 01:30</span></li>
+          </ul>
+          <button type="button" class="btn primary" style="width:100%;">Add set</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="zone-label">Recover</div>
+        <h2>Restore from Disk 1</h2>
+        <p class="sub">Target folder + snapshots in one place. Never restore into the live repo.</p>
+        <div class="grid-2">
+          <label class="field">Restore target
+            <input type="text" value="D:\SyncMe\Restores\20260802-071200" readonly />
+          </label>
+          <label class="field">Optional include path
+            <input type="text" placeholder="Leave blank for full snapshot" readonly />
+          </label>
+        </div>
+        <ul class="list">
+          <li class="selected"><code>a3f91c02</code> · 2026-08-01 01:14 · tags=[nightly]</li>
+          <li><code>b81e0041</code> · 2026-07-31 01:12 · tags=[nightly]</li>
+          <li><code>c02aa9de</code> · 2026-07-30 01:11 · tags=[nightly]</li>
+        </ul>
+        <div class="actions">
+          <button type="button" class="btn soft">Refresh</button>
+          <button type="button" class="btn soft">Suggest target</button>
+          <button type="button" class="btn primary">Restore latest</button>
+          <button type="button" class="btn primary">Restore selected</button>
+          <button type="button" class="btn soft">Open Disk 2</button>
+          <button type="button" class="btn ghost">Checklist</button>
+        </div>
+      </div>
+      <p class="footer-note">Secondary tools (OfficeAgent, reports, Set ResticPath) stay under Maintain or a More menu in the live build.</p>
+    </div>
+  </div>
+</body>
+</html>

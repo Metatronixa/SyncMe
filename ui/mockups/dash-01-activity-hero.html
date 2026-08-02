@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dash 01 — Activity hero · SyncMe mockup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="mockup.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-brand">
+        <div class="mark">SM</div>
+        <div><h1>SyncMe</h1><div class="by">By Bradford Lotriet</div></div>
+      </div>
+      <nav>
+        <a href="#">Setup wizard</a>
+        <a class="active" href="#">Dashboard</a>
+        <a href="ops-01-three-zones.html">Operations</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <p class="back"><a href="index.html">← All mockups</a> · Dash 01 — Activity hero</p>
+      <p class="mock-banner">Mockup — not wired. Activity is the hero; ETA shown during transfer.</p>
+      <div class="chips">
+        <span class="chip busy"><span class="dot"></span>Backup running</span>
+        <span class="chip ok"><span class="dot"></span>Set: Finance-PC</span>
+      </div>
+      <div class="set-switcher">
+        <span class="set-pill active">Finance-PC</span>
+        <span class="set-pill">Reception</span>
+        <span class="set-pill">+ Add set</span>
+      </div>
+
+      <div class="card" style="padding:22px 24px;">
+        <h2>Activity</h2>
+        <p class="sub">Live progress from restic. Continues if you close this console.</p>
+        <div class="phase">Backing up… 47%</div>
+        <div class="bar"><span style="width:47%"></span></div>
+        <div class="prog-meta">
+          86.2 GB of 183 GB · 12,401 / 28,900 files
+          <span class="eta">· ~38m remaining</span>
+        </div>
+      </div>
+
+      <div class="kpi-row">
+        <div class="stat ok"><div class="k">Last success</div><div class="v">2026-08-01 15:28</div></div>
+        <div class="stat ok"><div class="k">Network</div><div class="v">LAN</div></div>
+        <div class="stat ok"><div class="k">restic</div><div class="v">Ready</div></div>
+        <div class="stat"><div class="k">Disk 1 free</div><div class="v">412 GB (38%)</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2>Last run</h2>
+          <p class="sub">Most recent finished job for this set.</p>
+          <div class="stat ok" style="margin-bottom:10px"><div class="k">Result</div><div class="v">SUCCESS</div></div>
+          <div class="prog-meta">Added 1.2 GB · Snapshot a3f91c02 · Src ShadowCopy</div>
+          <div class="actions" style="margin-top:12px">
+            <button type="button" class="btn ghost">Open log</button>
+            <button type="button" class="btn ghost">Open reports</button>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Active set</h2>
+          <p class="sub">Finance-PC · daily 01:00</p>
+          <div class="prog-meta">Sources: \\FINANCE-PC\Data<br/>Disk 1: D:\SyncMe\repos\finance<br/>Disk 2: (none)</div>
+          <div class="actions" style="margin-top:12px">
+            <button type="button" class="btn soft">Cloud settings</button>
+            <button type="button" class="btn soft">Retention</button>
+            <button type="button" class="btn ghost">Open Operations</button>
+          </div>
+        </div>
+      </div>
+      <p class="footer-note">Passwords stay in Credential Manager.</p>
+    </div>
+  </div>
+</body>
+</html>

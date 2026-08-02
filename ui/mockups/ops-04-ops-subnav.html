@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ops 04 — Ops subnav · SyncMe mockup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="mockup.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-brand">
+        <div class="mark">SM</div>
+        <div><h1>SyncMe</h1><div class="by">By Bradford Lotriet</div></div>
+      </div>
+      <nav>
+        <a href="#">Setup wizard</a>
+        <a href="dash-01-activity-hero.html">Dashboard</a>
+        <a class="active" href="#">Operations</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <p class="back"><a href="index.html">← All mockups</a> · Ops 04 — Ops subnav</p>
+      <p class="mock-banner">Mockup — not wired. One panel at a time via tab strip (Actions shown; Sets / Restore linked as siblings).</p>
+
+      <div class="ops-tabs">
+        <span class="ops-tab active">Actions</span>
+        <a class="ops-tab" href="#panel-sets" style="text-decoration:none;">Sets</a>
+        <a class="ops-tab" href="#panel-restore" style="text-decoration:none;">Restore</a>
+      </div>
+
+      <div class="card" id="panel-actions">
+        <h2>Actions</h2>
+        <p class="sub">Jobs for the active set (Finance-PC). Open Sets or Restore from the tabs above.</p>
+        <div class="grid-2">
+          <div>
+            <div class="zone-label">Backup</div>
+            <div class="actions" style="flex-direction:column;align-items:stretch;margin-bottom:16px;">
+              <button type="button" class="btn primary">Run backup</button>
+              <button type="button" class="btn soft">Dry run</button>
+              <button type="button" class="btn soft">Run + archive</button>
+              <button type="button" class="btn danger">Cancel backup</button>
+            </div>
+          </div>
+          <div>
+            <div class="zone-label">Maintain</div>
+            <div class="actions" style="flex-direction:column;align-items:stretch;">
+              <button type="button" class="btn soft">Structural check</button>
+              <button type="button" class="btn soft">Data check</button>
+              <button type="button" class="btn soft">Prune now</button>
+              <button type="button" class="btn soft">Wake source</button>
+              <button type="button" class="btn soft">Mount repo</button>
+              <button type="button" class="btn ghost">Unmount</button>
+            </div>
+          </div>
+        </div>
+        <div class="zone-label" style="margin-top:8px;">Tools</div>
+        <div class="actions">
+          <button type="button" class="btn ghost">OfficeAgent</button>
+          <button type="button" class="btn ghost">Reports</button>
+          <button type="button" class="btn ghost">Logs</button>
+          <button type="button" class="btn ghost">Set ResticPath</button>
+        </div>
+      </div>
+
+      <div class="card" id="panel-sets">
+        <h2>Sets</h2>
+        <p class="sub">Same page for mock comparison — live UI would show only the active tab.</p>
+        <ul class="list">
+          <li class="selected"><strong>Finance-PC</strong><br/><span class="muted">Daily 01:00 · D:\SyncMe\repos\finance</span></li>
+          <li><strong>Reception</strong><br/><span class="muted">Daily 01:30 · D:\SyncMe\repos\reception</span></li>
+        </ul>
+        <button type="button" class="btn primary">Add set</button>
+      </div>
+
+      <div class="card" id="panel-restore">
+        <h2>Restore</h2>
+        <p class="sub">Target + snapshots + CTAs together.</p>
+        <div class="grid-2">
+          <label class="field">Restore target
+            <input type="text" value="D:\SyncMe\Restores\20260802-071200" readonly />
+          </label>
+          <label class="field">Include (optional)
+            <input type="text" placeholder="Blank = full" readonly />
+          </label>
+        </div>
+        <ul class="list">
+          <li class="selected"><code>a3f91c02</code> · 2026-08-01 01:14</li>
+          <li><code>b81e0041</code> · 2026-07-31 01:12</li>
+        </ul>
+        <div class="actions">
+          <button type="button" class="btn soft">Refresh</button>
+          <button type="button" class="btn soft">Suggest</button>
+          <button type="button" class="btn primary">Restore latest</button>
+          <button type="button" class="btn primary">Restore selected</button>
+          <button type="button" class="btn soft">Open Disk 2</button>
+          <button type="button" class="btn ghost">Checklist</button>
+        </div>
+      </div>
+      <p class="footer-note">In the live build, Sets and Restore panels would hide when Actions is selected.</p>
+    </div>
+  </div>
+</body>
+</html>

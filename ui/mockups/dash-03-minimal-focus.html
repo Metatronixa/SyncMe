@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dash 03 — Minimal focus · SyncMe mockup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="mockup.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-brand">
+        <div class="mark">SM</div>
+        <div><h1>SyncMe</h1><div class="by">By Bradford Lotriet</div></div>
+      </div>
+      <nav>
+        <a href="#">Setup wizard</a>
+        <a class="active" href="#">Dashboard</a>
+        <a href="ops-01-three-zones.html">Operations</a>
+      </nav>
+    </aside>
+    <div class="main" style="max-width:720px;">
+      <p class="back"><a href="index.html">← All mockups</a> · Dash 03 — Minimal focus</p>
+      <p class="mock-banner">Mockup — not wired. One job on screen: watch the backup.</p>
+
+      <div class="set-switcher">
+        <span class="set-pill active">Finance-PC</span>
+        <span class="set-pill">Reception</span>
+      </div>
+
+      <div style="padding:28px 8px 20px;">
+        <div style="font-size:0.8rem;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;">Activity</div>
+        <div class="phase" style="font-size:1.75rem;margin-bottom:16px;">Backing up… 47%</div>
+        <div class="bar" style="height:16px;margin-bottom:14px;"><span style="width:47%"></span></div>
+        <div class="prog-meta" style="font-size:1.05rem;">
+          86.2 GB of 183 GB · 12,401 files
+          <span class="eta">· ~38m remaining</span>
+        </div>
+      </div>
+
+      <div class="chips" style="margin:8px 0 28px;">
+        <span class="chip ok"><span class="dot"></span>Last success 2026-08-01 15:28</span>
+        <span class="chip ok"><span class="dot"></span>LAN</span>
+        <span class="chip ok"><span class="dot"></span>restic Ready</span>
+        <span class="chip"><span class="dot"></span>Disk 1 · 412 GB free</span>
+        <span class="chip"><span class="dot"></span>Disk 2 · off</span>
+      </div>
+
+      <div style="border-top:1px solid var(--line);padding-top:18px;">
+        <div style="font-size:0.85rem;font-weight:700;color:var(--muted);margin-bottom:8px;">Last run</div>
+        <div class="prog-meta">SUCCESS · Added 1.2 GB · Snapshot a3f91c02 · ShadowCopy</div>
+        <div class="actions" style="margin-top:12px">
+          <button type="button" class="btn ghost">Open log</button>
+          <button type="button" class="btn ghost">Reports</button>
+          <button type="button" class="btn soft">Operations</button>
+        </div>
+      </div>
+      <p class="footer-note">Passwords stay in Credential Manager.</p>
+    </div>
+  </div>
+</body>
+</html>

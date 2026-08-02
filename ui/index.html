@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SyncMe — © 2026 Bradford Lotriet</title>
+  <link rel="icon" type="image/svg+xml" href="/ui/assets/syncme-logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/ui/css/app.css" />
+</head>
+<body>
+  <div id="splash" class="splash" aria-hidden="false">
+    <div class="splash-inner">
+      <img class="splash-logo" src="/ui/assets/syncme-logo.svg" alt="" />
+      <h1 class="splash-title">SyncMe</h1>
+      <div class="splash-by">© 2026 Bradford Lotriet · brad@web-zilla.co.za</div>
+    </div>
+  </div>
+
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-brand">
+        <img src="/ui/assets/syncme-logo.svg" alt="" />
+        <div>
+          <h1>SyncMe</h1>
+          <div class="by">© 2026 Bradford Lotriet</div>
+        </div>
+      </div>
+      <nav>
+        <a href="#" id="navSetup" data-nav="setup">Setup wizard</a>
+        <a href="#" id="navDash" data-nav="dash">Dashboard</a>
+        <a href="#" id="navOps" data-nav="ops">Operations</a>
+      </nav>
+    </aside>
+
+    <div class="main">
+      <div class="chips">
+        <span id="topStatus" class="chip neutral"><span class="dot"></span><span id="topStatusText">Starting…</span></span>
+        <span id="lowDiskChip" class="chip danger hidden"><span class="dot"></span><span>Low disk space</span></span>
+      </div>
+
+      <div id="setSwitcher" class="set-switcher"></div>
+
+      <section id="view-setup" class="hidden">
+        <div class="card setup-card">
+          <div class="steps" id="setupSteps"></div>
+          <h2 id="setupTitle">Welcome</h2>
+          <p class="sub" id="setupSub"></p>
+          <div id="setupBody"></div>
+          <div class="actions">
+            <button type="button" class="btn ghost" id="btnBack">Back</button>
+            <button type="button" class="btn primary" id="btnNext">Next</button>
+            <button type="button" class="btn soft hidden" id="btnWizardDryRun">Run dry run</button>
+          </div>
+          <div class="status-line" id="setupStatus"></div>
+        </div>
+      </section>
+
+      <section id="view-dash" class="hidden">
+        <div class="card activity-hero" id="activityCard">
+          <h2>Activity</h2>
+          <p class="sub">Live progress from restic. Manual Run now and scheduled tasks both continue if you close this console.</p>
+          <div class="phase" id="progPhase">No backup running</div>
+          <div class="bar" id="progBar"><span id="progFill" style="width:0%"></span></div>
+          <div class="prog-meta"><span id="progMeta">Idle</span> <span class="eta" id="progEta"></span></div>
+          <div class="status-line" id="dashStatus"></div>
+        </div>
+
+        <div class="kpi-row" id="statsStrip">
+          <div class="stat" id="statLastCard"><div class="k">Last success</div><div class="v" id="statLast">—</div></div>
+          <div class="stat" id="statNetCard"><div class="k">Network</div><div class="v" id="statTs">—</div></div>
+          <div class="stat" id="statResticCard"><div class="k">restic</div><div class="v" id="statRestic">—</div></div>
+          <div class="stat" id="statRcloneCard"><div class="k">rclone</div><div class="v" id="statRclone">—</div></div>
+          <div class="stat" id="statDisk1Card"><div class="k">Disk 1 free</div><div class="v" id="statDisk1">—</div></div>
+          <div class="stat" id="statDisk2Card"><div class="k">Disk 2 free</div><div class="v" id="statDisk2">—</div></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card" id="lastRunCard">
+            <h2>Last run</h2>
+            <p class="sub">Summary of the most recent backup for the active set — including warnings and skipped-file notes.</p>
+            <div id="lastRunBody" class="last-run-body">
+              <div class="muted">No run details yet.</div>
+            </div>
+            <div class="actions" style="margin-top:12px">
+              <button type="button" class="btn ghost" id="btnOpenLastLog">Open log</button>
+              <button type="button" class="btn ghost" id="btnOpenReportsDash">Open reports</button>
+            </div>
+          </div>
+
+          <div class="card" id="setOverviewCard">
+            <h2>Active set</h2>
+            <p class="sub" id="setOverviewSub">Overview of the selected backup set.</p>
+            <div id="setOverviewBody" class="status-line"></div>
+            <div class="actions">
+              <button type="button" class="btn soft" id="btnOpenCloudModal">Cloud settings</button>
+              <button type="button" class="btn soft" id="btnOpenPolicyModal">Retention &amp; integrity</button>
+              <button type="button" class="btn ghost" id="btnGotoOps">Open Operations</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-ops" class="hidden">
+        <div class="card ops-primary-bar">
+          <div class="actions ops-bar-row">
+            <div class="quick-actions">
+              <button type="button" class="btn primary" data-backup="">Run backup</button>
+              <button type="button" class="btn soft" data-backup="whatIf">Dry run</button>
+              <button type="button" class="btn soft" data-backup="checkOnly">Check</button>
+              <button type="button" class="btn soft" data-backup="pruneOnly">Prune</button>
+              <button type="button" class="btn danger" id="btnCancelBackup">Cancel</button>
+            </div>
+            <div class="quick-actions">
+              <button type="button" class="btn ghost" id="btnWakeSource">Wake</button>
+              <button type="button" class="btn ghost" id="btnMountStart">Mount</button>
+              <button type="button" class="btn ghost" id="btnOpsMore">More…</button>
+            </div>
+          </div>
+          <div id="opsMorePanel" class="ops-more hidden">
+            <div class="quick-actions">
+              <button type="button" class="btn soft" data-backup="forceArchive">Run + archive</button>
+              <button type="button" class="btn soft" data-backup="dataCheck">Data check</button>
+              <button type="button" class="btn ghost" id="btnMountStop">Unmount</button>
+              <button type="button" class="btn soft hidden" id="btnInstallWinFsp">Install WinFsp</button>
+              <button type="button" class="btn soft hidden" id="btnStoreResticPass">Store password</button>
+              <button type="button" class="btn ghost" id="btnOpenOfficeAgent">OfficeAgent folder</button>
+              <button type="button" class="btn ghost" id="btnOpenReports">Open reports</button>
+              <button type="button" class="btn ghost" id="btnOpenLogs">Open logs</button>
+              <button type="button" class="btn ghost" id="btnSetResticPath">Set ResticPath</button>
+            </div>
+          </div>
+          <div class="status-line" id="mountStatus" style="margin-top:10px"></div>
+          <div class="status-line" id="opsStatus" style="margin-top:10px"></div>
+        </div>
+
+        <div class="card">
+          <div class="ops-sets-head">
+            <span class="ops-sets-label">Sets</span>
+            <button type="button" class="btn primary" id="btnAddSet">Add set</button>
+          </div>
+          <p class="sub" style="margin-top:8px">Select a set for Operations and the Dashboard. Edit opens the setup wizard for that set.</p>
+          <div id="setList" class="set-list"></div>
+        </div>
+
+        <div class="card restore-workspace">
+          <h2>Restore workspace</h2>
+          <p class="sub">Disk 1 snapshots and restore target for the active set. Never restore into the live repository.</p>
+          <div class="grid two">
+            <label class="field">Restore target folder
+              <input type="text" id="restoreTarget" />
+              <span class="hint">Use Suggest for a safe folder outside the repo.</span>
+            </label>
+            <label class="field">Optional include path
+              <input type="text" id="restoreInclude" placeholder="Leave blank for full snapshot" />
+              <span class="hint">Limit restore to one path inside the snapshot.</span>
+            </label>
+          </div>
+          <div class="ops-snap-head">
+            <h3>Snapshots</h3>
+            <button type="button" class="btn soft" id="btnRefreshSnaps">Refresh</button>
+          </div>
+          <ul class="list" id="snapList"></ul>
+          <div class="status-line" id="restoreStatus" style="margin-top:14px"></div>
+          <div class="actions" style="margin-top:8px">
+            <button type="button" class="btn soft" id="btnSuggestTarget">Suggest target</button>
+            <button type="button" class="btn primary" id="btnRestoreLatest">Restore latest</button>
+            <button type="button" class="btn primary" id="btnRestoreSel">Restore selected</button>
+            <button type="button" class="btn soft" id="btnOpenDisk2">Open Disk 2 archive</button>
+            <button type="button" class="btn ghost" id="btnOpenChecklist">Recovery checklist</button>
+          </div>
+        </div>
+      </section>
+
+      <p class="footer-note">© 2026 Bradford Lotriet (brad@web-zilla.co.za) · Free to use — keep this credit. Passwords stay in Windows Credential Manager.</p>
+    </div>
+  </div>
+
+  <!-- Cloud modal -->
+  <div id="modalCloud" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalCloudTitle">
+    <div class="modal-backdrop" data-close-modal="modalCloud"></div>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="modalCloudTitle">Cloud (rclone)</h2>
+        <button type="button" class="btn ghost modal-close" data-close-modal="modalCloud">Close</button>
+      </div>
+      <p class="sub">Configure OneDrive / Google Drive from the console. Remotes are stored in SyncMe’s <code>Config\rclone.conf</code>.</p>
+      <div class="grid two">
+        <label class="field">Remote
+          <select id="rcloneRemote"></select>
+          <span class="hint">Add a remote below if the list is empty.</span>
+        </label>
+        <label class="field">Folder path on remote
+          <input type="text" id="rcloneSubPath" placeholder="SyncMe/set1" />
+          <span class="hint">Saved as rclone:remote:path for Disk 1.</span>
+        </label>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button type="button" class="btn soft" id="btnRcloneRefresh">Refresh remotes</button>
+        <button type="button" class="btn primary" id="btnRcloneAddOneDrive">Add OneDrive</button>
+        <button type="button" class="btn primary" id="btnRcloneAddDrive">Add Google Drive</button>
+        <button type="button" class="btn soft" id="btnRcloneCancelOAuth">Cancel OAuth</button>
+        <button type="button" class="btn soft" id="btnRcloneTest">Test</button>
+        <button type="button" class="btn soft" id="btnRcloneSave">Save cloud dest</button>
+      </div>
+      <div class="grid two" style="margin-top:14px">
+        <label class="field">Bandwidth limit<span class="hint">e.g. 2M, 500k, or off</span>
+          <input type="text" id="rcloneBwLimit" value="off" />
+        </label>
+        <label class="field">restic upload limit (KiB/s)<span class="hint">0 = unlimited</span>
+          <input type="number" id="resticLimitUpload" value="0" min="0" />
+        </label>
+        <label class="field">Transfers
+          <input type="number" id="rcloneTransfers" value="4" min="1" max="32" />
+        </label>
+        <label class="field">Checkers
+          <input type="number" id="rcloneCheckers" value="8" min="1" max="64" />
+        </label>
+        <label class="field">Retries
+          <input type="number" id="rcloneRetries" value="3" min="1" max="20" />
+        </label>
+        <label class="field">Low-level retries
+          <input type="number" id="rcloneLowRetries" value="10" min="1" max="50" />
+        </label>
+      </div>
+      <div class="status-line" id="rcloneStatus"></div>
+    </div>
+  </div>
+
+  <!-- Store restic password modal -->
+  <div id="modalResticPass" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalResticPassTitle">
+    <div class="modal-backdrop" data-close-modal="modalResticPass"></div>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="modalResticPassTitle">Store repository password</h2>
+        <button type="button" class="btn ghost modal-close" data-close-modal="modalResticPass">Close</button>
+      </div>
+      <p class="sub">SyncMe keeps the restic encryption password in Windows Credential Manager — never in a config file. Use the same password you chose when the repository was created.</p>
+      <div class="grid">
+        <label class="field">Repository password
+          <input type="password" id="resticPassInput" autocomplete="new-password" />
+        </label>
+        <label class="field">Confirm password
+          <input type="password" id="resticPassInput2" autocomplete="new-password" />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn primary" id="btnSaveResticPass">Save password</button>
+      </div>
+      <div class="status-line" id="resticPassStatus" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- Retention modal -->
+  <div id="modalPolicy" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalPolicyTitle">
+    <div class="modal-backdrop" data-close-modal="modalPolicy"></div>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="modalPolicyTitle">Retention &amp; integrity</h2>
+        <button type="button" class="btn ghost modal-close" data-close-modal="modalPolicy">Close</button>
+      </div>
+      <p class="sub">Controls restic forget/prune lifecycle and repository checks for the active set.</p>
+      <div class="grid two">
+        <label class="field">Keep last
+          <input type="number" id="polKeepLast" min="1" value="7" />
+        </label>
+        <label class="field">Keep daily
+          <input type="number" id="polKeepDaily" min="0" value="14" />
+        </label>
+        <label class="field">Keep weekly
+          <input type="number" id="polKeepWeekly" min="0" value="8" />
+        </label>
+        <label class="field">Keep monthly
+          <input type="number" id="polKeepMonthly" min="0" value="6" />
+        </label>
+        <label class="field">Weekly data-check day
+          <select id="polCheckDay">
+            <option>Sunday</option><option>Monday</option><option>Tuesday</option>
+            <option>Wednesday</option><option>Thursday</option><option>Friday</option><option>Saturday</option>
+          </select>
+        </label>
+        <label class="check" style="align-self:end"><input id="polEnableCheck" type="checkbox" checked /> Enable restic check after backups</label>
+      </div>
+      <div class="actions">
+        <button type="button" class="btn primary" id="btnSavePolicy">Save policy</button>
+        <button type="button" class="btn soft" data-backup="pruneOnly">Prune now</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/ui/js/app.js"></script>
+</body>
+</html>

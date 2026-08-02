@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ops 03 — Sectioned stack · SyncMe mockup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="mockup.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-brand">
+        <div class="mark">SM</div>
+        <div><h1>SyncMe</h1><div class="by">By Bradford Lotriet</div></div>
+      </div>
+      <nav>
+        <a href="#">Setup wizard</a>
+        <a href="dash-01-activity-hero.html">Dashboard</a>
+        <a class="active" href="#">Operations</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <p class="back"><a href="index.html">← All mockups</a> · Ops 03 — Sectioned stack</p>
+      <p class="mock-banner">Mockup — not wired. One purpose per section; no mega button grid.</p>
+      <div class="set-switcher">
+        <span class="set-pill active">Finance-PC</span>
+        <span class="set-pill">Reception</span>
+      </div>
+
+      <h2 style="margin:0 0 6px;">1 · Run a backup</h2>
+      <p class="sub">Start a job for the active set. Cancel stops the running process.</p>
+      <div class="actions" style="margin-bottom:8px;">
+        <button type="button" class="btn primary">Run backup</button>
+        <button type="button" class="btn soft">Dry run</button>
+        <button type="button" class="btn soft">Run + Disk 2 archive</button>
+        <button type="button" class="btn danger">Cancel backup</button>
+      </div>
+
+      <hr class="section-rule" />
+
+      <h2 style="margin:0 0 6px;">2 · Backup sets</h2>
+      <p class="sub">Select a set to make it active for Operations and the Dashboard.</p>
+      <ul class="list">
+        <li class="selected"><strong>Finance-PC</strong> — Daily 01:00 · D:\SyncMe\repos\finance</li>
+        <li><strong>Reception</strong> — Daily 01:30 · D:\SyncMe\repos\reception</li>
+      </ul>
+      <button type="button" class="btn primary">Add set</button>
+
+      <hr class="section-rule" />
+
+      <h2 style="margin:0 0 6px;">3 · Restore</h2>
+      <p class="sub">Choose target, pick a snapshot, restore. Disk 2 is optional plain latest.</p>
+      <div class="grid-2">
+        <label class="field">Restore target
+          <input type="text" value="D:\SyncMe\Restores\20260802-071200" readonly />
+        </label>
+        <label class="field">Include path (optional)
+          <input type="text" placeholder="Blank = full snapshot" readonly />
+        </label>
+      </div>
+      <ul class="list">
+        <li class="selected"><code>a3f91c02</code> · 2026-08-01 01:14</li>
+        <li><code>b81e0041</code> · 2026-07-31 01:12</li>
+      </ul>
+      <div class="action-row">
+        <div><h3>Refresh snapshots</h3><p class="muted" style="margin:0;">Reload Disk 1 list.</p></div>
+        <button type="button" class="btn soft">Refresh</button>
+      </div>
+      <div class="action-row">
+        <div><h3>Restore latest</h3><p class="muted" style="margin:0;">Newest snapshot → target.</p></div>
+        <button type="button" class="btn primary">Restore latest</button>
+      </div>
+      <div class="action-row">
+        <div><h3>Restore selected</h3><p class="muted" style="margin:0;">Highlighted snapshot → target.</p></div>
+        <button type="button" class="btn primary">Restore selected</button>
+      </div>
+      <div class="action-row">
+        <div><h3>Open Disk 2</h3><p class="muted" style="margin:0;">Plain latest copy if configured.</p></div>
+        <button type="button" class="btn soft">Open Disk 2</button>
+      </div>
+
+      <hr class="section-rule" />
+
+      <h2 style="margin:0 0 6px;">4 · More</h2>
+      <p class="sub">Less common maintain tools.</p>
+      <div class="actions">
+        <button type="button" class="btn soft">Check</button>
+        <button type="button" class="btn soft">Data check</button>
+        <button type="button" class="btn soft">Prune now</button>
+        <button type="button" class="btn soft">Wake source</button>
+        <button type="button" class="btn soft">Mount / Unmount</button>
+        <button type="button" class="btn ghost">OfficeAgent</button>
+        <button type="button" class="btn ghost">Reports</button>
+        <button type="button" class="btn ghost">Logs</button>
+        <button type="button" class="btn ghost">Checklist</button>
+      </div>
+      <p class="footer-note">Passwords stay in Credential Manager.</p>
+    </div>
+  </div>
+</body>
+</html>

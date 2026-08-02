@@ -1,0 +1,38 @@
+SyncMe
+Copyright © 2026 Bradford Lotriet (brad@web-zilla.co.za)
+
+Permission
+----------
+SyncMe is free to use, copy, and share for personal or business backup purposes.
+You may deploy it for yourself and for others.
+
+Attribution (required)
+----------------------
+Keep the copyright notice and contact details visible in the product, documentation,
+command-window banners, and reports. Do not strip or replace the author credit.
+
+No warranty
+-----------
+SyncMe is provided "AS IS", without warranty of any kind, express or implied,
+including but not limited to merchantability, fitness for a particular purpose,
+and non-infringement.
+
+Limitation of liability
+-----------------------
+To the maximum extent permitted by law, Bradford Lotriet and contributors are
+not liable for any loss, damage, or claim arising from use of SyncMe, including
+(without limitation):
+
+  - data loss, incomplete backups, failed restores, or misconfiguration
+  - hardware failure, disk errors, network outages, or cloud-provider issues
+  - ransomware, malware, unauthorized access, encryption of source or backup
+    media, or any third-party attack affecting systems SyncMe reads or writes
+  - corrupted or deleted restic repositories, Disk 2 archives, or cloud copies
+  - downtime, lost profits, or consequential damages
+
+SyncMe is a file-level backup helper. It is not antivirus, ransomware protection,
+bare-metal disaster recovery, or a guarantee that backups are complete or recoverable.
+You are responsible for verifying backups, securing credentials and destinations,
+and maintaining additional recovery plans as needed.
+
+Contact: brad@web-zilla.co.za

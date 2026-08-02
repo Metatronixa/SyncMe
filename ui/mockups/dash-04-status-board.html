@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dash 04 — Status board · SyncMe mockup</title>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="mockup.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-brand">
+        <div class="mark">SM</div>
+        <div><h1>SyncMe</h1><div class="by">By Bradford Lotriet</div></div>
+      </div>
+      <nav>
+        <a href="#">Setup wizard</a>
+        <a class="active" href="#">Dashboard</a>
+        <a href="ops-01-three-zones.html">Operations</a>
+      </nav>
+    </aside>
+    <div class="main">
+      <p class="back"><a href="index.html">← All mockups</a> · Dash 04 — Status board</p>
+      <p class="mock-banner">Mockup — not wired. Status board first; activity and last run share the row below.</p>
+      <div class="chips">
+        <span class="chip busy"><span class="dot"></span>Backup running</span>
+        <span class="chip ok"><span class="dot"></span>Finance-PC</span>
+      </div>
+      <div class="set-switcher">
+        <span class="set-pill active">Finance-PC</span>
+        <span class="set-pill">Reception</span>
+      </div>
+
+      <div class="kpi-row" style="grid-template-columns:repeat(4,minmax(0,1fr));">
+        <div class="stat ok"><div class="k">Last success</div><div class="v">2026-08-01 15:28</div></div>
+        <div class="stat"><div class="k">Next schedule</div><div class="v">Daily 01:00</div></div>
+        <div class="stat"><div class="k">Disk 1 free</div><div class="v">412 GB</div></div>
+        <div class="stat"><div class="k">Disk 2 free</div><div class="v">—</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2>Activity</h2>
+          <p class="sub">Live progress · ETA after scan completes.</p>
+          <div class="phase">Backing up… 47%</div>
+          <div class="bar"><span style="width:47%"></span></div>
+          <div class="prog-meta">
+            86.2 GB of 183 GB
+            <span class="eta">· ~38m remaining</span>
+          </div>
+          <div class="chips" style="margin-top:12px;margin-bottom:0;">
+            <span class="chip ok"><span class="dot"></span>restic Ready</span>
+            <span class="chip ok"><span class="dot"></span>LAN</span>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Last run</h2>
+          <p class="sub">Summary for Finance-PC.</p>
+          <div class="stat ok" style="margin-bottom:10px"><div class="k">Result</div><div class="v">SUCCESS</div></div>
+          <div class="prog-meta">Added 1.2 GB · Snapshot a3f91c02<br/>Src ShadowCopy · Repo OK</div>
+          <div class="actions" style="margin-top:12px">
+            <button type="button" class="btn ghost">Open log</button>
+            <button type="button" class="btn ghost">Reports</button>
+            <button type="button" class="btn soft">Operations</button>
+          </div>
+        </div>
+      </div>
+      <p class="footer-note">Passwords stay in Credential Manager.</p>
+    </div>
+  </div>
+</body>
+</html>

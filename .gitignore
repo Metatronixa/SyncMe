@@ -1,0 +1,18 @@
+# Secrets / local runtime
+Logs/
+Reports/
+tools/restic.exe
+tools/*.exe
+Config.ps1.bak-*
+Config/rclone.conf
+*.bak
+
+# Build output
+dist/
+
+# OS / editor
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/
