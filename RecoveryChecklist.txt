@@ -4,13 +4,20 @@ Free to use — keep this credit. See LICENSE.txt
 ============================================
 
 KEEP THESE SAFE (offline + password manager):
-[ ] restic repository password (Credential Manager: SyncMeRestic or SyncMeRestic-<setId>)
+[ ] restic repository password — REQUIRED for any Disk 1 restore/mount (Credential Manager: SyncMeRestic or SyncMeRestic-<setId>)
+    Keep a vault copy outside the Backup PC. Lose this password = Disk 1 unrecoverable.
 [ ] SMTP / share passwords if used (SyncMeSmtp, SyncMeShare / SyncMeShare-<setId>)
 [ ] Windows account password for the SyncMe task (Task Scheduler "run whether logged on")
 [ ] This checklist printed or stored offline
 
-IF DISK 1 (restic repo) IS HEALTHY:
-1. On the Backup PC, open SyncMe-Menu.bat -> Restore / Disaster Recovery
+VERIFY AFTER BACKUP / BEFORE YOU NEED A REAL DISASTER RESTORE:
+[ ] Run dry run after setup Apply, then a real backup
+[ ] Read Reports/Logs (exit 3 = some source files unread)
+[ ] Operations Check (repo health)
+[ ] Mount or restore to an EMPTY test folder; spot-check critical paths vs the source
+
+IF THE RESTIC REPO IS HEALTHY:
+1. On the Backup PC, open SyncMe-Menu.bat -> Operations / Restore
    OR open PowerShell in the SyncMe folder (e.g. C:\SyncMe).
 2. Set password:  $env:RESTIC_PASSWORD = 'your-password'
 3. List snapshots: restic -r "D:\SyncMe\repos\user1" snapshots
@@ -18,27 +25,21 @@ IF DISK 1 (restic repo) IS HEALTHY:
 5. Clear: Remove-Item Env:RESTIC_PASSWORD
 
 GUI restore (recommended):
-- SyncMe.bat or SyncMe-Menu.bat -> Restore / Disaster Recovery
+- SyncMe.bat or SyncMe-Menu.bat -> Operations
 - Refresh snapshots -> Restore latest or Restore selected
 - Choose a target folder OUTSIDE the restic repo (Suggest button helps)
 
-IF YOU ONLY NEED THE LATEST PLAIN COPY:
-- Browse Disk 2 archive folder (e.g. E:\SyncMeArchive\UserA) via GUI "Open Disk 2 archive"
-- Note: only as fresh as the last biweekly / ForceArchive restore
-- Never store unique data only under ArchivePath — SyncMe clears that folder before refresh
-
 IF REPO CHECK FAILS (CORRUPTED / CHECK_FAILED):
 - Do not prune further until investigated
-- Prefer restoring from Disk 2 for immediate files
 - Run: restic -r "..." check
-- Contact support / review Logs\backup-*.log
+- Review Logs\backup-*.log
 
 IF BACKUPS STOPPED SILENTLY:
-- Check Task Scheduler: SyncMe-Backup / SyncMe-Backup-<setId> (LogonType Password on Server)
+- Check Task Scheduler: SyncMe-Backup / SyncMe-Backup-<setId>
 - Confirm the task user matches Credential Manager secrets
-- Check SyncMe-Watchdog task / overdue email (covers all sets)
+- Check SyncMe-Watchdog task / overdue email
 - Confirm Logs\sets\<setId>\last-success-utc.txt
-- Confirm free space on Disk 1 and Disk 2; Disk 2 must be mounted if configured
+- Confirm free space on the restic destination; cloud sets need rclone auth
 - LAN-only sets skip Tailscale; offsite needs Tailscale on source + Backup PC
 
 OPEN-FILE ISSUES (exit code 3):
@@ -49,9 +50,7 @@ NEVER:
 - Commit passwords to Config.ps1 or git
 - Blindly run "restic unlock" while another backup is running
 - Restore into the live restic repository folder
-- Set ArchivePath to a drive root (E:\)
 
-MIGRATION NOTE (from Monarch Offsite Backup):
+CREDENTIAL / TASK NAMES:
 - Credential targets: SyncMeRestic, SyncMeSmtp, SyncMeShare
 - Tasks: SyncMe-Backup, SyncMe-Watchdog
-- Re-run SyncMe setup if you previously used ResticOfficeBackup / BackupSmtp

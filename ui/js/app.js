@@ -84,7 +84,7 @@
     { id: 'welcome', title: 'Welcome', sub: 'Configure SyncMe on this Backup PC. Passwords go in Windows Credential Manager — never in a config file.' },
     { id: 'prereqs', title: 'Prerequisites', sub: 'We check restic (and Tailscale if you use it). SyncMe can download restic, rclone, and WinFsp if missing.' },
     { id: 'source', title: 'Source folders', sub: 'Pull from LAN and/or Tailscale UNC shares (including admin $ shares). Add multiple folders to this backup set.' },
-    { id: 'dest', title: 'Backup destination', sub: 'Disk 1 is the versioned restic repo (required). Disk 2 plain copy is optional.' },
+    { id: 'dest', title: 'Backup destination', sub: 'Versioned restic repository — local folder, NAS UNC, or cloud via rclone.' },
     { id: 'secrets', title: 'Passwords', sub: 'Choose a strong restic password and store it in a password manager too.' },
     { id: 'email', title: 'Email alerts', sub: 'Optional SMTP so you get start/complete reports.' },
     { id: 'schedule', title: 'Schedule', sub: 'Start date, time, and recurrence are written to Windows Task Scheduler — backups run with the console closed.' },
@@ -209,7 +209,7 @@
       const destEl = document.querySelector('input[name="fDestType"]:checked');
       f.destinationType = destEl ? destEl.value : 'local';
       f.resticRepo = val('fRepo');
-      f.archivePath = val('fArchive');
+      f.archivePath = '';
       f.createFolders = checked('fCreate');
       if (f.destinationType === 'rclone') {
         f.rcloneRemote = val('fRcloneRemote');
@@ -218,7 +218,6 @@
         f.rcloneTransfers = parseInt(val('fTransfers') || '4', 10);
         f.rcloneRetries = parseInt(val('fRetries') || '3', 10);
         f.resticLimitUploadKByte = parseInt(val('fLimitUp') || '0', 10);
-        f.archivePath = val('fArchiveCloud') || f.archivePath;
         const remote = (f.rcloneRemote || '').replace(/:$/, '');
         const sub = (f.rcloneSubPath || '').replace(/^\/+/, '');
         if (remote) {
@@ -375,12 +374,9 @@
         '</div>' +
         '<div id="destLocalNas">' +
         '<div class="grid">' +
-        '<label class="field">Disk 1 — versioned repo' + tip('restic repository folder. Prefer a dedicated subfolder, not a drive root.') +
+        '<label class="field">restic repository' + tip('Versioned restic repository folder. Prefer a dedicated subfolder, not a drive root.') +
         '<span class="hint">Full path on this Backup PC (your drive letter) or \\\\nas\\share\\repo</span>' +
         '<input id="fRepo" type="text" value="' + esc(f.resticRepo && f.resticRepo.indexOf('rclone:') === 0 ? '' : f.resticRepo) + '" placeholder="D:\\Backups\\repo" /></label>' +
-        '<label class="field">Disk 2 — plain latest copy' + tip('Optional mirror of latest files. Leave blank for restic-only. Must be a subfolder (never E:\\) with a fixed drive letter if removable.') +
-        '<span class="hint">Optional — leave blank for restic-only; use a subfolder, not a drive root</span>' +
-        '<input id="fArchive" type="text" value="' + esc(f.archivePath) + '" placeholder="E:\\SyncMe\\archive\\set1" /></label>' +
         '<label class="check"><input id="fCreate" type="checkbox" ' + (f.createFolders ? 'checked' : '') + ' /> Create local/NAS folders if they do not exist</label></div>' +
         '</div>' +
         '<div id="destRclone" class="hidden">' +
@@ -399,7 +395,6 @@
         '<button type="button" class="btn soft" id="btnWzCancelOAuth">Cancel OAuth</button>' +
         '</div>' +
         '<div class="status-line" id="wzRcloneStatus"></div>' +
-        '<label class="field" style="margin-top:12px">Disk 2 — plain latest (optional)<input id="fArchiveCloud" type="text" value="' + esc(f.archivePath) + '" /></label>' +
         '<p class="sub">OAuth runs in your browser (5-minute timeout). SyncMe writes remotes to <code>Config\\rclone.conf</code>.</p>' +
         '</div>';
       const syncDest = () => {
@@ -491,7 +486,6 @@
         'Network: ' + esc(f.networkMode) + '<br/>' +
         'Source: ' + esc(f.sourceHost) + ' — ' + esc((f.sourcePaths || []).join(', ')) + '<br/>' +
         'Destination: ' + esc(f.destinationType) + ' — ' + esc(f.resticRepo) + '<br/>' +
-        'Disk 2: ' + (f.archivePath ? esc(f.archivePath) : '(none — restic only)') + '<br/>' +
         'Email: ' + (f.enableEmail ? 'yes (' + esc(f.smtpServer) + ')' : 'no') + '<br/>' +
         'Task logon: ' + (f.taskLogonType === 'Interactive' ? 'while logged on' : 'whether logged on or not') + '<br/>' +
         'Schedule: ' + esc(scheduleSummary(f)) + ' → Task Scheduler' +
@@ -656,16 +650,9 @@
         }
       } else {
         const repo = String(f.resticRepo || '').trim();
-        if (!repo) return 'Enter Disk 1 destination (full path on this Backup PC).';
+        if (!repo) return 'Enter restic repository destination (full path on this Backup PC).';
         if (!/^[A-Za-z]:\\/.test(repo) && !/^\\\\[^\\]+\\[^\\]+/.test(repo)) {
-          return 'Disk 1 must be a full path (e.g. D:\\Backups\\repo) or UNC. Relative paths are not allowed.';
-        }
-        const arch = String(f.archivePath || '').trim();
-        if (arch && !/^[A-Za-z]:\\/.test(arch) && !/^\\\\[^\\]+\\[^\\]+/.test(arch)) {
-          return 'Disk 2 must be a full path or UNC when set. Leave blank to skip.';
-        }
-        if (/^[A-Za-z]:\\?$/.test(arch)) {
-          return 'Disk 2 cannot be a drive root (e.g. E:\\). Use a dedicated subfolder such as E:\\SyncMeArchive\\UserA.';
+          return 'Repository must be a full path (e.g. D:\\Backups\\repo) or UNC. Relative paths are not allowed.';
         }
       }
     }
@@ -989,17 +976,13 @@
     }
 
     if ($('statDisk1')) $('statDisk1').textContent = diskLabel(d.disk1FreeGb, d.disk1PercentFree);
-    if ($('statDisk2')) $('statDisk2').textContent = diskLabel(d.disk2FreeGb, d.disk2PercentFree);
     const d1warn = d.disk1PercentFree != null && d.disk1PercentFree < 15;
-    const d2warn = d.disk2PercentFree != null && d.disk2PercentFree < 15;
     setStatCard('statDisk1Card', d1warn ? 'warn' : '');
-    setStatCard('statDisk2Card', d2warn ? 'warn' : '');
-    const hasDisk2 = !!(d.archivePath && String(d.archivePath).trim());
-    if ($('statDisk2Card')) $('statDisk2Card').classList.toggle('hidden', !hasDisk2);
+    if ($('statDisk2Card')) $('statDisk2Card').classList.add('hidden');
     const destCloud = (d.resticRepo || '').indexOf('rclone:') === 0;
     if ($('statRcloneCard')) $('statRcloneCard').classList.toggle('hidden', !destCloud && !d.rcloneOk);
     const lowChip = $('lowDiskChip');
-    if (lowChip) lowChip.classList.toggle('hidden', !(d.lowDisk || d1warn || (hasDisk2 && d2warn)));
+    if (lowChip) lowChip.classList.toggle('hidden', !(d.lowDisk || d1warn));
 
     renderLastRun(d.lastRun);
 
@@ -1016,8 +999,7 @@
           scheduleEndDate: d.scheduleEndDate,
           scheduleDaysOfWeek: d.scheduleDaysOfWeek
         })) + '<br/>' +
-        'Disk 1: ' + esc(d.resticRepo || '—') + '<br/>' +
-        'Disk 2: ' + esc(hasDisk2 ? d.archivePath : '(none)') +
+        'Repo: ' + esc(d.resticRepo || '—') +
         '</div>';
     }
 
@@ -1713,7 +1695,6 @@
     if (state.selectedSnap < 0) { setStatus($('restoreStatus'), 'Select a snapshot first.', 'warn'); return; }
     doRestore(state.snaps[state.selectedSnap].Id);
   };
-  $('btnOpenDisk2').onclick = () => openPath('archive');
   $('btnOpenChecklist').onclick = () => openPath('checklist');
   $('btnSuggestTarget').onclick = async () => {
     try {

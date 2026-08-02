@@ -30,13 +30,14 @@ if (Test-Path $setupDir) { Remove-Item $setupDir -Recurse -Force -ErrorAction Si
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 New-Item -ItemType Directory -Path $setupDir -Force | Out-Null
 
+# Customer ship list only — never add website/ (local marketing site).
 $include = @(
     'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Host.ps1',
-    'SyncMe-Backup.ps1', 'Backup-OfficeToHome.ps1', 'Config.ps1',
-    'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1', 'Watchdog-MonarchBackup.ps1',
+    'SyncMe-Backup.ps1', 'Config.ps1',
+    'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1',
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md',
-    'LICENSE.txt', 'VERSION.txt',
+    'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'VERSION.txt',
     'Modules', 'ui', 'OfficeAgent', 'tools'
 )
 
@@ -69,9 +70,9 @@ SyncMe setup package
 2. Files unpack to $InstallDir (existing Config.ps1 is kept if present).
 3. SyncMe opens the browser wizard.
 4. Use a dedicated Windows account for unattended backups; enter that password in Schedule.
-5. Disk 2 ArchivePath must be a dedicated subfolder with a fixed drive letter — never a drive root.
+5. Each backup set needs its own restic repository path (dedicated subfolder — never a drive root).
 
-Passwords stay in Windows Credential Manager. See START-HERE.txt and LICENSE.txt after install.
+Passwords stay in Windows Credential Manager. See START-HERE.txt, LICENSE.txt, and THIRD-PARTY-NOTICES.txt after install.
 "@
 Set-Content -Path (Join-Path $setupDir 'START-HERE.txt') -Value $startHere.Trim() -Encoding UTF8
 
@@ -79,6 +80,19 @@ Add-Type -AssemblyName System.IO.Compression.FileSystem
 if (Test-Path $payloadZip) { Remove-Item $payloadZip -Force }
 [System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $payloadZip)
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+
+$zipCheck = [System.IO.Compression.ZipFile]::OpenRead($payloadZip)
+try {
+    $blocked = @($zipCheck.Entries | Where-Object {
+        $_.FullName -match '(^|[/\\])website([/\\]|$)'
+    })
+    if ($blocked.Count -gt 0) {
+        throw ("Payload must not include website/ (found: {0})" -f ($blocked[0].FullName))
+    }
+}
+finally {
+    $zipCheck.Dispose()
+}
 
 $cmd = @"
 @echo off
@@ -101,9 +115,9 @@ echo Install folder: %INSTALL%
 echo.
 
 "%PS%" -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$ErrorActionPreference='Stop';" ^
-  "$install='%INSTALL%';" ^
-  "$zip='%PAYLOAD%';" ^
+  "`$ErrorActionPreference='Stop';" ^
+  "`$install='%INSTALL%';" ^
+  "`$zip='%PAYLOAD%';" ^
   "if (-not (Test-Path -LiteralPath `$install)) { New-Item -ItemType Directory -Path `$install -Force | Out-Null };" ^
   "`$cfg = Join-Path `$install 'Config.ps1';" ^
   "`$preserve = `$false; `$tmp = `$null;" ^

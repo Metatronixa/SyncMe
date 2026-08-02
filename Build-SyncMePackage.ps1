@@ -21,13 +21,14 @@ if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction Silently
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }
 
+# Customer ship list only — never add website/ (local marketing site).
 $include = @(
     'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Host.ps1',
-    'SyncMe-Backup.ps1', 'Backup-OfficeToHome.ps1', 'Config.ps1',
-    'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1', 'Watchdog-MonarchBackup.ps1',
+    'SyncMe-Backup.ps1', 'Config.ps1',
+    'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1',
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md',
-    'LICENSE.txt', 'VERSION.txt',
+    'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'VERSION.txt',
     'Modules', 'ui', 'OfficeAgent', 'tools'
 )
 
@@ -57,6 +58,19 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip)
 Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+
+$zipCheck = [System.IO.Compression.ZipFile]::OpenRead($zip)
+try {
+    $blocked = @($zipCheck.Entries | Where-Object {
+        $_.FullName -match '(^|[/\\])website([/\\]|$)'
+    })
+    if ($blocked.Count -gt 0) {
+        throw ("Package must not include website/ (found: {0})" -f ($blocked[0].FullName))
+    }
+}
+finally {
+    $zipCheck.Dispose()
+}
 
 Write-Host "Created: $zip" -ForegroundColor Green
 Write-Host "Give customers the zip and tell them to open START-HERE.txt"

@@ -124,7 +124,7 @@ if (-not (Test-Path -LiteralPath $ScriptPath)) {
 }
 
 if ($Unregister) {
-    foreach ($n in @($TaskName, $WatchdogTaskName, 'Backup-OfficeToHome', 'Monarch-BackupWatchdog')) {
+    foreach ($n in @($TaskName, $WatchdogTaskName)) {
         if (Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue) {
             Unregister-ScheduledTask -TaskName $n -Confirm:$false
             Write-Host "Removed scheduled task '$n'."
@@ -243,7 +243,7 @@ Write-Host "Script: $scriptFull"
 if ($RegisterWatchdog) {
     $watch = Join-Path $ScriptRoot 'SyncMe-Watchdog.ps1'
     if (-not (Test-Path -LiteralPath $watch)) {
-        $watch = Join-Path $ScriptRoot 'Watchdog-MonarchBackup.ps1'
+        throw "Watchdog script not found: $watch"
     }
     $warg = "-NoProfile -ExecutionPolicy Bypass -File `"$watch`""
     $waction = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $warg

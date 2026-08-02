@@ -73,8 +73,7 @@
           <div class="stat" id="statNetCard"><div class="k">Network</div><div class="v" id="statTs">—</div></div>
           <div class="stat" id="statResticCard"><div class="k">restic</div><div class="v" id="statRestic">—</div></div>
           <div class="stat" id="statRcloneCard"><div class="k">rclone</div><div class="v" id="statRclone">—</div></div>
-          <div class="stat" id="statDisk1Card"><div class="k">Disk 1 free</div><div class="v" id="statDisk1">—</div></div>
-          <div class="stat" id="statDisk2Card"><div class="k">Disk 2 free</div><div class="v" id="statDisk2">—</div></div>
+          <div class="stat" id="statDisk1Card"><div class="k">Repo free</div><div class="v" id="statDisk1">—</div></div>
         </div>
 
         <div class="grid-2">
@@ -121,7 +120,6 @@
           </div>
           <div id="opsMorePanel" class="ops-more hidden">
             <div class="quick-actions">
-              <button type="button" class="btn soft" data-backup="forceArchive">Run + archive</button>
               <button type="button" class="btn soft" data-backup="dataCheck">Data check</button>
               <button type="button" class="btn ghost" id="btnMountStop">Unmount</button>
               <button type="button" class="btn soft hidden" id="btnInstallWinFsp">Install WinFsp</button>
@@ -168,13 +166,12 @@
             <button type="button" class="btn soft" id="btnSuggestTarget">Suggest target</button>
             <button type="button" class="btn primary" id="btnRestoreLatest">Restore latest</button>
             <button type="button" class="btn primary" id="btnRestoreSel">Restore selected</button>
-            <button type="button" class="btn soft" id="btnOpenDisk2">Open Disk 2 archive</button>
             <button type="button" class="btn ghost" id="btnOpenChecklist">Recovery checklist</button>
           </div>
         </div>
       </section>
 
-      <p class="footer-note">© 2026 Bradford Lotriet (brad@web-zilla.co.za) · Free to use — keep this credit. Passwords stay in Windows Credential Manager.</p>
+      <p class="footer-note">© 2026 Bradford Lotriet (brad@web-zilla.co.za) · Free to use — keep this credit. Uses restic &amp; rclone — see THIRD-PARTY-NOTICES.txt.</p>
     </div>
   </div>
 

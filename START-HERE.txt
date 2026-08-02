@@ -1,23 +1,22 @@
 SyncMe — START HERE
 Copyright © 2026 Bradford Lotriet (brad@web-zilla.co.za)
 Free to use — keep this credit. See LICENSE.txt
+Third-party tools: THIRD-PARTY-NOTICES.txt (restic, rclone)
 ================================
 
 WHAT THIS IS
   SyncMe backs up source files/folders to this Backup PC using restic.
-  It is a simple file-level backup tool (LAN and/or Tailscale, local disk,
-  NAS, or cloud via rclone — e.g. OneDrive OAuth).
-  It is NOT bare-metal imaging, antivirus, or ransomware protection.
-  You use a web console in your browser. No database, no PHP.
+  Create a backup set per source PC / schedule / destination.
+  Destinations: local disk, NAS (UNC), or cloud via rclone (OneDrive / Google Drive).
+  LAN and/or Tailscale for sources. HTML console in the browser. No database, no PHP.
+  Not bare-metal imaging, antivirus, or ransomware protection.
 
 WHERE TO INSTALL
-  Install SyncMe ONLY on the Backup PC (Windows 10/11 PC or Windows Server).
+  Install SyncMe ONLY on the Backup PC (Windows 10/11 or Windows Server).
   Source desktops only need a shared folder (+ Tailscale if offsite).
-  You do NOT run SyncMe on every PC.
 
 USER GUIDE
-  For the full guide (exit codes, restore, email, limitations, troubleshooting):
-    open UserGuide.html in this folder
+  Open UserGuide.html for the full guide (exit codes, restore, limitations).
   SyncMe.bat asks whether to open the guide before starting the console.
 
 CUSTOMER PACKAGE (minimal)
@@ -30,7 +29,6 @@ UPDATE FROM THIS PROJECT (technicians)
     .\Deploy-SyncMe.ps1 -Target C:\SyncMe
   That keeps your existing Config.ps1 and copies tools\restic.exe when present.
   Then run SyncMe.bat.
-  Do NOT copy from D:\Projects\Scripts\Backup-OfficeToHome (stale).
 
 WINDOWS SERVER (customer / unattended)
   1. Use a dedicated Windows account for SyncMe (e.g. DOMAIN\syncme-backup).
@@ -40,16 +38,16 @@ WINDOWS SERVER (customer / unattended)
   4. Credential Manager secrets (restic / share / SMTP) must be for the SAME account.
   5. Console is http://127.0.0.1:17845 only — manage via RDP (not a LAN website).
   6. Prefer email notifications; toasts are off by default.
-  7. One backup set per user is supported — stagger run times; Disk 2 paths must be
-     dedicated subfolders with a FIXED drive letter (never a drive root like E:\).
+  7. One backup set per user/source is typical — stagger run times; each set needs
+     its own restic repository path (dedicated subfolder, never a drive root).
   8. After reboot, confirm overnight jobs still run WITHOUT staying logged on.
 
 BEFORE YOU BEGIN (once)
   1. Share the folder(s) on the source PC so this PC can open \\source\share.
   2. LAN only: ensure this Backup PC can reach the share by UNC.
      Offsite: install Tailscale on source + Backup PC.
-  3. restic is installed by the wizard if missing (or install yourself).
-  4. For OneDrive/Google Drive destinations: install rclone and run OAuth from the console.
+  3. restic is installed by the wizard if missing.
+  4. For OneDrive/Google Drive: install rclone and complete OAuth from the console.
 
 RUN
   Double-click SyncMe.bat
@@ -73,17 +71,17 @@ MULTIPLE SETS / FOLDERS
   The SyncMe-Watchdog task checks ALL sets for overdue last-success stamps.
 
 DAY TO DAY
-  SyncMe.bat → Dashboard (or SyncMe-Menu.bat to open management view)
-  Use Restore workspace on Operations when you need files back.
+  SyncMe.bat → Dashboard (or SyncMe-Menu.bat)
+  Use Restore on Operations when you need files back (restic snapshots).
 
 DO NOT
   Edit Config.ps1 unless a technician asks you to.
   Put passwords in any text file.
   Restore into the live restic repository folder.
-  Point Disk 2 ArchivePath at a drive root (SyncMe clears that folder before refresh).
-  Rely on SyncMe alone against ransomware — keep offline/immutable copies separately.
+  Rely on SyncMe alone against ransomware — keep offline copies separately.
 
 NEED HELP
   Open UserGuide.html or RecoveryChecklist.txt in this folder.
   License / liability: LICENSE.txt
+  Third-party: THIRD-PARTY-NOTICES.txt
   Contact: brad@web-zilla.co.za

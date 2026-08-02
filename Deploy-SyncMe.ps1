@@ -5,7 +5,6 @@
 
 .DESCRIPTION
   Preserves target Config.ps1 and Logs\sets\*.json. Does not wipe Logs or Reports.
-  Do NOT run this from D:\Projects\Scripts\Backup-OfficeToHome — that tree is stale.
 
 .EXAMPLE
   .\Deploy-SyncMe.ps1
@@ -22,18 +21,6 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($root)) { $root = (Get-Location).Path }
 
-# Refuse obvious legacy copy source
-$leaf = Split-Path -Leaf $root
-if ($leaf -eq 'Backup-OfficeToHome') {
-    throw @"
-Refusing to deploy from '$root'.
-That folder is the old Monarch/Backup-OfficeToHome tree.
-Use the SyncMe project instead, e.g.:
-  cd 'D:\Projects\Personal Projects\SyncMe'
-  .\Deploy-SyncMe.ps1 -Target C:\SyncMe
-"@
-}
-
 $marker = Join-Path $root 'SyncMe-Host.ps1'
 $verSrc = Join-Path $root 'VERSION.txt'
 if (-not (Test-Path -LiteralPath $marker)) {
@@ -45,11 +32,11 @@ if (-not (Test-Path -LiteralPath $verSrc)) {
 
 $include = @(
     'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Host.ps1',
-    'SyncMe-Backup.ps1', 'Backup-OfficeToHome.ps1', 'Config.ps1',
-    'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1', 'Watchdog-MonarchBackup.ps1',
+    'SyncMe-Backup.ps1', 'Config.ps1',
+    'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1', 'Build-SyncMePackage.ps1', 'Build-SyncMeSetup.ps1',
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md',
-    'LICENSE.txt',
+    'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt',
     'VERSION.txt',
     'Modules', 'ui', 'OfficeAgent', 'tools'
 )
@@ -143,4 +130,3 @@ if (-not $reportCheck) {
 Write-Host ''
 Write-Host "Deployed SyncMe build $installedVer → $Target" -ForegroundColor Green
 Write-Host 'Start SyncMe again (SyncMe.bat). New reports must show: Backup by SyncMe · build '"$installedVer"
-Write-Host 'Do not copy from D:\Projects\Scripts\Backup-OfficeToHome.'

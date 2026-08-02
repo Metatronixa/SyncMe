@@ -21,9 +21,9 @@ $script:BackupConfig = [pscustomobject]@{
     ShareDriveLetter    = ''
 
     # --- Destination (this Backup PC) — use YOUR drive letters ---
-    # Disk 1: versioned restic repository (required). Example: 'D:\Backups\repo'
+    # Versioned restic repository (required). Example: 'D:\Backups\repo'
     ResticRepo   = ''
-    # Disk 2: optional plain latest-file copy. Leave empty for restic-only.
+    # Legacy optional plain-file archive path — leave empty (not used in current SyncMe UX)
     ArchivePath  = ''
 
     # Credential Manager generic target that holds the restic repository password

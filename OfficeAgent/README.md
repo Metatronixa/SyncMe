@@ -19,8 +19,6 @@ is still read by the Backup PC if present).
 |--------|------|
 | `Enable-SyncMeShadowCopies.ps1` | Shadow storage + daily SYSTEM task + first pointer |
 | `Update-SyncMeShadowPointer.ps1` | Create shadow + write `.syncme-latest-shadow.txt` |
-| `Enable-MonarchShadowCopies.ps1` | Compatibility stub → SyncMe script |
-| `Update-MonarchShadowPointer.ps1` | Compatibility stub → SyncMe script |
 
 Also enable **Shadow Copies for Shared Folders** in the Windows GUI on the volume
 so the Backup PC can open `\\server\share\@GMT-...` over SMB.
