@@ -7,14 +7,23 @@
     step: 0,
     snaps: [],
     selectedSnap: -1,
+    browse: {
+      snapshotId: '',
+      path: '',
+      selectedPath: '',
+      selectedType: '',
+      entries: [],
+      loading: false
+    },
     resticOk: false,
     rcloneOk: false,
-    winfspOk: false,
+    winfspOk: false, // legacy from /api/prereqs; unused in UI
     activeSetId: 'set1',
     sets: [],
     isNewSet: false,
     pollTimer: null,
     pollTimerOauth: null,
+    pollTimerRestore: null,
     setupAppliedSetId: '',
     etaSamples: [],
     form: {
@@ -82,8 +91,8 @@
 
   const steps = [
     { id: 'welcome', title: 'Welcome', sub: 'Configure SyncMe on this Backup PC. Passwords go in Windows Credential Manager — never in a config file.' },
-    { id: 'prereqs', title: 'Prerequisites', sub: 'We check restic (and Tailscale if you use it). SyncMe can download restic, rclone, and WinFsp if missing.' },
-    { id: 'source', title: 'Source folders', sub: 'Pull from LAN and/or Tailscale UNC shares (including admin $ shares). Add multiple folders to this backup set.' },
+    { id: 'prereqs', title: 'Prerequisites', sub: 'We check restic (and Tailscale if you use it). SyncMe can download restic and rclone if missing.' },
+    { id: 'source', title: 'Source folders', sub: 'Local folders on this Backup PC, and/or UNC shares over LAN/Tailscale (including admin $ shares).' },
     { id: 'dest', title: 'Backup destination', sub: 'Versioned restic repository — local folder, NAS UNC, or cloud via rclone.' },
     { id: 'secrets', title: 'Passwords', sub: 'Choose a strong restic password and store it in a password manager too.' },
     { id: 'email', title: 'Email alerts', sub: 'Optional SMTP so you get start/complete reports.' },
@@ -98,8 +107,60 @@
 
   function setStatus(el, text, kind) {
     if (!el) return;
+    const prev = _flashTimers.get(el);
+    if (prev) {
+      clearTimeout(prev.hide);
+      clearTimeout(prev.clear);
+      _flashTimers.delete(el);
+    }
+    el.classList.remove('fade-out', 'empty');
     el.className = 'status-line' + (kind ? ' ' + kind : '');
     el.textContent = text || '';
+    if (!text) el.classList.add('empty');
+  }
+
+  const _flashTimers = new WeakMap();
+  const FLASH_FADE_MS = 650;
+
+  function clearStatusQuiet(el) {
+    if (!el) return;
+    if (el.id === 'prereqOut') {
+      refreshPrereqs();
+      return;
+    }
+    if (el.id === 'dashStatus' || el.id === 'opsStatus') {
+      if (state.pollTimer) return;
+      setStatus(el, 'Ready.', '');
+      return;
+    }
+    setStatus(el, '', '');
+  }
+
+  /** Show a status message, then fade it out after a few seconds. */
+  function flashStatus(el, text, kind, ms) {
+    if (!el) return;
+    const prev = _flashTimers.get(el);
+    if (prev) {
+      clearTimeout(prev.hide);
+      clearTimeout(prev.clear);
+    }
+    el.classList.remove('fade-out', 'empty');
+    el.className = 'status-line' + (kind ? ' ' + kind : '');
+    el.textContent = text || '';
+    const wait = (typeof ms === 'number') ? ms : 8000;
+    if (wait <= 0 || !text) return;
+    const fadeAt = Math.max(400, wait - FLASH_FADE_MS);
+    const hide = setTimeout(() => {
+      el.classList.add('fade-out');
+      const clear = setTimeout(() => {
+        _flashTimers.delete(el);
+        el.classList.remove('fade-out');
+        clearStatusQuiet(el);
+      }, FLASH_FADE_MS);
+      const cur = _flashTimers.get(el);
+      if (cur) cur.clear = clear;
+    }, fadeAt);
+    _flashTimers.set(el, { hide: hide, clear: null });
   }
 
   function setTop(text, kind) {
@@ -265,7 +326,7 @@
     if (!box) return;
     const paths = state.form.sourcePaths && state.form.sourcePaths.length ? state.form.sourcePaths : [''];
     box.innerHTML = paths.map((p, i) =>
-      '<div class="path-row"><input class="path-input" type="text" data-i="' + i + '" value="' + esc(p) + '" />' +
+      '<div class="path-row"><input class="path-input" type="text" data-i="' + i + '" value="' + esc(p) + '" placeholder="D:\\Data or \\\\pc\\share" />' +
       '<button type="button" class="btn ghost btn-rm-path" data-i="' + i + '">Remove</button></div>'
     ).join('');
     box.querySelectorAll('.btn-rm-path').forEach((b) => {
@@ -320,20 +381,16 @@
         '<button type="button" class="btn soft" id="btnRefreshPrereq">Refresh checks</button>' +
         '<button type="button" class="btn primary" id="btnInstallRestic">Install restic</button>' +
         '<button type="button" class="btn soft" id="btnInstallRclone">Install rclone</button>' +
-        '<button type="button" class="btn soft" id="btnInstallWinFspWizard">Install WinFsp</button>' +
         '</div>' +
-        '<div class="status-line" id="prereqOut">Checking…</div>' +
+        '<div id="prereqOut" class="prereq-panel" aria-live="polite">Checking…</div>' +
         '<label class="field" style="margin-top:16px">restic path <span class="hint">(auto-filled when found or installed)</span>' +
         '<input id="fRestic" type="text" value="' + esc(f.resticPath) + '" /></label>' +
-        '<p class="sub">Cloud destinations need rclone. Install it here, then add OneDrive/Google Drive from the destination step or Cloud settings (browser OAuth). Remotes are stored in <code>Config\\rclone.conf</code>.</p>' +
-        '<p class="sub">WinFsp is optional — only needed to <strong>Mount</strong> the repository as a browsable folder. A Windows security prompt (UAC) appears during install.</p>';
+        '<p class="sub">Cloud destinations need rclone. Install it here, then add OneDrive/Google Drive from the destination step or Cloud settings (browser OAuth). Remotes are stored in <code>Config\\rclone.conf</code>.</p>';
       $('btnRefreshPrereq').onclick = refreshPrereqs;
       $('btnInstallRestic').onclick = installRestic;
       $('btnInstallRclone').onclick = installRclone;
-      $('btnInstallWinFspWizard').onclick = installWinFsp;
       updateInstallResticBtn();
       updateInstallRcloneBtn();
-      updateInstallWinFspBtn();
       refreshPrereqs();
     } else if (state.step === 2) {
       const nm = f.networkMode || 'both';
@@ -344,10 +401,10 @@
         '<label><input type="radio" name="fNetMode" value="both" ' + (nm === 'both' ? 'checked' : '') + ' /> Both</label>' +
         '</div>' +
         '<div class="grid two">' +
-        '<label class="field">Source computer name' + tip('Hostname or Tailscale MagicDNS name used to build UNC paths.') +
-        '<span class="hint">Tailscale MagicDNS name or LAN hostname</span><input id="fHost" type="text" value="' + esc(f.sourceHost) + '" placeholder="pc-name" /></label></div>' +
-        '<label class="field">Source folders (UNC)' + tip('Paths this Backup PC can open. Admin shares like C$ work if your account has rights.') +
-        '<span class="hint">Including admin $ shares, e.g. \\\\pc-name\\C$\\Users\\You\\Documents</span></label>' +
+        '<label class="field">Source computer name' + tip('Optional for local folders on this Backup PC. Hostname or Tailscale MagicDNS when using UNC shares.') +
+        '<span class="hint">Leave blank for local-only sources</span><input id="fHost" type="text" value="' + esc(f.sourceHost) + '" placeholder="pc-name (optional)" /></label></div>' +
+        '<label class="field">Source folders' + tip('Local path on this Backup PC (e.g. D:\\Data) or UNC share. Admin $ shares work if your account has rights.') +
+        '<span class="hint">Local: D:\\Folder &nbsp;·&nbsp; UNC: \\\\pc-name\\Data or \\\\pc-name\\C$\\Users\\You</span></label>' +
         '<div class="path-list" id="pathList"></div>' +
         '<div class="actions" style="margin-top:0"><button type="button" class="btn soft" id="btnAddPath">Add folder</button>' +
         '<button type="button" class="btn soft" id="btnTestConn">Test connectivity</button></div>' +
@@ -461,9 +518,12 @@
         '<label class="check"><input id="fUnattended" type="checkbox" ' + (f.taskLogonType !== 'Interactive' ? 'checked' : '') + ' /> Run whether logged on or not (recommended for Windows Server)' + tip('Required on Windows Server so backups run after reboot without an interactive session. Password goes to Task Scheduler only.') + '</label>' +
         '<p class="sub">Unattended tasks need this Windows account password stored in Task Scheduler. Use the same account that holds SyncMe Credential Manager secrets (restic / share / SMTP).</p>' +
         '<div class="grid two" id="winPassWrap">' +
-        '<label class="field">Windows account password' + tip('Same Windows user that owns Credential Manager entries for SyncMe.') +
+        '<label class="field"><span class="field-label-row">Windows account password' + tip('Same Windows user that owns Credential Manager entries for SyncMe.') + '</span>' +
+        '<span class="hint">Task Scheduler stores this for unattended runs</span>' +
         '<input id="fWinPass" type="password" autocomplete="current-password" /></label>' +
-        '<label class="field">Confirm Windows password<input id="fWinPass2" type="password" autocomplete="current-password" /></label>' +
+        '<label class="field"><span class="field-label-row">Confirm Windows password</span>' +
+        '<span class="hint">&nbsp;</span>' +
+        '<input id="fWinPass2" type="password" autocomplete="current-password" /></label>' +
         '</div>' +
         '<label class="check"><input id="fToast" type="checkbox" ' + (f.enableToast ? 'checked' : '') + ' /> Enable Windows toast notifications</label>' +
         '<p class="sub">Scheduled tasks run with the SyncMe console closed. Console is only at http://127.0.0.1 — use RDP on Server.</p>';
@@ -516,29 +576,53 @@
     btn.classList.toggle('soft', !state.rcloneOk);
   }
 
-  function updateInstallWinFspBtn() {
-    const btn = document.getElementById('btnInstallWinFspWizard');
-    if (!btn) return;
-    btn.disabled = !!state.winfspOk;
-    btn.textContent = state.winfspOk ? 'WinFsp installed' : 'Install WinFsp';
-    btn.classList.toggle('installed', !!state.winfspOk);
-    btn.classList.toggle('soft', !state.winfspOk);
+  function renderPrereqPills(d) {
+    const el = $('prereqOut');
+    if (!el) return;
+    const prev = _flashTimers.get(el);
+    if (prev) {
+      clearTimeout(prev.hide);
+      clearTimeout(prev.clear);
+      _flashTimers.delete(el);
+    }
+
+    let tsKind = d.tailscaleOk ? 'ok' : 'warn';
+    let tsLabel = d.tailscaleOk ? 'OK' : 'Warn';
+    let tsTip = d.tailscaleMessage || '';
+    let tsNote = '';
+    if (d.tailscaleMessage && /LAN-only|Skipped/i.test(String(d.tailscaleMessage))) {
+      tsKind = 'ok';
+      tsLabel = 'Skipped';
+      tsTip = 'LAN-only network mode — Tailscale not required.';
+    } else if (!d.tailscaleOk) {
+      tsNote = 'Tailscale not verified — fine for LAN-only backups. Install/start it if you use MagicDNS or tailnet UNC.';
+    }
+
+    const resticKind = d.resticOk ? 'ok' : 'err';
+    const resticLabel = d.resticOk ? 'Ready' : 'Missing';
+    const resticTip = d.resticOk ? (d.resticPath || 'found') : 'Click Install restic';
+
+    const rcloneKind = d.rcloneOk ? 'ok' : 'warn';
+    const rcloneLabel = d.rcloneOk ? 'Ready' : 'Optional';
+    const rcloneTip = d.rcloneOk
+      ? (d.rclonePath || 'found')
+      : 'Needed only for OneDrive / Google Drive cloud destinations';
+
+    el.className = 'prereq-panel';
+    el.innerHTML =
+      '<div class="prereq-pills">' +
+      '<span class="prereq-pill ' + tsKind + '" title="' + esc(tsTip) + '"><span class="prereq-name">Tailscale</span><span class="prereq-val">' + esc(tsLabel) + '</span></span>' +
+      '<span class="prereq-pill ' + resticKind + '" title="' + esc(resticTip) + '"><span class="prereq-name">restic</span><span class="prereq-val">' + esc(resticLabel) + '</span></span>' +
+      '<span class="prereq-pill ' + rcloneKind + '" title="' + esc(rcloneTip) + '"><span class="prereq-name">rclone</span><span class="prereq-val">' + esc(rcloneLabel) + '</span></span>' +
+      '</div>' +
+      (tsNote ? ('<p class="prereq-note">' + esc(tsNote) + '</p>') : '');
   }
 
   async function refreshPrereqs() {
     try {
       const d = await api('/api/prereqs');
-      const lines = [];
-      lines.push(d.tailscaleOk ? ('Tailscale: OK — ' + d.tailscaleMessage) : ('Tailscale: WARN — ' + d.tailscaleMessage + ' (OK to ignore on LAN-only)'));
-      if (d.tailscaleMessage && /LAN-only|Skipped/i.test(String(d.tailscaleMessage))) {
-        lines[lines.length - 1] = 'Tailscale: skipped (LAN-only network mode)';
-      }
-      lines.push(d.resticOk ? ('restic: found at ' + d.resticPath) : 'restic: NOT found — click Install restic');
-      lines.push(d.rcloneOk ? ('rclone: found at ' + d.rclonePath) : 'rclone: not found (optional — needed for OneDrive/Google Drive)');
-      lines.push(d.winfspOk ? 'WinFsp: OK (needed for Mount)' : 'WinFsp: not found (optional — click Install WinFsp to browse mounts)');
       state.resticOk = !!d.resticOk;
       state.rcloneOk = !!d.rcloneOk;
-      state.winfspOk = !!d.winfspOk;
       if (d.resticOk && d.resticPath) {
         const el = document.getElementById('fRestic');
         if (el) el.value = d.resticPath;
@@ -546,16 +630,13 @@
       }
       updateInstallResticBtn();
       updateInstallRcloneBtn();
-      updateInstallWinFspBtn();
-      setStatus($('prereqOut'), lines.join('\n'), d.resticOk ? 'ok' : 'warn');
+      renderPrereqPills(d);
     } catch (e) {
       state.resticOk = false;
       state.rcloneOk = false;
-      state.winfspOk = false;
       updateInstallResticBtn();
       updateInstallRcloneBtn();
-      updateInstallWinFspBtn();
-      setStatus($('prereqOut'), e.message, 'err');
+      flashStatus($('prereqOut'), e.message, 'err', 10000);
     }
   }
 
@@ -565,33 +646,16 @@
       const d = await api('/api/prereqs/install-rclone', { method: 'POST', body: '{}' });
       state.rcloneOk = !!d.rcloneOk;
       updateInstallRcloneBtn();
-      setStatus($('prereqOut'), d.message || 'rclone installed.', d.rcloneOk ? 'ok' : 'warn');
+      flashStatus($('prereqOut'), d.message || 'rclone installed.', d.rcloneOk ? 'ok' : 'warn', 6000);
     } catch (e) {
-      setStatus($('prereqOut'), e.message, 'err');
-    }
-  }
-
-  async function installWinFsp() {
-    const btn = document.getElementById('btnInstallWinFspWizard');
-    if (btn) btn.disabled = true;
-    setStatus($('prereqOut'), 'Downloading WinFsp installer… Approve the Windows security prompt if asked.', 'busy');
-    try {
-      const d = await api('/api/prereqs/install-winfsp', { method: 'POST', body: '{}' });
-      state.winfspOk = !!d.winfspOk;
-      updateInstallWinFspBtn();
-      setStatus($('prereqOut'), d.message || 'WinFsp installed.', d.winfspOk ? 'ok' : 'warn');
-      if ($('mountStatus')) refreshMountStatus();
-    } catch (e) {
-      state.winfspOk = false;
-      updateInstallWinFspBtn();
-      setStatus($('prereqOut'), e.message, 'err');
+      flashStatus($('prereqOut'), e.message, 'err', 10000);
     }
   }
 
   async function installRestic() {
     const btn = document.getElementById('btnInstallRestic');
     if (btn) btn.disabled = true;
-    setStatus($('prereqOut'), 'Downloading restic from GitHub…', '');
+    setStatus($('prereqOut'), 'Downloading restic from GitHub…', 'busy');
     try {
       const d = await api('/api/prereqs/install-restic', { method: 'POST', body: '{}' });
       state.resticOk = !!d.resticOk;
@@ -601,11 +665,11 @@
         state.form.resticPath = d.resticPath;
       }
       updateInstallResticBtn();
-      setStatus($('prereqOut'), d.message || ('restic ready at ' + d.resticPath), d.resticOk ? 'ok' : 'warn');
+      flashStatus($('prereqOut'), d.message || ('restic ready at ' + d.resticPath), d.resticOk ? 'ok' : 'warn', 6000);
     } catch (e) {
       state.resticOk = false;
       updateInstallResticBtn();
-      setStatus($('prereqOut'), e.message, 'err');
+      flashStatus($('prereqOut'), e.message, 'err', 10000);
     }
   }
 
@@ -613,7 +677,7 @@
     collectForm();
     const btn = document.getElementById('btnTestConn');
     if (btn) btn.disabled = true;
-    setStatus($('connOut'), 'Testing connectivity to ' + (state.form.sourceHost || 'host') + '…\nThis can take a few seconds.', 'busy');
+    setStatus($('connOut'), 'Testing source paths…\nThis can take a few seconds.', 'busy');
     try {
       const d = await api('/api/test-source', {
         method: 'POST',
@@ -639,9 +703,16 @@
     }
     if (state.step === 2) {
       if (!f.sourceHost) return 'Enter source host name (Tailscale MagicDNS or LAN hostname).';
-      if (!f.sourcePaths || !f.sourcePaths.length) return 'Add at least one UNC source folder.';
-      const bad = (f.sourcePaths || []).find((p) => !/^\\\\[^\\]+\\[^\\]+/.test(String(p).trim()));
-      if (bad) return 'Each source must be a UNC path, including $ shares (e.g. \\\\pc-name\\C$\\Users\\You).';
+      if (!f.sourcePaths || !f.sourcePaths.length) return 'Add at least one source folder (local path or UNC).';
+      const bad = (f.sourcePaths || []).find((p) => {
+        const s = String(p).trim();
+        return !/^[A-Za-z]:\\/.test(s) && !/^\\\\[^\\]+\\[^\\]+/.test(s);
+      });
+      if (bad) return 'Each source must be a local path (e.g. D:\\Data) or UNC (e.g. \\\\pc-name\\share).';
+      const hasUnc = (f.sourcePaths || []).some((p) => /^\\\\[^\\]+\\[^\\]+/.test(String(p).trim()));
+      if (hasUnc && !(f.sourceHost || '').trim()) {
+        return 'Enter the source computer name when using UNC paths (or use local paths only).';
+      }
     }
     if (state.step === 3) {
       if (f.destinationType === 'rclone') {
@@ -828,7 +899,6 @@
       return;
     }
     const ok = lr.success !== false;
-    const warnList = Array.isArray(lr.warnings) ? lr.warnings : [];
     let html = '<div class="last-run-grid">' +
       '<div class="last-run-stat"><div class="k">Status</div><div class="v">' + (ok ? 'OK' : 'Issues') + '</div></div>' +
       '<div class="last-run-stat"><div class="k">Ended</div><div class="v">' + esc(lr.endTime || '—') + '</div></div>' +
@@ -840,11 +910,11 @@
       '<div class="last-run-stat"><div class="k">Exit</div><div class="v">' + esc(lr.backupExitCode || '—') + '</div></div>' +
       '</div>';
     if (lr.summary) html += '<div class="prog-meta" style="margin-top:10px">' + esc(lr.summary) + '</div>';
-    if (lr.backupExitCode === '3' || (lr.openFileRisk && lr.openFileRisk !== '')) {
-      html += '<p class="sub" style="margin-top:10px;color:var(--warn)">Some files may have been skipped (restic exit 3 / open-file risk). Prefer Shadow Copies via OfficeAgent.</p>';
-    }
-    if (warnList.length) {
-      html += '<ul class="last-run-warnings">' + warnList.slice(0, 8).map((w) => '<li>' + esc(w) + '</li>').join('') + '</ul>';
+    // Details stay in Reports/Logs — do not dump raw exception strings on the dashboard
+    if (String(lr.backupExitCode) === '3') {
+      html += '<p class="sub" style="margin-top:10px;color:var(--warn)">Some files may have been skipped — see Reports / Logs (Open buttons below).</p>';
+    } else if (!ok) {
+      html += '<p class="sub" style="margin-top:10px;color:var(--muted)">See Reports / Logs for details.</p>';
     }
     body.innerHTML = html;
   }
@@ -963,8 +1033,17 @@
 
     $('statLast').textContent = formatLastSuccess(d.lastSuccess);
     const net = d.networkMode || 'both';
-    $('statTs').textContent = net === 'lan' ? 'LAN' : (d.tailscaleOk ? 'OK' : 'WARN');
-    setStatCard('statNetCard', net === 'lan' ? 'ok' : (d.tailscaleOk ? 'ok' : 'warn'));
+    if (net === 'lan') {
+      $('statTs').textContent = 'LAN';
+      setStatCard('statNetCard', 'ok');
+    } else if (net === 'tailscale') {
+      $('statTs').textContent = d.tailscaleOk ? 'OK' : 'WARN';
+      setStatCard('statNetCard', d.tailscaleOk ? 'ok' : 'warn');
+    } else {
+      // both: Tailscale is optional — do not WARN just because it is missing
+      $('statTs').textContent = d.tailscaleOk ? 'Both' : 'Both';
+      setStatCard('statNetCard', 'ok');
+    }
 
     state.resticOk = !!d.resticOk;
     state.rcloneOk = !!d.rcloneOk;
@@ -1006,8 +1085,12 @@
     setTop(d.configured ? 'Ready' : 'Needs setup', d.configured ? 'ok' : 'warn');
     setStatus($('dashStatus'), d.backupRunning ? 'A backup appears to be running.' : 'Ready.', d.backupRunning ? 'warn' : '');
     if (d.defaultRestoreTarget && $('restoreTarget')) $('restoreTarget').value = d.defaultRestoreTarget;
+    if ($('buildVersion')) {
+      const ver = d.packageVersion || d.PackageVersion || '';
+      $('buildVersion').textContent = ver ? ('· build ' + ver) : '';
+    }
     await fillDashPolicyAndCloud();
-    refreshMountStatus();
+    refreshStorePasswordButton();
     if (d.backupRunning) pollBackup();
     else {
       try { updateProgressUI(await api('/api/backup/status')); } catch (e) { /* ignore */ }
@@ -1188,100 +1271,32 @@
           weeklyDataCheckDay: $('polCheckDay').value
         })
       });
-      setStatus($('dashStatus'), d.message || 'Policy saved.', 'ok');
+      flashStatus($('dashStatus'), d.message || 'Policy saved.', 'ok', 8000);
       closeModal('modalPolicy');
     } catch (e) {
-      setStatus($('dashStatus'), e.message, 'err');
+      flashStatus($('dashStatus'), e.message, 'err', 10000);
     }
   }
 
-  function updateMountActionButtons(d) {
-    const btnW = $('btnInstallWinFsp');
+  function updateStorePasswordButton(d) {
     const btnP = $('btnStoreResticPass');
-    if (btnW) {
-      btnW.classList.toggle('hidden', !!d.winfspOk || !!d.running);
-    }
-    if (btnP) {
-      btnP.classList.toggle('hidden', !!d.running);
-      if (!d.resticCredOk) {
-        btnP.classList.add('primary');
-        btnP.classList.remove('soft');
-      } else {
-        btnP.classList.add('soft');
-        btnP.classList.remove('primary');
-      }
+    if (!btnP) return;
+    btnP.classList.remove('hidden');
+    if (d && d.resticCredOk === false) {
+      btnP.classList.add('primary');
+      btnP.classList.remove('soft');
+    } else {
+      btnP.classList.add('soft');
+      btnP.classList.remove('primary');
     }
   }
 
-  async function refreshMountStatus() {
-    const el = $('mountStatus');
-    if (!el) return;
+  async function refreshStorePasswordButton() {
     try {
       const sid = state.activeSetId || 'set1';
       const d = await api('/api/mount/status?setId=' + encodeURIComponent(sid));
-      state.winfspOk = !!d.winfspOk;
-      let text = '';
-      let kind = '';
-      if (d.running) {
-        text = 'Mounted: ' + (d.mountPoint || '') + (d.setId ? (' (' + d.setId + ')') : '');
-        kind = 'ok';
-      } else if (!d.winfspOk) {
-        text = d.winfspMessage || 'Mount needs WinFsp (lets SyncMe show the backup as a folder).';
-        kind = 'warn';
-      } else if (!d.resticCredOk) {
-        text = d.resticCredMessage || 'Repository password is not stored for this set.';
-        kind = 'warn';
-      } else {
-        text = 'Not mounted';
-        kind = '';
-      }
-      updateMountActionButtons(d);
-      setStatus(el, text, kind);
-    } catch (e) {
-      setStatus(el, e.message, 'err');
-    }
-  }
-
-  async function startMount() {
-    setStatus($('mountStatus'), 'Starting restic mount…', 'busy');
-    try {
-      const d = await api('/api/mount/start', {
-        method: 'POST',
-        body: JSON.stringify({ setId: state.activeSetId || 'set1' })
-      });
-      setStatus($('mountStatus'), d.message || 'Mounted.', 'ok');
-      await refreshMountStatus();
-    } catch (e) {
-      setStatus($('mountStatus'), e.message, 'err');
-      await refreshMountStatus();
-    }
-  }
-
-  async function stopMount() {
-    setStatus($('mountStatus'), 'Unmounting…', 'busy');
-    try {
-      const d = await api('/api/mount/stop', { method: 'POST', body: '{}' });
-      setStatus($('mountStatus'), d.message || 'Unmounted.', 'ok');
-      await refreshMountStatus();
-    } catch (e) {
-      setStatus($('mountStatus'), e.message, 'err');
-    }
-  }
-
-  async function installWinFspFromOps() {
-    const btn = $('btnInstallWinFsp');
-    if (btn) btn.disabled = true;
-    setStatus($('mountStatus'), 'Downloading WinFsp installer… Approve the Windows security prompt if asked.', 'busy');
-    try {
-      const d = await api('/api/prereqs/install-winfsp', { method: 'POST', body: '{}' });
-      state.winfspOk = !!d.winfspOk;
-      setStatus($('mountStatus'), d.message || 'WinFsp installed.', d.winfspOk ? 'ok' : 'warn');
-      await refreshMountStatus();
-    } catch (e) {
-      setStatus($('mountStatus'), e.message, 'err');
-      if (btn) btn.disabled = false;
-      await refreshMountStatus();
-    }
+      updateStorePasswordButton(d);
+    } catch (e) { /* ignore */ }
   }
 
   function openStorePasswordModal() {
@@ -1313,7 +1328,7 @@
       setStatus($('resticPassStatus'), d.message || 'Password stored.', 'ok');
       if ($('resticPassInput')) $('resticPassInput').value = '';
       if ($('resticPassInput2')) $('resticPassInput2').value = '';
-      await refreshMountStatus();
+      await refreshStorePasswordButton();
       setTimeout(() => closeModal('modalResticPass'), 800);
     } catch (e) {
       setStatus($('resticPassStatus'), e.message, 'err');
@@ -1338,12 +1353,12 @@
         method: 'POST',
         body: JSON.stringify({ mode: mode || '', setId: state.activeSetId || 'set1' })
       });
-      setStatus(st, d.message || 'Backup started.', 'ok');
-      setStatus($('dashStatus'), d.message || 'Backup started.', 'ok');
+      flashStatus(st, d.message || 'Backup started.', 'ok', 8000);
+      flashStatus($('dashStatus'), d.message || 'Backup started.', 'ok', 8000);
       pollBackup();
     } catch (e) {
-      setStatus(st, e.message, 'err');
-      setStatus($('dashStatus'), e.message, 'err');
+      flashStatus(st, e.message, 'err', 10000);
+      flashStatus($('dashStatus'), e.message, 'err', 10000);
     }
   }
 
@@ -1362,8 +1377,10 @@
         setTop('Backup running', 'warn');
         state.pollTimer = setTimeout(pollBackup, 2000);
       } else if (d.finished) {
-        setStatus($('dashStatus'), d.message || ('Finished (exit ' + d.exitCode + ').'), d.exitCode === 0 ? 'ok' : 'warn');
-        setStatus($('opsStatus'), d.message || ('Finished (exit ' + d.exitCode + ').'), d.exitCode === 0 ? 'ok' : 'warn');
+        const fin = d.message || ('Finished (exit ' + d.exitCode + ').');
+        const kind = d.exitCode === 0 ? 'ok' : 'warn';
+        flashStatus($('dashStatus'), fin, kind, 10000);
+        flashStatus($('opsStatus'), fin, kind, 10000);
         loadDash();
       }
     } catch (e) { /* ignore poll errors */ }
@@ -1374,33 +1391,283 @@
     try {
       const q = state.activeSetId ? ('?setId=' + encodeURIComponent(state.activeSetId)) : '';
       const d = await api('/api/snapshots' + q);
-      state.snaps = d.snapshots || [];
+      state.snaps = [].concat(d.snapshots || []);
       state.selectedSnap = -1;
+      resetBrowsePanel('Select a snapshot and click Browse.');
       const ul = $('snapList');
       ul.innerHTML = '';
       if (!state.snaps.length) {
-        ul.innerHTML = '<li>No snapshots yet.</li>';
+        ul.innerHTML = '<li class="list-empty">No snapshots yet.</li>';
         setStatus($('restoreStatus'), 'No snapshots found.', 'warn');
+        updateBrowseButtons();
         return;
       }
       state.snaps.forEach((s, i) => {
         const li = document.createElement('li');
-        li.textContent = s.Display || (s.ShortId + '  ' + s.Time);
+        const sid = s.Id || s.id || '';
+        const shortId = s.ShortId || s.shortId || (sid ? String(sid).slice(0, 8) : '');
+        const timeLocal = s.TimeLocal || s.timeLocal || '';
+        const timeRaw = s.Time || s.time || '';
+        const hasUnc = !!(s.HasUncPaths || s.hasUncPaths);
+        let label = shortId;
+        if (timeLocal) label += '  ·  backup ' + timeLocal;
+        else if (timeRaw) label += '  ·  backup ' + timeRaw;
+        if (hasUnc) label += '  ·  UNC (Windows restore unsupported)';
+        const paths = [].concat(s.Paths || s.paths || []);
+        if (paths.length) label += '  ·  ' + paths.join(', ');
+        li.textContent = label;
+        li.setAttribute('data-snap-id', sid);
+        li.title = (timeRaw ? ('Snapshot time (ISO): ' + timeRaw + '\n') : '') +
+          (hasUnc ? 'This snapshot used UNC paths and cannot be restored on Windows. Take a new backup after upgrading SyncMe.\n' : '') +
+          'Click to select';
+        if (hasUnc) li.classList.add('snap-unc');
         li.onclick = () => {
           state.selectedSnap = i;
           Array.from(ul.children).forEach((c) => c.classList.remove('selected'));
           li.classList.add('selected');
+          let msg = 'Selected ' + (shortId || sid || ('#' + (i + 1)));
+          if (timeLocal) msg += ' (backed up ' + timeLocal + ')';
+          if (hasUnc) msg += ' — UNC snapshot: restore on Windows will fail; run a new backup first.';
+          else msg += ' — Browse selected to pick a folder/file, or Restore selected for the full snapshot.';
+          setStatus($('restoreStatus'), msg, hasUnc ? 'warn' : 'ok');
+          updateBrowseButtons();
         };
         ul.appendChild(li);
       });
-      setStatus($('restoreStatus'), 'Loaded ' + state.snaps.length + ' snapshot(s). Select one to restore, or use Restore latest.', 'ok');
+      setStatus($('restoreStatus'), 'Loaded ' + state.snaps.length + ' snapshot(s). Times are when each backup ran.', 'ok');
+      updateBrowseButtons();
     } catch (e) {
       setStatus($('restoreStatus'), e.message, 'err');
+      updateBrowseButtons();
+    }
+  }
+
+  function resetBrowsePanel(crumbText) {
+    state.browse.snapshotId = '';
+    state.browse.path = '';
+    state.browse.selectedPath = '';
+    state.browse.selectedType = '';
+    state.browse.entries = [];
+    state.browse.loading = false;
+    const crumb = $('browseCrumb');
+    if (crumb) crumb.textContent = crumbText || 'Select a snapshot and click Browse.';
+    const bl = $('browseList');
+    if (bl) bl.innerHTML = '';
+    updateBrowseButtons();
+  }
+
+  function updateBrowseButtons() {
+    const snap = state.selectedSnap >= 0 ? (state.snaps[state.selectedSnap] || {}) : null;
+    const hasUnc = !!(snap && (snap.HasUncPaths || snap.hasUncPaths));
+    const sid = snap ? (snap.Id || snap.id || '') : '';
+    const btnBrowse = $('btnBrowseSnap');
+    if (btnBrowse) btnBrowse.disabled = !sid || hasUnc || state.browse.loading;
+    const btnUp = $('btnBrowseUp');
+    if (btnUp) btnUp.disabled = !state.browse.snapshotId || state.browse.loading || !state.browse.path;
+    const btnUse = $('btnBrowseUse');
+    if (btnUse) {
+      btnUse.disabled = !state.browse.selectedPath || state.browse.loading;
+    }
+    const btnClear = $('btnBrowseClear');
+    if (btnClear) {
+      const includeEl = $('restoreInclude');
+      btnClear.disabled = !(includeEl && includeEl.value);
+    }
+  }
+
+  function formatBrowseSize(n) {
+    if (n == null || !isFinite(n)) return '';
+    const u = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let v = Number(n);
+    let i = 0;
+    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    return (i === 0 ? String(Math.round(v)) : v.toFixed(v >= 10 ? 0 : 1)) + ' ' + u[i];
+  }
+
+  function renderBrowseList(entries) {
+    const ul = $('browseList');
+    if (!ul) return;
+    ul.innerHTML = '';
+    const list = [].concat(entries || []);
+    if (!list.length) {
+      ul.innerHTML = '<li class="list-empty">This folder is empty (or listing was filtered).</li>';
+      return;
+    }
+    list.forEach((ent) => {
+      const li = document.createElement('li');
+      const isDir = (ent.type || '') === 'dir';
+      li.className = isDir ? 'browse-dir' : 'browse-file';
+      const name = ent.name || ent.path || '';
+      const path = ent.path || '';
+      let label = (isDir ? '[dir] ' : '') + name;
+      li.textContent = label;
+      if (!isDir && ent.size != null) {
+        const meta = document.createElement('span');
+        meta.className = 'browse-meta';
+        meta.textContent = formatBrowseSize(ent.size);
+        li.appendChild(meta);
+      }
+      li.title = path;
+      li.onclick = () => {
+        Array.from(ul.children).forEach((c) => c.classList.remove('selected'));
+        li.classList.add('selected');
+        state.browse.selectedPath = path;
+        state.browse.selectedType = isDir ? 'dir' : 'file';
+        updateBrowseButtons();
+        setStatus($('restoreStatus'), (isDir ? 'Folder' : 'File') + ' selected: ' + path, 'ok');
+      };
+      li.ondblclick = () => {
+        if (isDir) loadBrowsePath(path);
+        else {
+          state.browse.selectedPath = path;
+          state.browse.selectedType = 'file';
+          useBrowsePath();
+        }
+      };
+      ul.appendChild(li);
+    });
+  }
+
+  async function loadBrowsePath(path) {
+    const snapId = state.browse.snapshotId;
+    if (!snapId) {
+      setStatus($('restoreStatus'), 'Browse a snapshot first.', 'warn');
+      return;
+    }
+    state.browse.loading = true;
+    state.browse.selectedPath = path || '';
+    state.browse.selectedType = path ? 'dir' : '';
+    updateBrowseButtons();
+    const crumb = $('browseCrumb');
+    if (crumb) crumb.textContent = 'Loading ' + (path || '(snapshot roots)') + '…';
+    setStatus($('restoreStatus'), 'Listing snapshot folder…', 'busy');
+    try {
+      let url = '/api/snapshot/ls?setId=' + encodeURIComponent(state.activeSetId || 'set1') +
+        '&snapshot=' + encodeURIComponent(snapId);
+      if (path) url += '&path=' + encodeURIComponent(path);
+      const d = await api(url);
+      state.browse.path = d.path || path || '';
+      state.browse.entries = [].concat(d.entries || []);
+      if (crumb) {
+        crumb.textContent = state.browse.path
+          ? ('Path: ' + state.browse.path)
+          : ('Roots of snapshot ' + String(snapId).slice(0, 8));
+      }
+      renderBrowseList(state.browse.entries);
+      if (state.browse.path) {
+        state.browse.selectedPath = state.browse.path;
+        state.browse.selectedType = 'dir';
+      }
+      let msg = 'Listed ' + state.browse.entries.length + ' item(s). Double-click a folder to open; Use this path to fill include.';
+      if (d.truncated) msg += ' (truncated — first 1000 shown)';
+      if (d.message) msg += ' ' + d.message;
+      setStatus($('restoreStatus'), msg, d.truncated ? 'warn' : 'ok');
+    } catch (e) {
+      setStatus($('restoreStatus'), e.message, 'err');
+      if (crumb) crumb.textContent = 'Browse failed.';
+      const ul = $('browseList');
+      if (ul) ul.innerHTML = '';
+    } finally {
+      state.browse.loading = false;
+      updateBrowseButtons();
+    }
+  }
+
+  function startBrowseSelected() {
+    if (state.selectedSnap < 0) {
+      setStatus($('restoreStatus'), 'Select a snapshot first.', 'warn');
+      return;
+    }
+    const snap = state.snaps[state.selectedSnap] || {};
+    if (snap.HasUncPaths || snap.hasUncPaths) {
+      setStatus($('restoreStatus'), 'Cannot browse UNC snapshots on Windows. Run a new backup first.', 'warn');
+      return;
+    }
+    const sid = snap.Id || snap.id;
+    if (!sid) {
+      setStatus($('restoreStatus'), 'Selected snapshot has no id.', 'err');
+      return;
+    }
+    state.browse.snapshotId = sid;
+    state.browse.path = '';
+    state.browse.selectedPath = '';
+    state.browse.selectedType = '';
+    loadBrowsePath('');
+  }
+
+  function browseUp() {
+    const cur = state.browse.path || '';
+    if (!cur) return;
+    const parts = cur.replace(/\//g, '\\').replace(/\\+$/, '').split('\\');
+    if (parts.length <= 1) {
+      loadBrowsePath('');
+      return;
+    }
+    // C:\Foo\Bar -> C:\Foo ; C:\Foo -> roots
+    if (parts.length === 2 && /^[A-Za-z]:$/.test(parts[0])) {
+      loadBrowsePath('');
+      return;
+    }
+    parts.pop();
+    const parent = parts.join('\\');
+    loadBrowsePath(parent);
+  }
+
+  function useBrowsePath() {
+    const p = state.browse.selectedPath || state.browse.path;
+    if (!p) {
+      setStatus($('restoreStatus'), 'Select a file or folder in the browse list first.', 'warn');
+      return;
+    }
+    const includeEl = $('restoreInclude');
+    if (includeEl) includeEl.value = p;
+    updateBrowseButtons();
+    setStatus($('restoreStatus'), 'Include path set to: ' + p + ' — use Restore selected when ready.', 'ok');
+  }
+
+  function clearBrowseInclude() {
+    const includeEl = $('restoreInclude');
+    if (includeEl) includeEl.value = '';
+    updateBrowseButtons();
+    setStatus($('restoreStatus'), 'Include path cleared (full snapshot restore).', 'ok');
+  }
+
+  function setRestoreBusy(busy) {
+    const cancelBtn = $('btnCancelRestore');
+    if (cancelBtn) cancelBtn.disabled = !busy;
+    ['btnRestoreLatest', 'btnRestoreSel', 'btnDeleteSnap', 'btnBrowseSnap', 'btnBrowseUp', 'btnBrowseUse'].forEach((id) => {
+      const el = $(id);
+      if (el) el.disabled = !!busy;
+    });
+    if (!busy) updateBrowseButtons();
+  }
+
+  async function pollRestore() {
+    if (state.pollTimerRestore) {
+      clearTimeout(state.pollTimerRestore);
+      state.pollTimerRestore = null;
+    }
+    try {
+      const d = await api('/api/restore/status');
+      if (d.running) {
+        setRestoreBusy(true);
+        setStatus($('restoreStatus'), 'Restoring… ' + (d.message || d.detail || ''), 'busy');
+        state.pollTimerRestore = setTimeout(pollRestore, 2000);
+      } else if (d.finished) {
+        setRestoreBusy(false);
+        const ok = d.success === true || d.exitCode === 0;
+        setStatus($('restoreStatus'), d.message || (ok ? 'Restore finished.' : 'Restore finished with errors.'), ok ? 'ok' : 'err');
+      } else {
+        setRestoreBusy(false);
+      }
+    } catch (e) {
+      state.pollTimerRestore = setTimeout(pollRestore, 3000);
     }
   }
 
   async function doRestore(snapshot) {
-    setStatus($('restoreStatus'), 'Restoring… this can take a while on large snapshots.', 'busy');
+    setStatus($('restoreStatus'), 'Starting restore…', 'busy');
+    setRestoreBusy(true);
     try {
       const d = await api('/api/restore', {
         method: 'POST',
@@ -1411,7 +1678,49 @@
           setId: state.activeSetId || 'set1'
         })
       });
-      setStatus($('restoreStatus'), d.message || 'Restore finished.', 'ok');
+      setStatus($('restoreStatus'), d.message || 'Restore started.', 'busy');
+      pollRestore();
+    } catch (e) {
+      setRestoreBusy(false);
+      setStatus($('restoreStatus'), e.message, 'err');
+    }
+  }
+
+  async function cancelRestore() {
+    try {
+      const d = await api('/api/restore/cancel', { method: 'POST', body: '{}' });
+      setRestoreBusy(false);
+      setStatus($('restoreStatus'), d.message || 'Restore cancelled.', 'warn');
+    } catch (e) {
+      setStatus($('restoreStatus'), e.message, 'err');
+    }
+  }
+
+  async function deleteSelectedSnap() {
+    if (state.selectedSnap < 0) {
+      setStatus($('restoreStatus'), 'Select a snapshot first.', 'warn');
+      return;
+    }
+    const snap = state.snaps[state.selectedSnap] || {};
+    const sid = snap.Id || snap.id;
+    const shortId = snap.ShortId || snap.shortId || (sid ? String(sid).slice(0, 8) : '');
+    const timeLocal = snap.TimeLocal || snap.timeLocal || '';
+    if (!sid) {
+      setStatus($('restoreStatus'), 'Selected snapshot has no id.', 'err');
+      return;
+    }
+    const label = shortId + (timeLocal ? (' (backed up ' + timeLocal + ')') : '');
+    if (!confirm('Permanently delete snapshot ' + label + ' from the repository?\n\nThis cannot be undone. Pack data is not pruned (use Ops → Prune for that).')) {
+      return;
+    }
+    setStatus($('restoreStatus'), 'Deleting snapshot…', 'busy');
+    try {
+      const d = await api('/api/snapshot/delete', {
+        method: 'POST',
+        body: JSON.stringify({ snapshot: sid, setId: state.activeSetId || 'set1' })
+      });
+      setStatus($('restoreStatus'), d.message || 'Snapshot deleted.', 'ok');
+      refreshSnaps();
     } catch (e) {
       setStatus($('restoreStatus'), e.message, 'err');
     }
@@ -1482,11 +1791,11 @@
     if (!confirm('Delete backup set "' + setId + '" and its scheduled task?\n\nThe restic repository on disk will NOT be deleted.')) return;
     try {
       const d = await api('/api/set/delete', { method: 'POST', body: JSON.stringify({ setId: setId }) });
-      setStatus(opsStatusEl(), d.message || 'Deleted.', 'ok');
+      flashStatus(opsStatusEl(), d.message || 'Deleted.', 'ok', 8000);
       state.activeSetId = '';
       await loadDash();
     } catch (e) {
-      setStatus(opsStatusEl(), e.message, 'err');
+      flashStatus(opsStatusEl(), e.message, 'err', 10000);
     }
   }
 
@@ -1496,12 +1805,12 @@
     setStatus(opsStatusEl(), 'Cancelling backup…', 'busy');
     try {
       const d = await api('/api/backup/cancel', { method: 'POST', body: '{}' });
-      setStatus(opsStatusEl(), d.message || 'Cancelled.', 'warn');
-      setStatus($('dashStatus'), d.message || 'Cancelled.', 'warn');
+      flashStatus(opsStatusEl(), d.message || 'Cancelled.', 'warn', 8000);
+      flashStatus($('dashStatus'), d.message || 'Cancelled.', 'warn', 8000);
       updateProgressUI({ running: false, finished: true, message: d.message, percent: null });
       loadDash();
     } catch (e) {
-      setStatus(opsStatusEl(), e.message, 'err');
+      flashStatus(opsStatusEl(), e.message, 'err', 10000);
     }
   }
 
@@ -1509,9 +1818,9 @@
     setStatus(opsStatusEl(), 'Sending Wake-on-LAN…', 'busy');
     try {
       const d = await api('/api/wake', { method: 'POST', body: JSON.stringify({ setId: state.activeSetId || 'set1' }) });
-      setStatus(opsStatusEl(), d.message || 'WoL sent.', 'ok');
+      flashStatus(opsStatusEl(), d.message || 'WoL sent.', 'ok', 8000);
     } catch (e) {
-      setStatus(opsStatusEl(), e.message, 'err');
+      flashStatus(opsStatusEl(), e.message, 'err', 10000);
     }
   }
 
@@ -1524,7 +1833,7 @@
     if (input == null) return;
     const resticPath = input.trim();
     if (!resticPath) {
-      setStatus(opsStatusEl(), 'ResticPath was not changed.', 'warn');
+      flashStatus(opsStatusEl(), 'ResticPath was not changed.', 'warn', 6000);
       return;
     }
     setStatus(opsStatusEl(), 'Updating ResticPath…', 'busy');
@@ -1533,10 +1842,10 @@
         method: 'POST',
         body: JSON.stringify({ setId: state.activeSetId || 'set1', resticPath: resticPath })
       });
-      setStatus(opsStatusEl(), d.message || 'ResticPath updated.', 'ok');
+      flashStatus(opsStatusEl(), d.message || 'ResticPath updated.', 'ok', 8000);
       await loadDash();
     } catch (e) {
-      setStatus(opsStatusEl(), e.message, 'err');
+      flashStatus(opsStatusEl(), e.message, 'err', 10000);
     }
   }
 
@@ -1563,7 +1872,6 @@
         const d = await api('/api/prereqs');
         state.resticOk = !!d.resticOk;
         state.rcloneOk = !!d.rcloneOk;
-        state.winfspOk = !!d.winfspOk;
         if (d.resticOk && d.resticPath) {
           const el = document.getElementById('fRestic');
           if (el) el.value = d.resticPath;
@@ -1571,7 +1879,6 @@
         }
         updateInstallResticBtn();
         updateInstallRcloneBtn();
-        updateInstallWinFspBtn();
       } catch (e) {
         state.resticOk = false;
       }
@@ -1662,9 +1969,6 @@
   if ($('btnRcloneSave')) $('btnRcloneSave').onclick = () => saveRcloneCloud();
   if ($('btnRcloneTest')) $('btnRcloneTest').onclick = () => testRcloneCloud();
   if ($('btnSavePolicy')) $('btnSavePolicy').onclick = () => savePolicy();
-  if ($('btnMountStart')) $('btnMountStart').onclick = () => startMount();
-  if ($('btnMountStop')) $('btnMountStop').onclick = () => stopMount();
-  if ($('btnInstallWinFsp')) $('btnInstallWinFsp').onclick = () => installWinFspFromOps();
   if ($('btnStoreResticPass')) $('btnStoreResticPass').onclick = () => openStorePasswordModal();
   if ($('btnSaveResticPass')) $('btnSaveResticPass').onclick = () => saveResticPassword();
   if ($('btnOpenOfficeAgent')) $('btnOpenOfficeAgent').onclick = () => openPath('officeagent');
@@ -1693,8 +1997,20 @@
   $('btnRestoreLatest').onclick = () => doRestore('latest');
   $('btnRestoreSel').onclick = () => {
     if (state.selectedSnap < 0) { setStatus($('restoreStatus'), 'Select a snapshot first.', 'warn'); return; }
-    doRestore(state.snaps[state.selectedSnap].Id);
+    const snap = state.snaps[state.selectedSnap] || {};
+    const sid = snap.Id || snap.id;
+    if (!sid) { setStatus($('restoreStatus'), 'Selected snapshot has no id.', 'err'); return; }
+    doRestore(sid);
   };
+  if ($('btnCancelRestore')) $('btnCancelRestore').onclick = () => cancelRestore();
+  if ($('btnDeleteSnap')) $('btnDeleteSnap').onclick = () => deleteSelectedSnap();
+  if ($('btnBrowseSnap')) $('btnBrowseSnap').onclick = () => startBrowseSelected();
+  if ($('btnBrowseUp')) $('btnBrowseUp').onclick = () => browseUp();
+  if ($('btnBrowseUse')) $('btnBrowseUse').onclick = () => useBrowsePath();
+  if ($('btnBrowseClear')) $('btnBrowseClear').onclick = () => clearBrowseInclude();
+  if ($('restoreInclude')) {
+    $('restoreInclude').addEventListener('input', () => updateBrowseButtons());
+  }
   $('btnOpenChecklist').onclick = () => openPath('checklist');
   $('btnSuggestTarget').onclick = async () => {
     try {

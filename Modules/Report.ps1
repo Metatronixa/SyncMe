@@ -58,8 +58,20 @@ function New-BackupHtmlReport {
     $statusClass = if ($success) { 'ok' } else { 'fail' }
 
     $errorsHtml = ''
-    if ($RunInfo.Errors -and $RunInfo.Errors.Count -gt 0) {
-        $items = ($RunInfo.Errors | ForEach-Object {
+    $reportErrors = @()
+    if (Get-Command Get-SyncMeRealErrors -ErrorAction SilentlyContinue) {
+        $reportErrors = @(Get-SyncMeRealErrors -Errors $RunInfo.Errors)
+    } else {
+        $reportErrors = @(@($RunInfo.Errors) | ForEach-Object { [string]$_ } | Where-Object {
+            $_ -and
+            ($_ -notmatch '(?i)Argument types do not match') -and
+            ($_ -notmatch '(?i)arguments do not match') -and
+            ($_ -notmatch '(?i)ShowBalloonTip') -and
+            ($_ -notmatch '(?i)NotifyIcon')
+        })
+    }
+    if ($reportErrors.Count -gt 0) {
+        $items = ($reportErrors | ForEach-Object {
             '<li><code>{0}</code></li>' -f (ConvertTo-HtmlEncoded $_)
         }) -join "`n"
         $errorsHtml = @"
@@ -278,7 +290,7 @@ function New-BackupHtmlReport {
         <tr><th>Files new</th><td>$(ConvertTo-HtmlEncoded $RunInfo.FilesNew)</td></tr>
         <tr><th>Files changed</th><td>$(ConvertTo-HtmlEncoded $RunInfo.FilesChanged)</td></tr>
         <tr><th>Files unmodified</th><td>$(ConvertTo-HtmlEncoded $RunInfo.FilesUnmodified)</td></tr>
-        <tr><th>Dirs new / changed</th><td>$(ConvertTo-HtmlEncoded $RunInfo.DirsNew) / $(ConvertTo-HtmlEncoded $RunInfo.DirsChanged)</td></tr>
+        <tr><th>Dirs new / changed</th><td>$(if ([string]::IsNullOrWhiteSpace([string]$RunInfo.DirsNew) -and [string]::IsNullOrWhiteSpace([string]$RunInfo.DirsChanged)) { '—' } else { (ConvertTo-HtmlEncoded $RunInfo.DirsNew) + ' / ' + (ConvertTo-HtmlEncoded $RunInfo.DirsChanged) })</td></tr>
         <tr><th>Data added</th><td>$(ConvertTo-HtmlEncoded $RunInfo.DataAdded)</td></tr>
         <tr><th>Total bytes processed</th><td>$(ConvertTo-HtmlEncoded $RunInfo.TotalBytesProcessed)</td></tr>
         <tr><th>Backup exit code</th><td>$(ConvertTo-HtmlEncoded $RunInfo.BackupExitCode)</td></tr>

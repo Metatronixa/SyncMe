@@ -27,12 +27,12 @@ if (-not (Test-Path -LiteralPath $marker)) {
     throw "Not a SyncMe project root (missing SyncMe-Host.ps1): $root"
 }
 if (-not (Test-Path -LiteralPath $verSrc)) {
-    throw "Missing VERSION.txt in $root — deploy from the SyncMe project that contains it."
+    throw "Missing VERSION.txt in $root - deploy from the SyncMe project that contains it."
 }
 
 $include = @(
     'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Host.ps1',
-    'SyncMe-Backup.ps1', 'Config.ps1',
+    'SyncMe-Backup.ps1', 'SyncMe-Restore.ps1', 'Config.ps1',
     'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1', 'Build-SyncMePackage.ps1', 'Build-SyncMeSetup.ps1',
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md',
@@ -128,5 +128,5 @@ if (-not $reportCheck) {
 }
 
 Write-Host ''
-Write-Host "Deployed SyncMe build $installedVer → $Target" -ForegroundColor Green
-Write-Host 'Start SyncMe again (SyncMe.bat). New reports must show: Backup by SyncMe · build '"$installedVer"
+Write-Host "Deployed SyncMe build $installedVer -> $Target" -ForegroundColor Green
+Write-Host ("Start SyncMe again (SyncMe.bat). New reports must show: Backup by SyncMe - build {0}" -f $installedVer)

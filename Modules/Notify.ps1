@@ -98,6 +98,44 @@ function Get-BackupStoredCredential {
     return (New-Object System.Management.Automation.PSCredential ($user, $secure))
 }
 
+function Test-SyncMeNotifyNoiseMessage {
+    <#
+      True for Windows toast / NotifyIcon binder noise that must never fail a backup report.
+    #>
+    param([AllowNull()][string]$Message)
+    if ([string]::IsNullOrWhiteSpace($Message)) { return $false }
+    return (
+        ($Message -match '(?i)Argument types do not match') -or
+        ($Message -match '(?i)arguments do not match') -or
+        ($Message -match '(?i)ShowBalloonTip') -or
+        ($Message -match '(?i)NotifyIcon') -or
+        ($Message -match '(?i)BurntToast')
+    )
+}
+
+function Get-SyncMeRealErrors {
+    param([AllowNull()]$Errors)
+    return @(
+        @($Errors) | ForEach-Object { [string]$_ } | Where-Object {
+            $_ -and -not (Test-SyncMeNotifyNoiseMessage $_)
+        }
+    )
+}
+
+function Test-SyncMeDesktopToastSupported {
+    <#
+      Balloon / BurntToast need an interactive desktop session.
+      Skip non-interactive / Service sessions (Task Scheduler with no desktop).
+      Allow interactive Server and Domain Controller sessions (e.g. RDP on PHAMBILIPDC).
+    #>
+    try {
+        if ([Environment]::UserInteractive -eq $false) { return $false }
+    } catch { }
+    $session = [string]$env:SESSIONNAME
+    if ($session -match '(?i)^Service') { return $false }
+    return $true
+}
+
 function Send-BackupToast {
     [CmdletBinding()]
     param(
@@ -115,46 +153,69 @@ function Send-BackupToast {
         [switch]$Silent
     )
 
-    if ($Silent) { return }
-
-    $hasBurntToast = $false
+    # Toasts must never fail a backup — swallow all errors.
     try {
-        $hasBurntToast = Ensure-BurntToast
-    } catch {
-        $hasBurntToast = $false
-    }
+        if ($Silent) { return }
 
-    if ($hasBurntToast) {
-        $sound = switch ($Status) {
-            'Failure' { 'Alarm' }
-            'Success' { 'Default' }
-            default   { 'Silent' }
-        }
-        try {
-            New-BurntToastNotification -Text $Title, $Text -AppId $AppId -Sound $sound -ErrorAction Stop | Out-Null
+        $rawTitle = [string]$Title
+        $rawText = [string]$Text
+        # Keep toast/balloon text short — long multi-line strings break NotifyIcon ("Argument types do not match")
+        $safeTitle = if ($rawTitle.Length -gt 63) { $rawTitle.Substring(0, 60) + '...' } else { $rawTitle }
+        $oneLine = ($rawText -replace '[\r\n]+', ' ').Trim()
+        if ($oneLine.Length -gt 200) { $oneLine = $oneLine.Substring(0, 197) + '...' }
+        if ([string]::IsNullOrWhiteSpace($safeTitle)) { $safeTitle = 'SyncMe' }
+        if ([string]::IsNullOrWhiteSpace($oneLine)) { $oneLine = 'Backup notification' }
+
+        if (-not (Test-SyncMeDesktopToastSupported)) {
+            Write-Host "[$Status] $safeTitle - $oneLine"
             return
-        } catch {
-            # Fall through
         }
-    }
 
-    try {
-        Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
-        $notify = New-Object System.Windows.Forms.NotifyIcon
-        $notify.Icon = [System.Drawing.SystemIcons]::Information
-        if ($Status -eq 'Failure') {
-            $notify.Icon = [System.Drawing.SystemIcons]::Error
-        } elseif ($Status -eq 'Success') {
-            $notify.Icon = [System.Drawing.SystemIcons]::Application
+        $hasBurntToast = $false
+        try {
+            $hasBurntToast = Ensure-BurntToast
+        } catch {
+            $hasBurntToast = $false
         }
-        $notify.Visible = $true
-        $tipType = [System.Windows.Forms.ToolTipIcon]::Info
-        if ($Status -eq 'Failure') { $tipType = [System.Windows.Forms.ToolTipIcon]::Error }
-        $notify.ShowBalloonTip(8000, $Title, $Text, $tipType)
-        Start-Sleep -Seconds 2
-        $notify.Dispose()
+
+        if ($hasBurntToast) {
+            try {
+                New-BurntToastNotification -Text @($safeTitle, $oneLine) -ErrorAction Stop | Out-Null
+                return
+            } catch {
+                try {
+                    New-BurntToastNotification -Text $safeTitle, $oneLine -ErrorAction Stop | Out-Null
+                    return
+                } catch {
+                    # Fall through to balloon
+                }
+            }
+        }
+
+        try {
+            Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+            Add-Type -AssemblyName System.Drawing -ErrorAction Stop
+            $notify = New-Object System.Windows.Forms.NotifyIcon
+            $notify.Icon = [System.Drawing.SystemIcons]::Information
+            if ($Status -eq 'Failure') {
+                $notify.Icon = [System.Drawing.SystemIcons]::Error
+            } elseif ($Status -eq 'Success') {
+                $notify.Icon = [System.Drawing.SystemIcons]::Application
+            }
+            $notify.Visible = $true
+            $tipType = [System.Windows.Forms.ToolTipIcon]::Info
+            if ($Status -eq 'Failure') { $tipType = [System.Windows.Forms.ToolTipIcon]::Error }
+            elseif ($Status -eq 'Success') { $tipType = [System.Windows.Forms.ToolTipIcon]::Info }
+            # Explicit [string] / [int] / enum to avoid "Argument types do not match" overloads
+            $notify.ShowBalloonTip([int]8000, [string]$safeTitle, [string]$oneLine, $tipType)
+            Start-Sleep -Seconds 2
+            $notify.Visible = $false
+            $notify.Dispose()
+        } catch {
+            Write-Host "[$Status] $safeTitle - $oneLine"
+        }
     } catch {
-        Write-Host "[$Status] $Title - $Text"
+        try { Write-Host "[Notify] Toast failed (ignored): $($_.Exception.Message)" } catch { }
     }
 }
 
@@ -333,7 +394,11 @@ function Send-BackupStartNotification {
         [string]$LogPath
     )
     if ($Enabled) {
-        Send-BackupToast -Title 'SyncMe backup started' -Text "Pulling from: $SourceSummary" -Status Info -AppId $AppId
+        try {
+            Send-BackupToast -Title 'SyncMe backup started' -Text "Pulling from: $SourceSummary" -Status Info -AppId $AppId
+        } catch {
+            try { Write-Host "[Notify] Start toast failed (ignored): $($_.Exception.Message)" } catch { }
+        }
     }
     if ($Config -and $Config.EnableEmailNotifications -and $Config.EmailOnStart) {
         $encSrc = [System.Net.WebUtility]::HtmlEncode($SourceSummary)
@@ -362,13 +427,20 @@ function Send-BackupCompleteNotification {
         [string]$LogPath
     )
     if ($Enabled) {
-        $title = if ($Success) { 'SyncMe backup completed' } else { 'SyncMe backup FAILED' }
-        $status = if ($Success) { 'Success' } else { 'Failure' }
-        $text = $Summary
-        if ($ReportPath) {
-            $text = $Summary + [Environment]::NewLine + "Report: $ReportPath"
+        try {
+            $ok = [bool]$Success
+            $title = if ($ok) { 'SyncMe backup completed' } else { 'SyncMe backup FAILED' }
+            $status = if ($ok) { 'Success' } else { 'Failure' }
+            # Do not append report path — long paths / newlines break Windows balloon toasts
+            $text = if ([string]::IsNullOrWhiteSpace($Summary)) {
+                if ($ok) { 'Backup finished successfully.' } else { 'Backup finished with errors.' }
+            } else {
+                [string]$Summary
+            }
+            Send-BackupToast -Title $title -Text $text -Status $status -AppId $AppId
+        } catch {
+            try { Write-Host "[Notify] Complete toast failed (ignored): $($_.Exception.Message)" } catch { }
         }
-        Send-BackupToast -Title $title -Text $text -Status $status -AppId $AppId
     }
     if ($Config -and $Config.EnableEmailNotifications -and $Config.EmailOnComplete) {
         $statusWord = if ($Success) { 'SUCCESS' } else { 'FAILED' }

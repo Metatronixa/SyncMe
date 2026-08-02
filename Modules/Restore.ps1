@@ -124,20 +124,34 @@ function Get-SyncMeSnapshots {
             $id = [string]$s.id
             $short = if ($id.Length -ge 8) { $id.Substring(0, 8) } else { $id }
             $time = [string]$s.time
+            $timeLocal = $time
+            try {
+                $dt = [datetime]::Parse($time, [System.Globalization.CultureInfo]::InvariantCulture, [System.Globalization.DateTimeStyles]::RoundtripKind)
+                $timeLocal = $dt.ToLocalTime().ToString('yyyy-MM-dd HH:mm')
+            } catch {
+                try {
+                    $dt2 = Get-Date $time
+                    $timeLocal = $dt2.ToLocalTime().ToString('yyyy-MM-dd HH:mm')
+                } catch { }
+            }
             $tags = @()
             if ($s.tags) { $tags = @($s.tags) }
             $paths = @()
             if ($s.paths) { $paths = @($s.paths) }
-            $host = [string]$s.hostname
-            $display = "$short  $time  tags=[$($tags -join ',')]  $($paths -join ', ')"
+            $hasUnc = [bool](@($paths) | Where-Object { $_ -match '^\\\\' })
+            $snapHostname = [string]$s.hostname
+            $uncNote = if ($hasUnc) { '  [UNC — Windows restore unsupported]' } else { '' }
+            $display = "$short  backup $timeLocal$uncNote  tags=[$($tags -join ',')]  $($paths -join ', ')"
             [pscustomobject]@{
-                Id       = $id
-                ShortId  = $short
-                Time     = $time
-                Tags     = $tags
-                Paths    = $paths
-                Hostname = $host
-                Display  = $display
+                Id          = $id
+                ShortId     = $short
+                Time        = $time
+                TimeLocal   = $timeLocal
+                Tags        = $tags
+                Paths       = $paths
+                Hostname    = $snapHostname
+                HasUncPaths = $hasUnc
+                Display     = $display
             }
         }
         # Newest first (restic often returns oldest first)
@@ -185,6 +199,71 @@ function Test-SyncMeRestoreTargetSafe {
     return @{ Ok = $true; Message = ''; NonEmpty = $nonEmpty; FullPath = $targetFull }
 }
 
+function Test-SyncMeSnapshotHasUncPaths {
+    param(
+        [Parameter(Mandatory)]$Config,
+        [Parameter(Mandatory)][string]$Snapshot
+    )
+    $snaps = @(Get-SyncMeSnapshots -Config $Config)
+    if (-not $snaps.Count) {
+        return @{ HasUnc = $false; Message = ''; Snapshot = $null }
+    }
+    $s = $null
+    if ($Snapshot -eq 'latest') {
+        $s = $snaps[0]
+    } else {
+        $want = $Snapshot.Trim()
+        $s = $snaps | Where-Object {
+            $_.Id -eq $want -or $_.ShortId -eq $want -or
+            ($_.Id -and $_.Id.StartsWith($want, [StringComparison]::OrdinalIgnoreCase))
+        } | Select-Object -First 1
+    }
+    if (-not $s) {
+        return @{ HasUnc = $false; Message = ''; Snapshot = $null }
+    }
+    if ($s.HasUncPaths) {
+        $uncPaths = @($s.Paths | Where-Object { $_ -match '^\\\\' })
+        $msg = "This snapshot was backed up using UNC paths ($($uncPaths -join ', ')). Windows restic cannot restore those snapshots (invalid child node name). Run a new backup — SyncMe now stores drive-letter paths — then restore the new snapshot."
+        return @{ HasUnc = $true; Message = $msg; Snapshot = $s }
+    }
+    return @{ HasUnc = $false; Message = ''; Snapshot = $s }
+}
+
+function Remove-SyncMeSnapshot {
+    <#
+      Forgets a single snapshot by id (does not prune pack data).
+    #>
+    param(
+        [Parameter(Mandatory)]$Config,
+        [Parameter(Mandatory)][string]$SnapshotId,
+        [string]$LogPath = ''
+    )
+    . (Join-Path $PSScriptRoot 'Notify.ps1')
+    if ([string]::IsNullOrWhiteSpace($SnapshotId) -or $SnapshotId -eq 'latest') {
+        throw 'A specific snapshot id is required to delete (not latest).'
+    }
+    $resticExe = Get-SyncMeResticExePath -Config $Config -ScriptRoot (Split-Path -Parent $PSScriptRoot)
+    $cred = Get-BackupStoredCredential -TargetName $Config.ResticCredentialName
+    $plain = $cred.GetNetworkCredential().Password
+    $env:RESTIC_PASSWORD = $plain
+    $env:RESTIC_REPOSITORY = $Config.ResticRepo
+    try {
+        $output = & $resticExe forget $SnapshotId 2>&1 | Out-String
+        $code = $LASTEXITCODE
+        if ($code -ne 0) {
+            throw "restic forget failed (exit $code): $output"
+        }
+        $msg = "Deleted snapshot $SnapshotId from the repository (data packs not pruned)."
+        if ($LogPath) {
+            Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue
+        }
+        return @{ Success = $true; Message = $msg; Detail = $output }
+    } finally {
+        Remove-Item Env:RESTIC_PASSWORD -ErrorAction SilentlyContinue
+        Remove-Item Env:RESTIC_REPOSITORY -ErrorAction SilentlyContinue
+    }
+}
+
 function Invoke-SyncMeRestore {
     <#
       Restores a snapshot (id or 'latest') to TargetPath.
@@ -198,6 +277,11 @@ function Invoke-SyncMeRestore {
         [string]$LogPath = ''
     )
     . (Join-Path $PSScriptRoot 'Notify.ps1')
+
+    $uncCheck = Test-SyncMeSnapshotHasUncPaths -Config $Config -Snapshot $Snapshot
+    if ($uncCheck.HasUnc) {
+        return @{ Success = $false; ExitCode = 1; Message = $uncCheck.Message; TargetPath = $TargetPath }
+    }
 
     $safe = Test-SyncMeRestoreTargetSafe -TargetPath $TargetPath -ResticRepo $Config.ResticRepo
     if (-not $safe.Ok) {
@@ -226,7 +310,11 @@ function Invoke-SyncMeRestore {
         $msg = if ($ok) {
             "Restore completed to $($safe.FullPath)"
         } else {
-            "Restore failed (exit $code). $output"
+            $detail = $output
+            if ($detail -match '(?i)invalid child node name') {
+                $detail = "Windows restic rejected UNC path nodes in this snapshot. Run a new backup (drive-letter sources), then restore that snapshot. Raw: $detail"
+            }
+            "Restore failed (exit $code). $detail"
         }
         if ($LogPath) {
             Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue
@@ -261,4 +349,247 @@ function Get-SyncMeDefaultRestoreTarget {
     $base = if ($ScriptRoot) { $ScriptRoot } else { $PSScriptRoot }
     if (-not $base) { $base = (Get-Location).Path }
     return (Join-Path $base "Restores\$stamp")
+}
+
+function Get-SyncMeNormalizedSnapshotPath {
+    param([AllowNull()][string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
+    $p = $Path.Trim() -replace '/', '\'
+    while ($p.Contains('\\') -and $p -notmatch '^\\\\') {
+        $p = $p.Replace('\\', '\')
+    }
+    return $p.TrimEnd('\')
+}
+
+function Get-SyncMeSnapshotPathParent {
+    param([string]$Path)
+    $p = Get-SyncMeNormalizedSnapshotPath -Path $Path
+    if ([string]::IsNullOrWhiteSpace($p)) { return '' }
+    $idx = $p.LastIndexOf('\')
+    if ($idx -lt 0) { return '' }
+    if ($idx -eq 2 -and $p.Length -ge 3 -and $p[1] -eq ':') {
+        # Parent of C:\Foo is C:  — treat drive root specially
+        return $p.Substring(0, 2)
+    }
+    return $p.Substring(0, $idx)
+}
+
+function Get-SyncMeSnapshotPathName {
+    param([string]$Path)
+    $p = Get-SyncMeNormalizedSnapshotPath -Path $Path
+    if ([string]::IsNullOrWhiteSpace($p)) { return '' }
+    $idx = $p.LastIndexOf('\')
+    if ($idx -lt 0) { return $p }
+    if ($idx -eq $p.Length - 1) { return $p.TrimEnd('\') }
+    return $p.Substring($idx + 1)
+}
+
+function Get-SyncMeSnapshotListing {
+    <#
+      Lazy directory listing for a snapshot (immediate children only).
+      Empty Path returns snapshot root Paths as folders.
+      Returns hashtable: Ok, Message, Path, Entries[{name,path,type,size}], Truncated, SnapshotId
+    #>
+    param(
+        [Parameter(Mandatory)]$Config,
+        [Parameter(Mandatory)][string]$Snapshot,
+        [string]$Path = '',
+        [int]$MaxEntries = 1000,
+        [int]$TimeoutSeconds = 90
+    )
+    # TimeoutSeconds kept for API compatibility; listing uses sync & restic (same as snapshots).
+    $null = $TimeoutSeconds
+
+    try {
+        . (Join-Path $PSScriptRoot 'Notify.ps1')
+
+        if ($MaxEntries -lt 1) { $MaxEntries = 1000 }
+
+        $uncCheck = Test-SyncMeSnapshotHasUncPaths -Config $Config -Snapshot $Snapshot
+        if ($uncCheck.HasUnc) {
+            return ,@{
+                Ok         = $false
+                Message    = [string]$uncCheck.Message
+                Path       = [string]$Path
+                Entries    = @()
+                Truncated  = $false
+                SnapshotId = $(if ($uncCheck.Snapshot) { [string]$uncCheck.Snapshot.Id } else { [string]$Snapshot })
+            }
+        }
+
+        $snapObj = $uncCheck.Snapshot
+        if (-not $snapObj) {
+            $snaps = @(Get-SyncMeSnapshots -Config $Config)
+            if ($Snapshot -eq 'latest') {
+                $snapObj = $snaps | Select-Object -First 1
+            } else {
+                $want = $Snapshot.Trim()
+                $snapObj = $snaps | Where-Object {
+                    $_.Id -eq $want -or $_.ShortId -eq $want -or
+                    ($_.Id -and $_.Id.StartsWith($want, [StringComparison]::OrdinalIgnoreCase))
+                } | Select-Object -First 1
+            }
+        }
+        if (-not $snapObj) {
+            return ,@{
+                Ok         = $false
+                Message    = "Snapshot not found: $Snapshot"
+                Path       = [string]$Path
+                Entries    = @()
+                Truncated  = $false
+                SnapshotId = [string]$Snapshot
+            }
+        }
+
+        $snapId = [string]$snapObj.Id
+        $normPath = Get-SyncMeNormalizedSnapshotPath -Path $Path
+
+        # Root listing: snapshot source paths only (no full-tree ls).
+        if ([string]::IsNullOrWhiteSpace($normPath)) {
+            $roots = New-Object System.Collections.Generic.List[object]
+            foreach ($rp in @($snapObj.Paths)) {
+                if ([string]::IsNullOrWhiteSpace([string]$rp)) { continue }
+                $full = Get-SyncMeNormalizedSnapshotPath -Path ([string]$rp)
+                [void]$roots.Add([pscustomobject]@{
+                    name = Get-SyncMeSnapshotPathName -Path $full
+                    path = $full
+                    type = 'dir'
+                    size = $null
+                })
+            }
+            return ,@{
+                Ok         = $true
+                Message    = ''
+                Path       = ''
+                Entries    = @($roots)
+                Truncated  = $false
+                SnapshotId = $snapId
+            }
+        }
+
+        $scriptRoot = Split-Path -Parent $PSScriptRoot
+        $resticExe = Get-SyncMeResticExePath -Config $Config -ScriptRoot $scriptRoot
+        $cred = Get-BackupStoredCredential -TargetName $Config.ResticCredentialName
+        $plain = $cred.GetNetworkCredential().Password
+
+        $env:RESTIC_PASSWORD = $plain
+        $env:RESTIC_REPOSITORY = $Config.ResticRepo
+        $entries = New-Object System.Collections.Generic.List[object]
+        $truncated = $false
+        $parentNorm = $normPath
+
+        try {
+            # Same proven invoke style as Get-SyncMeSnapshots (no ProcessStartInfo / ReadToEndAsync).
+            $raw = & $resticExe ls $snapId $normPath --json 2>&1
+            $lec = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+            $code = if ($null -ne $lec -and $null -ne $lec.Value) { [int]$lec.Value } else { 1 }
+
+            $lineTexts = New-Object System.Collections.Generic.List[string]
+            $errBits = New-Object System.Collections.Generic.List[string]
+            foreach ($item in @($raw)) {
+                $text = if ($item -is [System.Management.Automation.ErrorRecord]) {
+                    if ($item.Exception -and $item.Exception.Message) { [string]$item.Exception.Message }
+                    else { $item.ToString() }
+                } else {
+                    [string]$item
+                }
+                if ([string]::IsNullOrWhiteSpace($text)) { continue }
+                if ($text -match '^\s*\{') {
+                    [void]$lineTexts.Add($text.Trim())
+                } else {
+                    [void]$errBits.Add($text)
+                }
+            }
+
+            if ($code -ne 0) {
+                $msg = if ($errBits.Count -gt 0) { ($errBits -join ' ').Trim() } else { "restic ls failed (exit $code)." }
+                if ($msg -match '(?i)invalid child node name') {
+                    $msg = 'Windows restic rejected UNC path nodes in this snapshot. Run a new backup, then browse that snapshot.'
+                }
+                return ,@{
+                    Ok         = $false
+                    Message    = "Snapshot browse failed: $msg"
+                    Path       = $normPath
+                    Entries    = @()
+                    Truncated  = $false
+                    SnapshotId = $snapId
+                }
+            }
+
+            foreach ($line in $lineTexts) {
+                $obj = $null
+                try { $obj = $line | ConvertFrom-Json } catch { continue }
+                if (-not $obj) { continue }
+
+                $entryPath = ''
+                if ($obj.PSObject.Properties.Name -contains 'path' -and $obj.path) {
+                    $entryPath = Get-SyncMeNormalizedSnapshotPath -Path ([string]$obj.path)
+                } elseif ($obj.PSObject.Properties.Name -contains 'name' -and $obj.name) {
+                    $entryPath = Get-SyncMeNormalizedSnapshotPath -Path (Join-Path $parentNorm ([string]$obj.name))
+                }
+                if ([string]::IsNullOrWhiteSpace($entryPath)) { continue }
+                if ($entryPath -ieq $parentNorm) { continue }
+
+                $entryParent = Get-SyncMeSnapshotPathParent -Path $entryPath
+                if ($entryParent -ine $parentNorm) { continue }
+
+                $type = 'file'
+                if ($obj.PSObject.Properties.Name -contains 'type' -and $obj.type) {
+                    $t = [string]$obj.type
+                    if ($t -eq 'dir' -or $t -eq 'directory') { $type = 'dir' }
+                } elseif ($obj.PSObject.Properties.Name -contains 'mode') {
+                    try {
+                        $mode = [long]$obj.mode
+                        if (($mode -band 0x4000) -ne 0) { $type = 'dir' }
+                    } catch { }
+                }
+
+                $size = $null
+                if ($obj.PSObject.Properties.Name -contains 'size' -and $null -ne $obj.size) {
+                    try { $size = [long]$obj.size } catch { $size = $null }
+                }
+
+                $name = Get-SyncMeSnapshotPathName -Path $entryPath
+                if ($obj.PSObject.Properties.Name -contains 'name' -and $obj.name) {
+                    $name = [string]$obj.name
+                }
+
+                if ($entries.Count -ge $MaxEntries) {
+                    $truncated = $true
+                    break
+                }
+                [void]$entries.Add([pscustomobject]@{
+                    name = $name
+                    path = $entryPath
+                    type = $type
+                    size = $size
+                })
+            }
+
+            $sorted = @($entries | Sort-Object @{ Expression = { if ($_.type -eq 'dir') { 0 } else { 1 } } }, @{ Expression = { $_.name } })
+
+            return ,@{
+                Ok         = $true
+                Message    = $(if ($truncated) { "Showing first $MaxEntries entries in this folder." } else { '' })
+                Path       = $normPath
+                Entries    = $sorted
+                Truncated  = $truncated
+                SnapshotId = $snapId
+            }
+        } finally {
+            Remove-Item Env:RESTIC_PASSWORD -ErrorAction SilentlyContinue
+            Remove-Item Env:RESTIC_REPOSITORY -ErrorAction SilentlyContinue
+        }
+    } catch {
+        $exType = $_.Exception.GetType().FullName
+        $exMsg = [string]$_.Exception.Message
+        return ,@{
+            Ok         = $false
+            Message    = "Snapshot browse failed ($exType): $exMsg"
+            Path       = $(if ($Path) { Get-SyncMeNormalizedSnapshotPath -Path $Path } else { [string]$Path })
+            Entries    = @()
+            Truncated  = $false
+            SnapshotId = [string]$Snapshot
+        }
+    }
 }

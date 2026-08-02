@@ -107,13 +107,23 @@ function Resolve-BackupSourcePaths {
 
     $mode = 'Live'
     $pointerValue = ''
-    $detail = 'Using live UNC paths.'
+    $detail = 'Using configured source paths.'
     $openRisk = 'Low'
     $effective = New-Object System.Collections.Generic.List[string]
 
     $useShadow = $false
     if ($Config.PSObject.Properties.Name -contains 'UseShadowCopySources') {
         $useShadow = [bool]$Config.UseShadowCopySources
+    }
+
+    $anyUnc = $false
+    foreach ($p in $ConfiguredPaths) {
+        if ($p -match '^\\\\[^\\]+\\[^\\]+') { $anyUnc = $true; break }
+    }
+    if (-not $anyUnc) {
+        $detail = 'Using local source path(s) on the Backup PC.'
+    } elseif (-not $useShadow) {
+        $detail = 'Using live UNC paths.'
     }
 
     if (-not $useShadow) {
@@ -123,7 +133,7 @@ function Resolve-BackupSourcePaths {
             SourceMode     = $mode
             PointerValue   = $pointerValue
             Detail         = $detail
-            OpenFileRisk   = 'Medium'
+            OpenFileRisk   = $(if ($anyUnc) { 'Medium' } else { 'Low' })
         }
     }
 
@@ -550,10 +560,14 @@ function Connect-BackupShare {
     $secure = ConvertTo-SecureString $pass -AsPlainText -Force
     $cred = New-Object System.Management.Automation.PSCredential ($user, $secure)
 
-    # Use the root of the first UNC path as the share to map
-    $first = $SourcePaths | Select-Object -First 1
-    if ($first -notmatch '^\\\\([^\\]+)\\([^\\]+)') {
-        throw "Cannot parse UNC share from source path: $first"
+    # Use the root of the first UNC path as the share to map (skip local drive paths)
+    $firstUnc = $SourcePaths | Where-Object { $_ -match '^\\\\[^\\]+\\[^\\]+' } | Select-Object -First 1
+    if (-not $firstUnc) {
+        Write-Log 'Share credentials configured but sources are local paths — skipping SMB map.' $LogPath
+        return $null
+    }
+    if ($firstUnc -notmatch '^\\\\([^\\]+)\\([^\\]+)') {
+        throw "Cannot parse UNC share from source path: $firstUnc"
     }
     $shareRoot = '\\{0}\{1}' -f $Matches[1], $Matches[2]
 
@@ -588,12 +602,129 @@ function Disconnect-BackupShare {
     try {
         if ($Mapped -eq 'OfficeBackupShare') {
             Remove-PSDrive -Name 'OfficeBackupShare' -Force -ErrorAction SilentlyContinue
+        } elseif ($Mapped -match '^OfficeBackupShare') {
+            Remove-PSDrive -Name $Mapped -Force -ErrorAction SilentlyContinue
         } else {
-            net use "$($Mapped):" /delete /y 2>$null | Out-Null
+            $letter = $Mapped.TrimEnd(':')
+            net use "${letter}:" /delete /y 2>$null | Out-Null
         }
         Write-Log "Disconnected share mapping '$Mapped'" $LogPath
     } catch {
         Write-Log "Share disconnect warning: $_" $LogPath 'WARN'
+    }
+}
+
+function Convert-BackupSourcesToDriveLetters {
+    <#
+      Map each unique UNC share to a drive letter and rewrite sources for restic.
+      Windows restic cannot restore snapshots that stored UNC roots as tree node names.
+    #>
+    param(
+        [string[]]$SourcePaths,
+        [string]$PreferredLetter = '',
+        [string]$CredentialName = '',
+        [string]$LogPath = ''
+    )
+
+    $user = $null
+    $pass = $null
+    if (-not [string]::IsNullOrWhiteSpace($CredentialName)) {
+        try {
+            $user = Get-GenericCredentialUserName -TargetName $CredentialName
+            $pass = Get-GenericCredentialPassword -TargetName $CredentialName
+        } catch {
+            Write-Log "Share credential read warning: $($_.Exception.Message)" $LogPath 'WARN'
+        }
+    }
+
+    $shareToLetter = @{}
+    $mapped = New-Object System.Collections.Generic.List[string]
+    $out = New-Object System.Collections.Generic.List[string]
+
+    $usedLetters = @()
+    try {
+        $usedLetters = @([System.IO.DriveInfo]::GetDrives() | ForEach-Object {
+            $_.Name.Substring(0, 1).ToUpperInvariant()
+        })
+    } catch { }
+
+    $candidates = New-Object System.Collections.Generic.List[string]
+    if (-not [string]::IsNullOrWhiteSpace($PreferredLetter)) {
+        [void]$candidates.Add($PreferredLetter.TrimEnd(':').ToUpperInvariant())
+    }
+    foreach ($code in 90..67) {
+        $ch = [string][char]$code
+        if ($candidates -notcontains $ch) { [void]$candidates.Add($ch) }
+    }
+
+    foreach ($src in @($SourcePaths)) {
+        if ([string]::IsNullOrWhiteSpace($src)) { continue }
+        if ($src -notmatch '^\\\\([^\\]+)\\([^\\]+)(.*)$') {
+            [void]$out.Add($src)
+            continue
+        }
+        $server = $Matches[1]
+        $share = $Matches[2]
+        $rest = [string]$Matches[3]
+        if ([string]::IsNullOrWhiteSpace($rest)) { $rest = '\' }
+        if (-not $rest.StartsWith('\')) { $rest = '\' + $rest }
+        $shareRoot = '\\{0}\{1}' -f $server, $share
+        $key = $shareRoot.ToLowerInvariant()
+
+        if (-not $shareToLetter.ContainsKey($key)) {
+            $letter = $null
+            try {
+                $existing = Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue |
+                    Where-Object {
+                        $_.DisplayRoot -and ($_.DisplayRoot.TrimEnd('\') -ieq $shareRoot.TrimEnd('\')) -and
+                        ($_.Name -match '^[A-Za-z]$')
+                    } | Select-Object -First 1
+                if ($existing) {
+                    $letter = $existing.Name.ToUpperInvariant()
+                    Write-Log "Reusing existing mapping ${letter}: for $shareRoot" $LogPath
+                }
+            } catch { }
+
+            if (-not $letter) {
+                foreach ($c in $candidates) {
+                    if ($usedLetters -contains $c) { continue }
+                    if ($mapped -contains $c) { continue }
+                    $letter = $c
+                    break
+                }
+                if (-not $letter) {
+                    throw "No free drive letter available to map UNC share $shareRoot for restic backup."
+                }
+                Write-Log "Mapping $shareRoot -> ${letter}: for restic (UNC path rewrite)" $LogPath
+                if (-not $WhatIf) {
+                    net use "${letter}:" /delete /y 2>$null | Out-Null
+                    $result = $null
+                    if ($user -and $pass) {
+                        $result = net use "${letter}:" $shareRoot /user:$user $pass /persistent:no 2>&1
+                    } else {
+                        $result = net use "${letter}:" $shareRoot /persistent:no 2>&1
+                    }
+                    if ($LASTEXITCODE -ne 0) {
+                        throw "net use failed for $shareRoot : $result"
+                    }
+                    [void]$mapped.Add($letter)
+                } else {
+                    [void]$mapped.Add($letter)
+                }
+            }
+            $shareToLetter[$key] = $letter
+            $usedLetters += $letter
+        }
+
+        $letter = $shareToLetter[$key]
+        $drivePath = ('{0}:{1}' -f $letter, $rest)
+        Write-Log "Source rewrite for restic: $src -> $drivePath" $LogPath
+        [void]$out.Add($drivePath)
+    }
+
+    return @{
+        EffectivePaths = @($out)
+        MappedLetters  = @($mapped)
     }
 }
 
@@ -627,7 +758,7 @@ function Invoke-Restic {
 
     if ($WhatIf) {
         Write-Log 'WhatIf: skipping restic execution' $LogPath 'WARN'
-        return @{ ExitCode = 0; Output = @(); JsonObjects = @() }
+        return ,@{ ExitCode = 0; Output = @(); JsonObjects = @() }
     }
 
     $jsonObjects = New-Object System.Collections.Generic.List[object]
@@ -689,114 +820,151 @@ function Invoke-Restic {
             }
         }
 
-        & $ResticExe @Arguments 2>&1 | ForEach-Object {
-            $text = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.ToString() } else { [string]$_ }
-            if ([string]::IsNullOrWhiteSpace($text)) { return }
-            try {
-                if ($logWriter) { $logWriter.WriteLine($text) }
-                elseif ($LogPath) { Add-SyncMeSharedLine -Path $LogPath -Line $text }
-            } catch { }
-            try {
-                if ($jsonWriter) { $jsonWriter.WriteLine($text) }
-            } catch { }
+        $exit = -1
+        try {
+            # Discard pipeline output so progress helpers never pollute the function return value.
+            & $ResticExe @Arguments 2>&1 | ForEach-Object {
+                $text = if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                    if ($_.Exception -and $_.Exception.Message) { [string]$_.Exception.Message }
+                    else { $_.ToString() }
+                } else {
+                    [string]$_
+                }
+                if ([string]::IsNullOrWhiteSpace($text)) { return }
+                try {
+                    if ($logWriter) { $logWriter.WriteLine($text) }
+                    elseif ($LogPath) { Add-SyncMeSharedLine -Path $LogPath -Line $text }
+                } catch { }
+                try {
+                    if ($jsonWriter) { $jsonWriter.WriteLine($text) }
+                } catch { }
 
-            if ($text -match '^\s*\{') {
-                $obj = $null
-                try { $obj = $text | ConvertFrom-Json } catch { }
-                if ($obj) {
-                    $msgType = [string](Get-ResticJsonProp $obj 'message_type')
-                    if ($msgType -eq 'status') {
-                        $lastStatusObj = $obj
-                    } elseif ($msgType -eq 'summary') {
-                        $summaryObj = $obj
-                        [void]$jsonObjects.Add($obj)
-                    }
-                    if ($msgType -eq 'status' -or $msgType -eq 'summary') {
-                        $now = Get-Date
-                        $force = ($msgType -eq 'summary')
-                        if ($force -or ($now - $lastProgressUtc).TotalSeconds -ge 2) {
-                            $lastProgressUtc = $now
-                            $percent = $null
-                            $bytesDone = $null
-                            $totalBytes = $null
-                            $filesDone = $null
-                            $totalFiles = $null
-                            $mode = 'scanning'
+                # Extract JSON even if PowerShell prefixed the line (e.g. "restic.exe : {...}")
+                $jsonText = $null
+                if ($text -match '^\s*\{') {
+                    $jsonText = $text.Trim()
+                } elseif ($text -match '(\{.*\})\s*$') {
+                    $jsonText = $Matches[1]
+                }
+                if ($jsonText) {
+                    $obj = $null
+                    try { $obj = $jsonText | ConvertFrom-Json } catch { }
+                    if ($obj) {
+                        $msgType = [string](Get-ResticJsonProp $obj 'message_type')
+                        if ($msgType -eq 'status') {
+                            $lastStatusObj = $obj
+                        } elseif ($msgType -eq 'summary') {
+                            $summaryObj = $obj
+                            [void]$jsonObjects.Add($obj)
+                        }
+                        if ($msgType -eq 'status' -or $msgType -eq 'summary') {
+                            $now = Get-Date
+                            $force = ($msgType -eq 'summary')
+                            if ($force -or ($now - $lastProgressUtc).TotalSeconds -ge 2) {
+                                $lastProgressUtc = $now
+                                try {
+                                    $percent = $null
+                                    $bytesDone = $null
+                                    $totalBytes = $null
+                                    $filesDone = $null
+                                    $totalFiles = $null
+                                    $mode = 'scanning'
 
-                            if ($msgType -eq 'status') {
-                                $pd = Get-ResticJsonProp $obj 'percent_done'
-                                if ($null -ne $pd) {
-                                    $percent = [math]::Round(([double]$pd) * 100, 1)
+                                    if ($msgType -eq 'status') {
+                                        $pd = Get-ResticJsonProp $obj 'percent_done'
+                                        if ($null -ne $pd) {
+                                            try { $percent = [math]::Round(([double]$pd) * 100, 1) } catch { $percent = $null }
+                                        }
+                                        $bd = Get-ResticJsonProp $obj 'bytes_done'
+                                        if ($null -ne $bd) { try { $bytesDone = [long]$bd } catch { $bytesDone = $null } }
+                                        $tb = Get-ResticJsonProp $obj 'total_bytes'
+                                        if ($null -ne $tb) { try { $totalBytes = [long]$tb } catch { $totalBytes = $null } }
+                                        $fd = Get-ResticJsonProp $obj 'files_done'
+                                        if ($null -ne $fd) { try { $filesDone = [long]$fd } catch { $filesDone = $null } }
+                                        $tf = Get-ResticJsonProp $obj 'total_files'
+                                        if ($null -ne $tf) { try { $totalFiles = [long]$tf } catch { $totalFiles = $null } }
+                                    } elseif ($msgType -eq 'summary') {
+                                        $tbp = Get-ResticJsonProp $obj 'total_bytes_processed'
+                                        if ($null -ne $tbp) {
+                                            try {
+                                                $totalBytes = [long]$tbp
+                                                $bytesDone = $totalBytes
+                                            } catch {
+                                                $totalBytes = $null
+                                                $bytesDone = $null
+                                            }
+                                        }
+                                        $percent = 100
+                                        $mode = 'done'
+                                    }
+
+                                    if ($null -ne $totalBytes -and $totalBytes -gt $maxTotalBytes) {
+                                        $maxTotalBytes = $totalBytes
+                                    }
+                                    $displayTotal = if ($maxTotalBytes -gt 0) { $maxTotalBytes } else { $totalBytes }
+
+                                    if ($null -ne $percent -and $percent -ge 1) { $mode = 'transferring' }
+                                    elseif ($msgType -eq 'summary') { $mode = 'done' }
+                                    else { $mode = 'scanning' }
+
+                                    $parts = New-Object System.Collections.Generic.List[string]
+                                    if ($mode -eq 'scanning') {
+                                        if ($null -ne $displayTotal -and $displayTotal -gt 0) {
+                                            try { [void]$parts.Add(('Scanning source… {0} found so far' -f (Format-SyncMeBytes $displayTotal))) } catch { [void]$parts.Add('Scanning source…') }
+                                        } else {
+                                            [void]$parts.Add('Scanning source…')
+                                        }
+                                    } elseif ($null -ne $bytesDone -and $null -ne $displayTotal -and $displayTotal -gt 0) {
+                                        try { [void]$parts.Add(('{0} of {1}' -f (Format-SyncMeBytes $bytesDone), (Format-SyncMeBytes $displayTotal))) } catch { }
+                                    } elseif ($null -ne $bytesDone) {
+                                        try { [void]$parts.Add((Format-SyncMeBytes $bytesDone)) } catch { }
+                                    }
+                                    if ($null -ne $percent -and $mode -ne 'scanning') { [void]$parts.Add(('{0}%' -f $percent)) }
+                                    if ($null -ne $filesDone) {
+                                        try {
+                                            if ($null -ne $totalFiles) {
+                                                [void]$parts.Add(('{0:N0} / {1:N0} files' -f [long]$filesDone, [long]$totalFiles))
+                                            } else {
+                                                [void]$parts.Add(('{0:N0} files' -f [long]$filesDone))
+                                            }
+                                        } catch { }
+                                    }
+                                    $detail = ($parts -join ' · ')
+                                    $uiPercent = if ($mode -eq 'scanning') { $null } else { $percent }
+
+                                    try {
+                                        Write-SyncMeLiveProgress `
+                                            -ScriptRoot $ScriptRoot `
+                                            -SetId $ActiveSetId `
+                                            -Phase $ProgressPhase `
+                                            -Message $(if ($mode -eq 'scanning') { 'Scanning source…' } elseif ($mode -eq 'done') { 'Backup step finishing…' } else { 'Backing up…' }) `
+                                            -RunId $runId `
+                                            -JsonLog '' `
+                                            -Percent $uiPercent `
+                                            -BytesDone $bytesDone `
+                                            -TotalBytes $displayTotal `
+                                            -FilesDone $filesDone `
+                                            -TotalFiles $totalFiles `
+                                            -Detail $detail `
+                                            -ProgressMode $mode
+                                    } catch { }
+                                } catch {
+                                    # Progress UI must never abort the restic pipeline
                                 }
-                                $bd = Get-ResticJsonProp $obj 'bytes_done'
-                                if ($null -ne $bd) { $bytesDone = [long]$bd }
-                                $tb = Get-ResticJsonProp $obj 'total_bytes'
-                                if ($null -ne $tb) { $totalBytes = [long]$tb }
-                                $fd = Get-ResticJsonProp $obj 'files_done'
-                                if ($null -ne $fd) { $filesDone = [long]$fd }
-                                $tf = Get-ResticJsonProp $obj 'total_files'
-                                if ($null -ne $tf) { $totalFiles = [long]$tf }
-                            } elseif ($msgType -eq 'summary') {
-                                $tbp = Get-ResticJsonProp $obj 'total_bytes_processed'
-                                if ($null -ne $tbp) { $totalBytes = [long]$tbp; $bytesDone = $totalBytes }
-                                $percent = 100
-                                $mode = 'done'
                             }
-
-                            if ($null -ne $totalBytes -and $totalBytes -gt $maxTotalBytes) {
-                                $maxTotalBytes = $totalBytes
-                            }
-                            $displayTotal = if ($maxTotalBytes -gt 0) { $maxTotalBytes } else { $totalBytes }
-
-                            if ($null -ne $percent -and $percent -ge 1) { $mode = 'transferring' }
-                            elseif ($msgType -eq 'summary') { $mode = 'done' }
-                            else { $mode = 'scanning' }
-
-                            $parts = @()
-                            if ($mode -eq 'scanning') {
-                                if ($null -ne $displayTotal -and $displayTotal -gt 0) {
-                                    $parts += ('Scanning source… {0} found so far' -f (Format-SyncMeBytes $displayTotal))
-                                } else {
-                                    $parts += 'Scanning source…'
-                                }
-                            } elseif ($null -ne $bytesDone -and $null -ne $displayTotal -and $displayTotal -gt 0) {
-                                $parts += ('{0} of {1}' -f (Format-SyncMeBytes $bytesDone), (Format-SyncMeBytes $displayTotal))
-                            } elseif ($null -ne $bytesDone) {
-                                $parts += (Format-SyncMeBytes $bytesDone)
-                            }
-                            if ($null -ne $percent -and $mode -ne 'scanning') { $parts += ('{0}%' -f $percent) }
-                            if ($null -ne $filesDone) {
-                                if ($null -ne $totalFiles) {
-                                    $parts += ('{0:N0} / {1:N0} files' -f $filesDone, $totalFiles)
-                                } else {
-                                    $parts += ('{0:N0} files' -f $filesDone)
-                                }
-                            }
-                            $detail = ($parts -join ' · ')
-                            $uiPercent = if ($mode -eq 'scanning') { $null } else { $percent }
-
-                            try {
-                                Write-SyncMeLiveProgress `
-                                    -ScriptRoot $ScriptRoot `
-                                    -SetId $ActiveSetId `
-                                    -Phase $ProgressPhase `
-                                    -Message $(if ($mode -eq 'scanning') { 'Scanning source…' } elseif ($mode -eq 'done') { 'Backup step finishing…' } else { 'Backing up…' }) `
-                                    -RunId $runId `
-                                    -JsonLog '' `
-                                    -Percent $uiPercent `
-                                    -BytesDone $bytesDone `
-                                    -TotalBytes $displayTotal `
-                                    -FilesDone $filesDone `
-                                    -TotalFiles $totalFiles `
-                                    -Detail $detail `
-                                    -ProgressMode $mode
-                            } catch { }
                         }
                     }
                 }
-            }
+            } | Out-Null
+
+            $lec = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+            if ($null -ne $lec -and $null -ne $lec.Value) { $exit = [int]$lec.Value }
+        } catch {
+            $lec = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+            if ($null -ne $lec -and $null -ne $lec.Value) { $exit = [int]$lec.Value }
+            if ($exit -lt 0) { $exit = 1 }
+            try { Write-Log "restic pipeline handler error (continuing with exit=$exit): $($_.Exception.Message)" $LogPath 'WARN' } catch { }
         }
-        $exit = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $prevEap
         try { if ($jsonWriter) { $jsonWriter.Dispose() } } catch { }
@@ -807,14 +975,38 @@ function Invoke-Restic {
         Remove-Item Env:RESTIC_REPOSITORY -ErrorAction SilentlyContinue
     }
 
+    # Fallback: recover summary from JSONL if live parse missed it
+    if (-not $summaryObj -and $JsonLogPath -and (Test-Path -LiteralPath $JsonLogPath)) {
+        try {
+            $lines = @(Get-Content -LiteralPath $JsonLogPath -ErrorAction SilentlyContinue)
+            for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+                $line = [string]$lines[$i]
+                $jsonText = $null
+                if ($line -match '^\s*\{') { $jsonText = $line.Trim() }
+                elseif ($line -match '(\{.*\})\s*$') { $jsonText = $Matches[1] }
+                if (-not $jsonText) { continue }
+                $obj = $null
+                try { $obj = $jsonText | ConvertFrom-Json } catch { continue }
+                if ((Get-ResticJsonProp $obj 'message_type') -eq 'summary') {
+                    $summaryObj = $obj
+                    break
+                }
+            }
+        } catch { }
+    }
+
     if ($summaryObj) {
         $jsonObjects.Clear()
         [void]$jsonObjects.Add($summaryObj)
+        # Pipeline can leave LASTEXITCODE unset (-1) even when restic wrote a summary (success).
+        if ($exit -lt 0) { $exit = 0 }
     } elseif ($lastStatusObj) {
         [void]$jsonObjects.Add($lastStatusObj)
     }
+    if ($exit -lt 0) { $exit = 1 }
 
-    return @{
+    # Unary comma: always return a single hashtable (never an Object[] from prior pipeline noise).
+    return ,@{
         ExitCode    = $exit
         Output      = @()
         JsonObjects = @($jsonObjects)
@@ -823,8 +1015,103 @@ function Invoke-Restic {
 
 function Get-ResticSummaryMessage {
     param($JsonObjects)
-    $summary = $JsonObjects | Where-Object { (Get-ResticJsonProp $_ 'message_type') -eq 'summary' } | Select-Object -Last 1
+    $summary = @($JsonObjects) | Where-Object { (Get-ResticJsonProp $_ 'message_type') -eq 'summary' } | Select-Object -Last 1
     return $summary
+}
+
+function Get-ResticSummaryFromJsonl {
+    param([string]$JsonLogPath)
+    if ([string]::IsNullOrWhiteSpace($JsonLogPath) -or -not (Test-Path -LiteralPath $JsonLogPath)) { return $null }
+    try {
+        $lines = @(Get-Content -LiteralPath $JsonLogPath -ErrorAction SilentlyContinue)
+        for ($i = $lines.Count - 1; $i -ge 0; $i--) {
+            $line = [string]$lines[$i]
+            $jsonText = $null
+            if ($line -match '^\s*\{') { $jsonText = $line.Trim() }
+            elseif ($line -match '(\{.*\})\s*$') { $jsonText = $Matches[1] }
+            if (-not $jsonText) { continue }
+            $obj = $null
+            try { $obj = $jsonText | ConvertFrom-Json } catch { continue }
+            if ((Get-ResticJsonProp $obj 'message_type') -eq 'summary') { return $obj }
+        }
+    } catch { }
+    return $null
+}
+
+function Set-RunInfoFromResticSummary {
+    param(
+        [hashtable]$RunInfo,
+        $SummaryMsg
+    )
+    if (-not $SummaryMsg) { return $false }
+    $sid = Get-ResticJsonProp $SummaryMsg 'snapshot_id'
+    if ($null -ne $sid -and -not [string]::IsNullOrWhiteSpace([string]$sid)) {
+        $RunInfo.SnapshotId = [string]$sid
+    }
+    $fn = Get-ResticJsonProp $SummaryMsg 'files_new'
+    if ($null -ne $fn) { $RunInfo.FilesNew = [string]$fn }
+    $fc = Get-ResticJsonProp $SummaryMsg 'files_changed'
+    if ($null -ne $fc) { $RunInfo.FilesChanged = [string]$fc }
+    $fu = Get-ResticJsonProp $SummaryMsg 'files_unmodified'
+    if ($null -ne $fu) { $RunInfo.FilesUnmodified = [string]$fu }
+    $dn = Get-ResticJsonProp $SummaryMsg 'dirs_new'
+    if ($null -ne $dn) { $RunInfo.DirsNew = [string]$dn }
+    $dc = Get-ResticJsonProp $SummaryMsg 'dirs_changed'
+    if ($null -ne $dc) { $RunInfo.DirsChanged = [string]$dc }
+    $dataAdded = Get-ResticJsonProp $SummaryMsg 'data_added'
+    if ($null -ne $dataAdded) {
+        try { $RunInfo.DataAdded = Format-ByteSize ([long]$dataAdded) } catch { $RunInfo.DataAdded = [string]$dataAdded }
+    }
+    $tbp = Get-ResticJsonProp $SummaryMsg 'total_bytes_processed'
+    if ($null -ne $tbp) {
+        try { $RunInfo.TotalBytesProcessed = Format-ByteSize ([long]$tbp) } catch { $RunInfo.TotalBytesProcessed = [string]$tbp }
+    }
+    # restic only emits message_type=summary when the backup command finished with a snapshot.
+    if (-not [string]::IsNullOrWhiteSpace([string]$RunInfo.SnapshotId) -and [string]::IsNullOrWhiteSpace([string]$RunInfo.BackupExitCode)) {
+        $RunInfo.BackupExitCode = '0'
+    }
+    return $true
+}
+
+function Recover-ResticBackupStats {
+    param(
+        [hashtable]$RunInfo,
+        [string]$JsonLogPath,
+        [string]$ResticExe,
+        [string]$Repo,
+        [string]$Password,
+        [string]$LogPath
+    )
+    $summary = Get-ResticSummaryFromJsonl -JsonLogPath $JsonLogPath
+    if ($summary) {
+        [void](Set-RunInfoFromResticSummary -RunInfo $RunInfo -SummaryMsg $summary)
+        try { Write-Log 'Recovered restic summary from backup JSONL.' $LogPath 'WARN' } catch { }
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$RunInfo.SnapshotId) -and $ResticExe -and $Repo -and $Password) {
+        try {
+            $env:RESTIC_REPOSITORY = $Repo
+            $env:RESTIC_PASSWORD = $Password
+            $snapJson = & $ResticExe snapshots --latest --json 2>$null | Out-String
+            $lec = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
+            $code = if ($null -ne $lec -and $null -ne $lec.Value) { [int]$lec.Value } else { 1 }
+            if ($code -eq 0 -and -not [string]::IsNullOrWhiteSpace($snapJson)) {
+                $snaps = $snapJson | ConvertFrom-Json
+                $latest = @($snaps) | Select-Object -First 1
+                if ($latest -and $latest.short_id) {
+                    $RunInfo.SnapshotId = [string]$latest.id
+                    try { Write-Log "Recovered snapshot id from restic snapshots --latest: $($RunInfo.SnapshotId)" $LogPath 'WARN' } catch { }
+                } elseif ($latest -and $latest.id) {
+                    $RunInfo.SnapshotId = [string]$latest.id
+                    try { Write-Log "Recovered snapshot id from restic snapshots --latest: $($RunInfo.SnapshotId)" $LogPath 'WARN' } catch { }
+                }
+            }
+        } catch {
+            try { Write-Log "Snapshot recovery failed: $($_.Exception.Message)" $LogPath 'WARN' } catch { }
+        } finally {
+            Remove-Item Env:RESTIC_PASSWORD -ErrorAction SilentlyContinue
+            Remove-Item Env:RESTIC_REPOSITORY -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 function Test-ArchiveDue {
@@ -886,12 +1173,13 @@ foreach ($d in @($reportsDir, $logsDir)) {
 $runId     = Get-Date -Format 'yyyyMMdd-HHmmss'
 $startTime = Get-Date
 $logPath   = Join-Path $logsDir "backup-$runId.log"
-$jsonLog   = Join-Path $logsDir "restic-$runId.jsonl"
+$jsonLog   = Join-Path $logsDir "restic-backup-$runId.jsonl"
+$pruneJsonLog = Join-Path $logsDir "restic-prune-$runId.jsonl"
 $reportPath = Join-Path $reportsDir "backup-$runId.html"
 
 $errors = New-Object System.Collections.Generic.List[string]
 $overallSuccess = $true
-$mappedShare = $null
+$mappedShares = New-Object System.Collections.Generic.List[string]
 $lockPath = Resolve-ConfigPath $(if ($Config.PSObject.Properties.Name -contains 'BackupLockFile') { $Config.BackupLockFile } else { 'Logs\backup.lock' })
 $lockHeld = $false
 $skippedDueToLock = $false
@@ -989,6 +1277,9 @@ if (-not $lockResult.Acquired) {
 $lockHeld = $true
 Write-Log $lockResult.Message $logPath
 
+$resticExe = ''
+$resticPassword = ''
+
 try {
     # Resolve restic (tools\restic.exe, PATH, or configured path)
     $resticExe = Get-SyncMeResticExePath -Config $Config -ScriptRoot $ScriptRoot
@@ -1012,20 +1303,29 @@ try {
         Write-Log "Cloud restic repository: $($Config.ResticRepo)" $logPath
     }
 
-    # Tailscale advisory (skip entirely on LAN-only sets)
+    # Tailscale advisory — never fail local/LAN backups over a missing Tailscale install.
     $netMode = 'both'
     if ($Config.PSObject.Properties.Name -contains 'NetworkMode' -and $Config.NetworkMode) {
         $netMode = [string]$Config.NetworkMode
     }
-    if ($netMode -eq 'lan') {
-        Write-Log 'NetworkMode=lan — skipping Tailscale check.' $logPath
+    $sourcesLookLocal = $true
+    foreach ($sp in @($Config.SourcePaths)) {
+        $s = [string]$sp
+        if ($s.StartsWith('\\') -or $s -match '^rclone:') { $sourcesLookLocal = $false; break }
+    }
+    if ($netMode -eq 'lan' -or $sourcesLookLocal) {
+        Write-Log ("Skipping Tailscale check (NetworkMode={0}; localSources={1})." -f $netMode, $sourcesLookLocal) $logPath
     } else {
         $ts = Test-MonarchTailscale
         if ($ts.Ok) {
             Write-Log "Tailscale: $($ts.Message) ($($ts.Detail))" $logPath
         } else {
             Write-Log "Tailscale WARNING: $($ts.Message) ($($ts.Detail))" $logPath 'WARN'
-            $errors.Add("Tailscale: $($ts.Message)")
+            # Only hard-error when Tailscale is required for this set.
+            if ($netMode -eq 'tailscale') {
+                $errors.Add("Tailscale: $($ts.Message)")
+                $overallSuccess = $false
+            }
         }
     }
 
@@ -1073,7 +1373,11 @@ try {
             -Password $resticPassword `
             -Arguments $forgetArgs `
             -LogPath $logPath `
-            -JsonLogPath $jsonLog
+            -JsonLogPath $pruneJsonLog
+        if ($pruneResult -is [System.Array]) {
+            $pruneResult = @($pruneResult) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('ExitCode') } | Select-Object -Last 1
+        }
+        if (-not $pruneResult) { $pruneResult = @{ ExitCode = 1 } }
         $runInfo.PruneExitCode = [string]$pruneResult.ExitCode
         if ($pruneResult.ExitCode -eq 0) {
             $runInfo.PruneDetail = 'Forget/prune completed successfully.'
@@ -1087,12 +1391,13 @@ try {
     }
 
     if (-not $skipBackupPipeline) {
-    # Optional SMB connect
+    # Optional SMB connect (credentials)
     $mappedShare = Connect-BackupShare `
         -CredentialName $Config.ShareCredentialName `
         -DriveLetter $Config.ShareDriveLetter `
         -SourcePaths $Config.SourcePaths `
         -LogPath $logPath
+    if ($mappedShare) { [void]$mappedShares.Add([string]$mappedShare) }
 
     # Preflight: host + configured sources
     if ($Config.SourceHost) {
@@ -1120,6 +1425,20 @@ try {
 
     $resolved = Resolve-BackupSourcePaths -ConfiguredPaths $Config.SourcePaths -Config $Config -LogPath $logPath
     $effectiveSources = @($resolved.EffectivePaths)
+
+    # Rewrite UNC → drive letters so restic stores restorable paths on Windows
+    $uncRewrite = Convert-BackupSourcesToDriveLetters `
+        -SourcePaths $effectiveSources `
+        -PreferredLetter $(if ($Config.ShareDriveLetter) { [string]$Config.ShareDriveLetter } else { '' }) `
+        -CredentialName $(if ($Config.ShareCredentialName) { [string]$Config.ShareCredentialName } else { '' }) `
+        -LogPath $logPath
+    $effectiveSources = @($uncRewrite.EffectivePaths)
+    foreach ($letter in @($uncRewrite.MappedLetters)) {
+        if ($letter -and ($mappedShares -notcontains $letter)) {
+            [void]$mappedShares.Add([string]$letter)
+        }
+    }
+
     $runInfo.EffectiveSourcePaths = $effectiveSources
     $runInfo.SourceMode = $resolved.SourceMode
     $runInfo.ShadowPointer = $resolved.PointerValue
@@ -1137,20 +1456,26 @@ try {
     }
 
     $sourceSummary = ($effectiveSources -join ', ')
-    Send-BackupStartNotification `
-        -SourceSummary $sourceSummary `
-        -AppId $Config.ToastAppId `
-        -Enabled:$toastEnabled `
-        -Config $emailConfig `
-        -LogPath $logPath
+    try {
+        Send-BackupStartNotification `
+            -SourceSummary $sourceSummary `
+            -AppId $Config.ToastAppId `
+            -Enabled:$toastEnabled `
+            -Config $emailConfig `
+            -LogPath $logPath
+    } catch {
+        Write-Log "Start notification failed (ignored): $($_.Exception.Message)" $logPath 'WARN'
+    }
 
     # --- restic backup ---
     Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'backup' -Message 'Backing up sources into Disk 1…' -RunId $runId -JsonLog ''
     $backupArgs = @(
         'backup'
         '--json'
-        '--host', $Config.SourceHost
     )
+    if (-not [string]::IsNullOrWhiteSpace([string]$Config.SourceHost)) {
+        $backupArgs += @('--host', [string]$Config.SourceHost)
+    }
     foreach ($tag in $Config.SnapshotTags) {
         $backupArgs += @('--tag', $tag)
     }
@@ -1174,24 +1499,30 @@ try {
         -LogPath $logPath `
         -JsonLogPath $jsonLog
 
+    # Normalize in case any caller pollution still returned an array.
+    if ($backupResult -is [System.Array]) {
+        $backupResult = @($backupResult) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('ExitCode') } | Select-Object -Last 1
+    }
+    if (-not $backupResult) {
+        $backupResult = @{ ExitCode = 1; JsonObjects = @() }
+        Write-Log 'Invoke-Restic returned no usable result object.' $logPath 'ERROR'
+    }
+
     $runInfo.BackupExitCode = [string]$backupResult.ExitCode
     $summaryMsg = Get-ResticSummaryMessage -JsonObjects $backupResult.JsonObjects
-
-    if ($summaryMsg) {
-        $sid = Get-ResticJsonProp $summaryMsg 'snapshot_id'
-        $runInfo.SnapshotId = if ($null -ne $sid) { [string]$sid } else { '' }
-        $runInfo.FilesNew = [string](Get-ResticJsonProp $summaryMsg 'files_new')
-        $runInfo.FilesChanged = [string](Get-ResticJsonProp $summaryMsg 'files_changed')
-        $runInfo.FilesUnmodified = [string](Get-ResticJsonProp $summaryMsg 'files_unmodified')
-        $runInfo.DirsNew = [string](Get-ResticJsonProp $summaryMsg 'dirs_new')
-        $runInfo.DirsChanged = [string](Get-ResticJsonProp $summaryMsg 'dirs_changed')
-        $dataAdded = Get-ResticJsonProp $summaryMsg 'data_added'
-        if ($null -ne $dataAdded) {
-            $runInfo.DataAdded = Format-ByteSize ([long]$dataAdded)
-        }
-        $tbp = Get-ResticJsonProp $summaryMsg 'total_bytes_processed'
-        if ($null -ne $tbp) {
-            $runInfo.TotalBytesProcessed = Format-ByteSize ([long]$tbp)
+    if (-not $summaryMsg) {
+        $summaryMsg = Get-ResticSummaryFromJsonl -JsonLogPath $jsonLog
+    }
+    if (-not (Set-RunInfoFromResticSummary -RunInfo $runInfo -SummaryMsg $summaryMsg)) {
+        if ($backupResult.ExitCode -eq 0 -or $backupResult.ExitCode -eq 3) {
+            Write-Log 'restic returned success but no JSON summary was parsed — attempting recovery.' $logPath 'WARN'
+            Recover-ResticBackupStats `
+                -RunInfo $runInfo `
+                -JsonLogPath $jsonLog `
+                -ResticExe $resticExe `
+                -Repo $Config.ResticRepo `
+                -Password $resticPassword `
+                -LogPath $logPath
         }
     }
 
@@ -1235,7 +1566,12 @@ try {
             -Password $resticPassword `
             -Arguments $forgetArgs `
             -LogPath $logPath `
-            -JsonLogPath $jsonLog
+            -JsonLogPath $pruneJsonLog
+
+        if ($pruneResult -is [System.Array]) {
+            $pruneResult = @($pruneResult) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('ExitCode') } | Select-Object -Last 1
+        }
+        if (-not $pruneResult) { $pruneResult = @{ ExitCode = 1 } }
 
         $runInfo.PruneExitCode = [string]$pruneResult.ExitCode
         if ($pruneResult.ExitCode -eq 0) {
@@ -1403,11 +1739,48 @@ try {
     }
 
 } catch {
-    $overallSuccess = $false
-    $errors.Add($_.Exception.Message)
-    Write-Log "Fatal: $($_.Exception.Message)" $logPath 'ERROR'
+    $fatalMsg = [string]$_.Exception.Message
+    if (Test-SyncMeNotifyNoiseMessage $fatalMsg) {
+        Write-Log "Ignored notify noise (not a backup failure): $fatalMsg" $logPath 'WARN'
+        # Do not keep SUCCESS unless restic exit + snapshot prove the backup finished.
+        if ($runInfo.BackupExitCode -notin @('0', '3') -or [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
+            # Attempt recovery before deciding — restic may have finished before the noise threw.
+            try {
+                if ([string]::IsNullOrWhiteSpace([string]$runInfo.BackupExitCode) -or [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
+                    Recover-ResticBackupStats `
+                        -RunInfo $runInfo `
+                        -JsonLogPath $jsonLog `
+                        -ResticExe $(if ($resticExe) { $resticExe } else { '' }) `
+                        -Repo $Config.ResticRepo `
+                        -Password $(if ($resticPassword) { $resticPassword } else { '' }) `
+                        -LogPath $logPath
+                }
+            } catch { }
+            if ($runInfo.BackupExitCode -notin @('0', '3') -or [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
+                $overallSuccess = $false
+                Write-Log 'Notify noise occurred before restic stats were captured — marking run unsuccessful until exit/snapshot are known.' $logPath 'WARN'
+            }
+        }
+    } else {
+        $overallSuccess = $false
+        $errors.Add($fatalMsg)
+        Write-Log "Fatal: $fatalMsg" $logPath 'ERROR'
+        try {
+            if ([string]::IsNullOrWhiteSpace([string]$runInfo.BackupExitCode) -or [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
+                Recover-ResticBackupStats `
+                    -RunInfo $runInfo `
+                    -JsonLogPath $jsonLog `
+                    -ResticExe $(if ($resticExe) { $resticExe } else { '' }) `
+                    -Repo $Config.ResticRepo `
+                    -Password $(if ($resticPassword) { $resticPassword } else { '' }) `
+                    -LogPath $logPath
+            }
+        } catch { }
+    }
 } finally {
-    Disconnect-BackupShare -Mapped $mappedShare -LogPath $logPath
+    foreach ($m in @($mappedShares)) {
+        Disconnect-BackupShare -Mapped $m -LogPath $logPath
+    }
     if ($lockHeld) { Exit-BackupRunLock -LockPath $lockPath }
     Clear-SyncMeRcloneEnvironment
     Remove-Item Env:RESTIC_PASSWORD -ErrorAction SilentlyContinue
@@ -1416,6 +1789,65 @@ try {
 
 $endTime = Get-Date
 $runInfo.EndTime = $endTime.ToString('yyyy-MM-dd HH:mm:ss')
+
+# Last-chance recovery if backup was attempted but stats are still blank.
+if (-not $CheckOnly -and -not $PruneOnly -and -not $skippedDueToLock) {
+    if ([string]::IsNullOrWhiteSpace([string]$runInfo.BackupExitCode) -or (
+            ($runInfo.BackupExitCode -in @('0', '3')) -and [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)
+        )) {
+        try {
+            Recover-ResticBackupStats `
+                -RunInfo $runInfo `
+                -JsonLogPath $jsonLog `
+                -ResticExe $(if ($resticExe) { $resticExe } else { '' }) `
+                -Repo $Config.ResticRepo `
+                -Password $(if ($resticPassword) { $resticPassword } else { '' }) `
+                -LogPath $logPath
+        } catch { }
+    }
+}
+
+# Toast / NotifyIcon binder noise must never appear as backup Errors
+$rawErrorList = @($errors)
+$realErrors = @(Get-SyncMeRealErrors -Errors $rawErrorList)
+$scrubbedNoise = ($rawErrorList.Count -gt $realErrors.Count)
+$errors.Clear()
+foreach ($re in $realErrors) { [void]$errors.Add($re) }
+if ($scrubbedNoise -and $errors.Count -eq 0 -and $runInfo.BackupExitCode -in @('0', '3') -and -not [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
+    if (-not $overallSuccess) {
+        Write-Log 'Restored overallSuccess after scrubbing notify noise (restic snapshot present).' $logPath 'WARN'
+        $overallSuccess = $true
+    }
+}
+
+# Exit-code gate: fail only when we have neither exit code nor a recovered snapshot.
+if (-not $CheckOnly -and -not $PruneOnly -and -not $skippedDueToLock) {
+    if ([string]::IsNullOrWhiteSpace([string]$runInfo.BackupExitCode) -and -not [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
+        $runInfo.BackupExitCode = '0'
+        Write-Log 'Inferred BackupExitCode=0 from recovered restic summary/snapshot.' $logPath 'WARN'
+    }
+    if ([string]::IsNullOrWhiteSpace([string]$runInfo.BackupExitCode) -and [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
+        $overallSuccess = $false
+        $msg = 'Backup finished without a captured restic exit code or snapshot — report stats may be incomplete. Check Logs\restic-backup-*.jsonl.'
+        if ($errors -notcontains $msg) { [void]$errors.Add($msg) }
+        Write-Log $msg $logPath 'ERROR'
+    } elseif ($runInfo.BackupExitCode -in @('0', '3') -and -not [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
+        # Drop the obsolete "blank exit" error if recovery filled stats after the fact.
+        $drop = 'Backup finished without a captured restic exit code — report stats may be incomplete. Check Logs\restic-backup-*.jsonl.'
+        for ($i = $errors.Count - 1; $i -ge 0; $i--) {
+            if ([string]$errors[$i] -eq $drop) { $errors.RemoveAt($i) }
+        }
+        # Tailscale advisory must not keep a good backup marked failed.
+        for ($i = $errors.Count - 1; $i -ge 0; $i--) {
+            if ([string]$errors[$i] -match '(?i)^Tailscale:') { $errors.RemoveAt($i) }
+        }
+        if ($errors.Count -eq 0 -and -not $overallSuccess) {
+            Write-Log 'Restored overallSuccess: snapshot present and only advisory/noise errors remained.' $logPath 'WARN'
+            $overallSuccess = $true
+        }
+    }
+}
+
 $runInfo.Success = $overallSuccess
 $runInfo.Errors = @($errors)
 

@@ -213,7 +213,7 @@ function Write-SyncMeLastRun {
         archiveStatus       = [string]$RunInfo.ArchiveStatus
         sourceMode          = [string]$RunInfo.SourceMode
         openFileRisk        = [string]$RunInfo.OpenFileRisk
-        warnings            = @($RunInfo.Errors)
+        warnings            = @(Get-SyncMeRealErrors -Errors $RunInfo.Errors)
         logPath             = [string]$RunInfo.LogPath
         updatedUtc          = (Get-Date).ToUniversalTime().ToString('o')
     }

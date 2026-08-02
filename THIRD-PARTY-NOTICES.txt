@@ -1,7 +1,7 @@
 THIRD-PARTY NOTICES
 ===================
 SyncMe orchestrates separate open-source tools. SyncMe is not affiliated with
-or endorsed by the authors of restic, rclone, WinFsp, or Tailscale.
+or endorsed by the authors of restic, rclone, or Tailscale.
 
 When SyncMe downloads or ships binaries for these tools, the following notices
 apply. Full upstream projects:

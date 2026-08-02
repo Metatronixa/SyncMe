@@ -259,6 +259,7 @@
         <p class="meta">
           Free to use — keep author credit.
           See <code>LICENSE.txt</code> ·
+          Website <a href="https://www.syncme.co.za">www.syncme.co.za</a> ·
           Contact <a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a> ·
           Start with <code>START-HERE.txt</code>
         </p>
@@ -295,15 +296,14 @@ Backup PC  —  SyncMe console + Task Scheduler
           <li>Network path: <strong>LAN</strong>, <strong>Tailscale</strong>, or both — Tailscale only if sources are offsite.</li>
           <li>Space for each set’s <strong>restic repository</strong> (local disk, NAS UNC, or cloud via rclone).
               Leave headroom beyond the size of your data.</li>
-          <li><strong>restic</strong> (the wizard can install it). <strong>rclone</strong> if you use OneDrive/Google Drive.
-              <strong>WinFsp</strong> only if you want to mount/browse a repo in Explorer.</li>
+          <li><strong>restic</strong> (the wizard can install it). <strong>rclone</strong> if you use OneDrive/Google Drive.</li>
           <li>Administrator rights as needed for shares, Task Scheduler, and optional Shadow Copies on sources.</li>
           <li>A password manager for the restic repository password (and SMTP/share secrets if used).</li>
           <li>Time for the first seed backup (hours or longer depending on data size and network speed).</li>
         </ul>
         <div class="callout warn">
           <strong>Password safety</strong>
-          The restic password encrypts Disk 1. If you lose it, you cannot restore, mount, or recover.
+          The restic password encrypts the repository. If you lose it, you cannot restore or recover.
           Save it in a password manager or other safe place when you create it — Credential Manager on the Backup PC is not enough if that machine dies.
           Do not put passwords in <code>Config.ps1</code>.
         </div>
@@ -323,12 +323,12 @@ Backup PC  —  SyncMe console + Task Scheduler
         <ul>
           <li><strong>Not bare-metal / full-disk imaging</strong> — use a separate imaging tool for whole-system restore.</li>
           <li><strong>Not antivirus or ransomware protection</strong> — encrypted or wiped disks/shares are still possible.</li>
-          <li><strong>You must verify backups and restores</strong> — locked files (exit 3), network drops, excludes, or cloud throttling can leave gaps. Use dry run, Reports/Logs, Operations Check, mount spot-checks, and a test restore to an empty folder against your sources.</li>
+          <li><strong>You must verify backups and restores</strong> — locked files (exit 3), network drops, excludes, or cloud throttling can leave gaps. Use dry run, Reports/Logs, Operations Check, and a test restore to an empty folder against your sources.</li>
           <li><strong>Not a multi-tenant SaaS</strong> — console binds to localhost on the Backup PC.</li>
         </ul>
         <div class="callout warn">
           <strong>Restic password</strong>
-          The restic password encrypts Disk 1. Without it there is no restore, mount, or recovery.
+          The restic password encrypts the repository. Without it there is no restore or recovery.
           Save it in a <strong>password manager or other safe place</strong> when you create it.
           Credential Manager keeps this Backup PC able to run jobs; your vault copy is for disaster recovery if the PC dies.
           Do not put the password in <code>Config.ps1</code>.
@@ -480,16 +480,22 @@ Backup PC  —  SyncMe console + Task Scheduler
         <h2>Restore</h2>
         <ol>
           <li>Operations → refresh snapshots.</li>
-          <li>Restore latest or selected snapshot to an <strong>empty folder outside</strong> the live restic repo (never into the source share).</li>
-          <li>Or mount the repo (WinFsp) to browse, then copy files.</li>
+          <li>Select a snapshot → <strong>Browse selected</strong> to open folders inside that snapshot (roots such as <code>C:\Pastel19</code>). Double-click folders; <strong>Use this path</strong> fills the optional include field (one file or folder). Leave include blank for a full restore.</li>
+          <li>Restore latest or selected snapshot to an <strong>empty folder outside</strong> the live restic repo (never into the source share). Use Suggest for a safe target.</li>
         </ol>
         <div class="callout">
+          <strong>Windows note</strong>
+          Official restic builds on Windows do not include <code>mount</code>. SyncMe’s browse panel lists paths via <code>restic ls</code>; restore still copies files out with <code>restic restore</code>.
+          UNC-era snapshots (paths starting with <code>\\</code>) cannot be browsed or restored on Windows — run a new backup after SyncMe’s drive-letter rewrite, then restore that snapshot.
+        </div>
+        <div class="callout">
           <strong>Verify against the source</strong>
-          Spot-check restored or mounted files (names, sizes, dates) against the live share for critical paths.
+          Spot-check restored files (names, sizes, dates) against the live share for critical paths.
           After backups: read Reports/Logs (exit 3 = unread files), run Operations Check, and periodically test-restore.
           You need the restic password — keep a vault copy, not only Credential Manager.
+          Later runs may show tiny “Data added” while “Total bytes processed” stays large — that is normal deduplication.
         </div>
-        <p>See also <code>RecoveryChecklist.txt</code>.</p>
+        <p>Online: <a href="https://www.syncme.co.za">www.syncme.co.za</a>. See also <code>RecoveryChecklist.txt</code>.</p>
       </section>
 
       <section class="card" id="troubleshooting">
@@ -502,7 +508,8 @@ Backup PC  —  SyncMe console + Task Scheduler
             <tr><td>Exit code 3</td><td>Locked files — Shadow Copies / close Office; read log for paths</td></tr>
             <tr><td>Cloud / OAuth fails</td><td>Install rclone; re-run OAuth; check bandwidth/throttling</td></tr>
             <tr><td>Task does not run unattended</td><td>Same Windows account as Credential Manager; “run whether logged on”</td></tr>
-            <tr><td>Port 17845 in use</td><td>Close another SyncMe Host window</td></tr>
+            <tr><td>Browse / restore fails on UNC snapshot</td><td>Old snapshots stored UNC roots; take a new backup (drive-letter paths), then browse/restore that snapshot</td></tr>
+            <tr><td>Browse while backup runs</td><td>Wait for backup to finish (restic repo lock)</td></tr>
           </tbody>
         </table>
       </section>
@@ -528,7 +535,6 @@ Backup PC  —  SyncMe console + Task Scheduler
         <ul>
           <li><strong>restic</strong> — BSD-2-Clause — <a href="https://restic.net" target="_blank" rel="noopener">restic.net</a></li>
           <li><strong>rclone</strong> — MIT — <a href="https://rclone.org" target="_blank" rel="noopener">rclone.org</a></li>
-          <li><strong>WinFsp</strong> — optional, for restic mount</li>
           <li><strong>Tailscale</strong> — optional, for offsite UNC access</li>
         </ul>
         <p>Full notices: <code>THIRD-PARTY-NOTICES.txt</code> in the SyncMe folder.</p>
@@ -536,6 +542,7 @@ Backup PC  —  SyncMe console + Task Scheduler
 
       <footer class="guide-foot">
         SyncMe — Copyright © 2026 Bradford Lotriet (<a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a>)<br />
+        Website: <a href="https://www.syncme.co.za">www.syncme.co.za</a> ·
         Free to use — keep this credit. See <code>LICENSE.txt</code>. Uses restic and rclone — see <code>THIRD-PARTY-NOTICES.txt</code>.
       </footer>
     </div>

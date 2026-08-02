@@ -17,10 +17,17 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($root)) { $root = (Get-Location).Path }
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $root 'dist' }
-$stamp = Get-Date -Format 'yyyyMMdd'
+
+$verFile = Join-Path $root 'VERSION.txt'
+$pkgVer = '0.0.0'
+if (Test-Path -LiteralPath $verFile) {
+    try { $pkgVer = ((Get-Content -LiteralPath $verFile -TotalCount 1).Trim()) } catch { }
+}
+if ([string]::IsNullOrWhiteSpace($pkgVer)) { $pkgVer = '0.0.0' }
+
 $stageStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $stage = Join-Path $OutDir ("SyncMe-payload-stage-" + $stageStamp)
-$setupDir = Join-Path $OutDir ("SyncMe-Setup-" + $stamp)
+$setupDir = Join-Path $OutDir ("SyncMe-Setup-" + $pkgVer)
 $payloadZip = Join-Path $setupDir 'SyncMe-Payload.zip'
 $setupCmd = Join-Path $setupDir 'SyncMe-Setup.cmd'
 
@@ -33,7 +40,7 @@ New-Item -ItemType Directory -Path $setupDir -Force | Out-Null
 # Customer ship list only — never add website/ (local marketing site).
 $include = @(
     'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Host.ps1',
-    'SyncMe-Backup.ps1', 'Config.ps1',
+    'SyncMe-Backup.ps1', 'SyncMe-Restore.ps1', 'Config.ps1',
     'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1',
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md',
@@ -64,7 +71,7 @@ Set-Content -Path (Join-Path $stage 'Reports\.gitkeep') -Value '' -Encoding ASCI
 
 # Customer-facing start note (minimal)
 $startHere = @"
-SyncMe setup package
+SyncMe setup package $pkgVer
 ====================
 1. Double-click SyncMe-Setup.cmd (Run as administrator recommended on Windows Server).
 2. Files unpack to $InstallDir (existing Config.ps1 is kept if present).
@@ -73,6 +80,7 @@ SyncMe setup package
 5. Each backup set needs its own restic repository path (dedicated subfolder — never a drive root).
 
 Passwords stay in Windows Credential Manager. See START-HERE.txt, LICENSE.txt, and THIRD-PARTY-NOTICES.txt after install.
+Confirm VERSION.txt shows $pkgVer after install.
 "@
 Set-Content -Path (Join-Path $setupDir 'START-HERE.txt') -Value $startHere.Trim() -Encoding UTF8
 
@@ -146,6 +154,7 @@ exit /b 0
 Set-Content -Path $setupCmd -Value $cmd.Trim() -Encoding ASCII
 
 Write-Host "Created setup folder: $setupDir" -ForegroundColor Green
+Write-Host "  Version: $pkgVer"
 Write-Host "  SyncMe-Setup.cmd"
 Write-Host "  SyncMe-Payload.zip"
 Write-Host "  START-HERE.txt"

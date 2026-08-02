@@ -26,7 +26,7 @@ Simple **file-level** backup from source PCs to a Backup PC using **restic**, ma
 2. Unzip SyncMe on the **Backup PC** only. Open **`START-HERE.txt`**, then **`SyncMe.bat`**.
 3. Complete the wizard (restic can be auto-installed). Pick network mode, folders, destination, schedule.
 4. **Save the restic password** in a password manager or other safe place when the wizard creates it (Credential Manager alone is not enough if the Backup PC dies).
-5. **Verify** before trusting the schedule: Run dry run → real backup → read Reports/Logs → Operations Check → mount or restore to an empty test folder and spot-check critical paths against the source.
+5. **Verify** before trusting the schedule: Run dry run → real backup → read Reports/Logs → Operations Check → restore to an empty test folder and spot-check critical paths against the source.
 6. Use the dashboard for progress, schedule edits, restore, and **Add backup set**.
 
 **Customer hand-off zip**
@@ -47,7 +47,7 @@ Simple **file-level** backup from source PCs to a Backup PC using **restic**, ma
 | Schedule | Windows Task Scheduler (+ SyncMe-Watchdog) |
 | UI | Static HTML5 + CSS + vanilla JavaScript (`ui/`), Source Sans 3 |
 | Config / secrets | `Config.ps1` (no database); Windows Credential Manager; `Config\rclone.conf` |
-| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), WinFsp (restic mount), OfficeAgent (VSS on source) |
+| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source) |
 | Platform | Windows 10/11 or Windows Server (Backup PC) |
 
 SyncMe is an **orchestration frontend** — not a replacement for restic or rclone. Third-party notices: [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
@@ -63,7 +63,7 @@ SyncMe is an **orchestration frontend** — not a replacement for restic or rclo
 | rclone bandwidth | `--bwlimit` + transfers/retries via env; restic upload limit |
 | Retention & prune | Keep* editable in console; Prune now |
 | Integrity check | Structural + weekly data subset; toggle in console |
-| restic mount | Browse repo via WinFsp (Mount / Unmount) |
+| Restore | Browse snapshot folders/files in Operations, then restore latest/selected (optional include path) to an empty folder |
 | Live progress + cancel | restic JSON %; cancel from console (with warning) |
 | Schedule | Once / Daily / Weekly with start (and optional end) date → Task Scheduler |
 | Wake-on-LAN | Optional MAC per set before backup / Wake button |
@@ -75,14 +75,14 @@ SyncMe is an **orchestration frontend** — not a replacement for restic or rclo
 Windows Credential Manager: `SyncMeRestic` / `SyncMeRestic-<setId>`, `SyncMeSmtp`, optional `SyncMeShare` / `SyncMeShare-<setId>`.
 rclone OAuth tokens live in `Config\rclone.conf` (not in git).
 
-**Restic password:** encrypts the repository. Without it there is no restore, mount, or recovery. Keep a copy in a password manager or other safe place — do not put it in `Config.ps1`.
+**Restic password:** encrypts the repository. Without it there is no restore or recovery. Keep a copy in a password manager or other safe place — do not put it in `Config.ps1`.
 
 ## Verify backups and restores
 
 1. After Apply, **Run dry run**, then a real backup.
 2. Open **Reports** / **Logs** (restic exit **3** = some files unread — often locked Office files).
 3. Operations **Check** (structural + weekly data subset) for repository health.
-4. **Mount** a snapshot and spot-check key folders next to the live share; or restore into an **empty test folder** and compare critical paths to the source.
+4. Restore into an **empty test folder** and compare critical paths to the source.
 
 ## Destinations
 
@@ -112,24 +112,33 @@ Sync/Bisync folder mirroring is planned later — this release uses rclone only 
 
 Consumer clouds may throttle large backups — prefer local disk or NAS for the primary repository when possible.
 
-## Mount (browse snapshots)
+## Restore
 
-**Operations** → **Install WinFsp** (if prompted; UAC appears) → **Mount repo** / **Unmount**.
+**Operations** → refresh snapshots → select a snapshot → **Browse selected** to walk folders inside that snapshot (one level at a time). Use **Use this path** to fill the optional include field (one file or folder), or leave include blank for a full snapshot.
+
+Then **Restore latest** or **Restore selected** into an empty folder outside the live repository (Suggest helps). Windows does not support restic mount; browse + restore replaces that.
+
 If the repository password is missing, use **Store password** on Operations (or Edit set → Passwords).
-Mount is for browsing; use Operations restore actions for permanent recovery.
+
+Data added on later runs can be tiny (KB) even when Total bytes processed is large — restic deduplicates against existing snapshots.
+
+### Versioning
+
+`VERSION.txt` uses semantic versioning (e.g. `1.1.1`). Setup packages are built as `dist\SyncMe-Setup-<version>\`.
 
 ### Console layout
 
 - **Setup wizard** — configure sets (including schedule and optional dry run at the end).
 - **Dashboard** — status cards (restic/rclone/disk), live activity, last-run details, Cloud & Retention modals.
-- **Operations** — backup actions, set list (edit/delete), restore.
+- **Operations** — backup actions, set list (edit/delete), snapshot browse and restore.
 
 ## Prerequisites
 
 - Windows 10/11 or Windows Server Backup PC
 - Source SMB share(s) reachable as UNC (LAN and/or [Tailscale](https://tailscale.com/))
 - [restic](https://restic.net/) (wizard can install into `tools\`)
-- Optional: rclone (console can install) + WinFsp (console can install) for mount
+- Optional: rclone (console can install) for cloud destinations
+- Optional: Tailscale for offsite UNC; OfficeAgent for locked files on the source
 
 ## Links
 

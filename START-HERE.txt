@@ -2,6 +2,7 @@ SyncMe — START HERE
 Copyright © 2026 Bradford Lotriet (brad@web-zilla.co.za)
 Free to use — keep this credit. See LICENSE.txt
 Third-party tools: THIRD-PARTY-NOTICES.txt (restic, rclone)
+Website: https://www.syncme.co.za  (FAQ + User Guide)
 ================================
 
 WHAT THIS IS
@@ -17,6 +18,7 @@ WHERE TO INSTALL
 
 USER GUIDE
   Open UserGuide.html for the full guide (exit codes, restore, limitations).
+  Online: https://www.syncme.co.za (same content + FAQ).
   SyncMe.bat asks whether to open the guide before starting the console.
 
 CUSTOMER PACKAGE (minimal)
@@ -64,6 +66,12 @@ FIRST TIME
   SyncMe opens the setup wizard until you finish Apply once.
   Wizard covers: set name, restic, LAN/Tailscale + folders, destination,
   passwords, email (optional), schedule → Task Scheduler.
+  SAVE THE RESTIC PASSWORD in a password manager or other safe place when
+  you create it. Without it you cannot restore. Credential Manager on this
+  PC is not enough if the Backup PC dies — keep your own vault copy.
+  After Apply: Run dry run, then a real backup. Read Reports/Logs. Use
+  Operations Check. Restore to an empty test folder and spot-check
+  critical files against the source.
 
 MULTIPLE SETS / FOLDERS
   One backup set can include several UNC folders.
@@ -73,15 +81,19 @@ MULTIPLE SETS / FOLDERS
 DAY TO DAY
   SyncMe.bat → Dashboard (or SyncMe-Menu.bat)
   Use Restore on Operations when you need files back (restic snapshots).
+  Browse selected walks folders inside a snapshot; Use this path fills include for a partial restore.
+  Periodically re-verify: Check, or test restore to an empty folder.
 
 DO NOT
   Edit Config.ps1 unless a technician asks you to.
-  Put passwords in any text file.
+  Put passwords in any text file (except your password manager / vault).
+  Lose or discard the restic password — the repository becomes unrecoverable.
   Restore into the live restic repository folder.
   Rely on SyncMe alone against ransomware — keep offline copies separately.
 
 NEED HELP
   Open UserGuide.html or RecoveryChecklist.txt in this folder.
+  Online: https://www.syncme.co.za
   License / liability: LICENSE.txt
   Third-party: THIRD-PARTY-NOTICES.txt
   Contact: brad@web-zilla.co.za

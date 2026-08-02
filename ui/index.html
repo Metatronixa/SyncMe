@@ -114,15 +114,12 @@
             </div>
             <div class="quick-actions">
               <button type="button" class="btn ghost" id="btnWakeSource">Wake</button>
-              <button type="button" class="btn ghost" id="btnMountStart">Mount</button>
               <button type="button" class="btn ghost" id="btnOpsMore">More…</button>
             </div>
           </div>
           <div id="opsMorePanel" class="ops-more hidden">
             <div class="quick-actions">
               <button type="button" class="btn soft" data-backup="dataCheck">Data check</button>
-              <button type="button" class="btn ghost" id="btnMountStop">Unmount</button>
-              <button type="button" class="btn soft hidden" id="btnInstallWinFsp">Install WinFsp</button>
               <button type="button" class="btn soft hidden" id="btnStoreResticPass">Store password</button>
               <button type="button" class="btn ghost" id="btnOpenOfficeAgent">OfficeAgent folder</button>
               <button type="button" class="btn ghost" id="btnOpenReports">Open reports</button>
@@ -130,7 +127,6 @@
               <button type="button" class="btn ghost" id="btnSetResticPath">Set ResticPath</button>
             </div>
           </div>
-          <div class="status-line" id="mountStatus" style="margin-top:10px"></div>
           <div class="status-line" id="opsStatus" style="margin-top:10px"></div>
         </div>
 
@@ -145,7 +141,7 @@
 
         <div class="card restore-workspace">
           <h2>Restore workspace</h2>
-          <p class="sub">Disk 1 snapshots and restore target for the active set. Never restore into the live repository.</p>
+          <p class="sub">Snapshots for the active set. Select a row, then <strong>Restore selected</strong> (or Restore latest) to copy files to an empty folder outside the live repository. Never restore into the live repository or source share.</p>
           <div class="grid two">
             <label class="field">Restore target folder
               <input type="text" id="restoreTarget" />
@@ -160,18 +156,35 @@
             <h3>Snapshots</h3>
             <button type="button" class="btn soft" id="btnRefreshSnaps">Refresh</button>
           </div>
+          <p class="sub snap-time-hint">Each row shows <strong>backup time</strong> (when that snapshot was taken).</p>
           <ul class="list" id="snapList"></ul>
+          <div class="browse-panel" id="browsePanel">
+            <div class="ops-snap-head">
+              <h3>Browse snapshot</h3>
+              <button type="button" class="btn soft" id="btnBrowseSnap" disabled>Browse selected</button>
+            </div>
+            <p class="sub">Open folders inside the selected snapshot, then <strong>Use this path</strong> to fill the include field (one file or folder). Restore still goes to the target folder above — never into the live repository.</p>
+            <div class="browse-crumb" id="browseCrumb" aria-live="polite">Select a snapshot and click Browse.</div>
+            <ul class="list browse-list" id="browseList"></ul>
+            <div class="actions" style="margin-top:8px">
+              <button type="button" class="btn soft" id="btnBrowseUp" disabled>Up</button>
+              <button type="button" class="btn primary" id="btnBrowseUse" disabled>Use this path</button>
+              <button type="button" class="btn ghost" id="btnBrowseClear" disabled>Clear include</button>
+            </div>
+          </div>
           <div class="status-line" id="restoreStatus" style="margin-top:14px"></div>
           <div class="actions" style="margin-top:8px">
             <button type="button" class="btn soft" id="btnSuggestTarget">Suggest target</button>
             <button type="button" class="btn primary" id="btnRestoreLatest">Restore latest</button>
             <button type="button" class="btn primary" id="btnRestoreSel">Restore selected</button>
+            <button type="button" class="btn soft" id="btnCancelRestore" disabled>Cancel restore</button>
+            <button type="button" class="btn danger" id="btnDeleteSnap">Delete selected</button>
             <button type="button" class="btn ghost" id="btnOpenChecklist">Recovery checklist</button>
           </div>
         </div>
       </section>
 
-      <p class="footer-note">© 2026 Bradford Lotriet (brad@web-zilla.co.za) · Free to use — keep this credit. Uses restic &amp; rclone — see THIRD-PARTY-NOTICES.txt.</p>
+      <p class="footer-note">© 2026 Bradford Lotriet (brad@web-zilla.co.za) · Free to use — keep this credit. Uses restic &amp; rclone — see THIRD-PARTY-NOTICES.txt. <span id="buildVersion"></span></p>
     </div>
   </div>
 

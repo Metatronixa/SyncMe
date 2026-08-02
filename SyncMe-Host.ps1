@@ -31,6 +31,20 @@ $script:BackupJob = @{
     Process  = $null
 }
 
+$script:RestoreJob = @{
+    Running   = $false
+    Finished  = $false
+    ExitCode  = $null
+    Message   = ''
+    Detail    = ''
+    Started   = $null
+    Process   = $null
+    SetId     = ''
+    Snapshot  = ''
+    Target    = ''
+    StatusFile = ''
+}
+
 $script:RcloneAuth = @{
     Running   = $false
     Type      = ''
@@ -59,6 +73,7 @@ $script:MountJob = @{
     Message    = ''
     Pid        = $null
 }
+$script:ResticMountProbe = $null
 
 function Write-SyncMeJson {
     param($Object, [int]$StatusCode = 200, $Response)
@@ -349,6 +364,16 @@ function Get-SyncMeRcloneConfigPath {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
     return (Join-Path $dir 'rclone.conf')
+}
+
+function Get-SyncMePackageVersion {
+    $verFile = Join-Path $ScriptRoot 'VERSION.txt'
+    if (-not (Test-Path -LiteralPath $verFile)) { return '' }
+    try {
+        return ((Get-Content -LiteralPath $verFile -TotalCount 1 -ErrorAction Stop).Trim())
+    } catch {
+        return ''
+    }
 }
 
 function Get-SyncMeRclone {
@@ -799,80 +824,50 @@ function Install-SyncMeWinFsp {
     }
 }
 
-function Start-SyncMeMount {
-    param([string]$SetId, [string]$MountPoint = '')
-    Update-SyncMeMountStatus
-    if ($script:MountJob.Running) { throw 'A mount is already active. Unmount first.' }
-    $winfsp = Test-SyncMeWinFsp
-    if (-not $winfsp.Ok) {
-        throw 'Mount needs WinFsp (lets SyncMe show the backup as a folder). Use Install WinFsp, then try again.'
+function Test-SyncMeResticMountCommand {
+    param([string]$ResticExe = '')
+    # Official Windows restic builds omit "mount" (no FUSE). Detect before Start-Process.
+    if ($script:ResticMountProbe -and $script:ResticMountProbe.Exe -eq $ResticExe) {
+        return $script:ResticMountProbe
     }
-
-    $set = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $SetId
-    if (-not $set) { throw 'Set not found.' }
-
-    $credCheck = Test-SyncMeResticCredential -SetId $set.Id
-    if (-not $credCheck.Ok) {
-        throw 'Repository password is not stored for this set. Use Store password (or Edit set → Passwords), then try again.'
-    }
-
-    $resticExe = $set.ResticPath
-    if ($resticExe -eq 'restic' -or -not (Test-Path -LiteralPath ([string]$resticExe))) {
+    $exe = $ResticExe
+    if ([string]::IsNullOrWhiteSpace($exe) -or $exe -eq 'restic' -or -not (Test-Path -LiteralPath $exe)) {
         $local = Join-Path $ScriptRoot 'tools\restic.exe'
-        if (Test-Path $local) { $resticExe = $local }
+        if (Test-Path -LiteralPath $local) { $exe = $local }
         else {
             $cmd = Get-Command restic -ErrorAction SilentlyContinue
-            if ($cmd) { $resticExe = $cmd.Source } else { throw 'restic not found.' }
+            if ($cmd) { $exe = $cmd.Source } else {
+                $r = @{ Ok = $false; Exe = ''; Message = 'restic not found.' }
+                $script:ResticMountProbe = $r
+                return $r
+            }
         }
     }
-
-    # rclone env for cloud repos
-    $tools = Join-Path $ScriptRoot 'tools'
-    if (Test-Path $tools) { $env:PATH = "$tools;$env:PATH" }
-    if ($set.RcloneConfigPath) { $env:RCLONE_CONFIG = [string]$set.RcloneConfigPath }
-    else {
-        $defConf = Get-SyncMeRcloneConfigPath
-        if (Test-Path $defConf) { $env:RCLONE_CONFIG = $defConf }
+    $help = ''
+    try {
+        $help = & $exe help 2>&1 | Out-String
+    } catch {
+        $r = @{ Ok = $false; Exe = $exe; Message = "Could not run restic help: $($_.Exception.Message)" }
+        $script:ResticMountProbe = $r
+        return $r
     }
-
-    $mp = $MountPoint
-    if ([string]::IsNullOrWhiteSpace($mp)) {
-        $mp = Join-Path $ScriptRoot ("Logs\mount\{0}" -f $set.Id)
-    }
-    if ($mp -match '^[A-Za-z]:\\?$') {
-        # drive letter mount
-        $mp = $mp.Substring(0, 2)
+    if ($help -match '(?m)^\s*mount\s+') {
+        $r = @{ Ok = $true; Exe = $exe; Message = 'restic mount command is available.' }
     } else {
-        if (-not (Test-Path -LiteralPath $mp)) {
-            New-Item -ItemType Directory -Path $mp -Force | Out-Null
+        $r = @{
+            Ok      = $false
+            Exe     = $exe
+            Message = 'Mount is not available on Windows: official restic builds do not include the mount command. Select a snapshot and use Restore selected to copy files out.'
         }
     }
+    $script:ResticMountProbe = $r
+    return $r
+}
 
-    $cred = Get-BackupStoredCredential -TargetName $set.ResticCredentialName
-    $plain = $cred.GetNetworkCredential().Password
-    $env:RESTIC_PASSWORD = $plain
-    $env:RESTIC_REPOSITORY = [string]$set.ResticRepo
-
-    $outLog = Join-Path $ScriptRoot ("Logs\mount-{0}.log" -f $set.Id)
-    $p = Start-Process -FilePath $resticExe -ArgumentList @('mount', $mp) `
-        -PassThru -WindowStyle Hidden `
-        -RedirectStandardOutput $outLog -RedirectStandardError $outLog
-
-    $script:MountJob = @{
-        Running    = $true
-        SetId      = $set.Id
-        MountPoint = $mp
-        Process    = $p
-        Message    = "Mounted at $mp (PID $($p.Id)). Browse snapshots; use Restore for permanent recovery."
-        Pid        = $p.Id
-    }
-    Start-Sleep -Seconds 2
-    if ($p.HasExited) {
-        $script:MountJob.Running = $false
-        $tail = if (Test-Path $outLog) { Get-Content $outLog -Tail 8 | Out-String } else { '' }
-        throw "restic mount exited immediately. Is WinFsp installed? $tail"
-    }
-    return $script:MountJob.Message
+function Start-SyncMeMount {
+    param([string]$SetId, [string]$MountPoint = '')
+    # Official Windows restic builds do not include "mount". Feature removed from the console.
+    throw 'Browse-as-folder (Mount) is not available on Windows: official restic builds omit the mount command. Select a snapshot and use Restore selected (or Restore latest) to copy files out.'
 }
 
 function Stop-SyncMeMount {
@@ -908,18 +903,13 @@ function Update-SyncMeMountStatus {
 function Get-SyncMeMountStatus {
     param([string]$SetId = '')
     Update-SyncMeMountStatus
-    $winfsp = Test-SyncMeWinFsp
     $checkSetId = $SetId
     if ([string]::IsNullOrWhiteSpace($checkSetId) -and $script:MountJob.Running -and $script:MountJob.SetId) {
         $checkSetId = [string]$script:MountJob.SetId
     }
     $cred = Test-SyncMeResticCredential -SetId $checkSetId
-    $idleMessage = 'Not mounted'
-    if (-not $winfsp.Ok) {
-        $idleMessage = $winfsp.Message
-    } elseif (-not $cred.Ok) {
-        $idleMessage = $cred.Message
-    }
+    $winfsp = Test-SyncMeWinFsp
+    $idleMessage = 'Use Restore selected to copy files from a snapshot (browse-as-folder Mount is not available on Windows).'
     return @{
         ok              = $true
         running         = [bool]$script:MountJob.Running
@@ -929,6 +919,8 @@ function Get-SyncMeMountStatus {
         winfspOk        = [bool]$winfsp.Ok
         winfspMessage   = $winfsp.Message
         winfspUrl       = $(if ($winfsp.Url) { $winfsp.Url } else { 'https://winfsp.dev/rel/' })
+        resticMountOk   = $false
+        resticMountMessage = 'Browse-as-folder Mount is not available on Windows with official restic. Use Restore selected.'
         resticCredOk    = [bool]$cred.Ok
         resticCredMessage = $cred.Message
         resticCredTarget  = $cred.Target
@@ -1034,6 +1026,155 @@ function Stop-SyncMeBackupJob {
     return ('Stopped: ' + ($killed -join '; '))
 }
 
+function Start-SyncMeRestoreJob {
+    param(
+        [Parameter(Mandatory)]$Config,
+        [Parameter(Mandatory)][string]$Snapshot,
+        [Parameter(Mandatory)][string]$TargetPath,
+        [string]$Include = '',
+        [string]$SetId = 'set1'
+    )
+    Update-SyncMeRestoreJob
+    if ($script:RestoreJob.Running -and $script:RestoreJob.Process -and -not $script:RestoreJob.Process.HasExited) {
+        throw 'A restore is already running. Cancel it first, or wait for it to finish.'
+    }
+    $bakStatus = Get-SyncMeBackupStatusPayload -SetId $SetId
+    if ($bakStatus.running) {
+        throw 'Cannot restore while a backup is running (restic repository lock). Wait for the backup to finish.'
+    }
+
+    $uncCheck = Test-SyncMeSnapshotHasUncPaths -Config $Config -Snapshot $Snapshot
+    if ($uncCheck.HasUnc) { throw $uncCheck.Message }
+
+    $safe = Test-SyncMeRestoreTargetSafe -TargetPath $TargetPath -ResticRepo $Config.ResticRepo
+    if (-not $safe.Ok) { throw $safe.Message }
+
+    $statusDir = Join-Path $ScriptRoot ("Logs\sets\$SetId")
+    if (-not (Test-Path -LiteralPath $statusDir)) {
+        New-Item -ItemType Directory -Path $statusDir -Force | Out-Null
+    }
+    $statusFile = Join-Path $statusDir 'restore-status.json'
+    $args = @(
+        '-NoProfile', '-ExecutionPolicy', 'Bypass',
+        '-WindowStyle', 'Hidden',
+        '-File', (Join-Path $ScriptRoot 'SyncMe-Restore.ps1'),
+        '-SetId', $SetId,
+        '-Snapshot', $Snapshot,
+        '-Target', $safe.FullPath,
+        '-StatusFile', $statusFile
+    )
+    if (-not [string]::IsNullOrWhiteSpace($Include)) {
+        $args += @('-Include', $Include.Trim())
+    }
+    $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $args -PassThru -WindowStyle Hidden
+    $script:RestoreJob = @{
+        Running    = $true
+        Finished   = $false
+        ExitCode   = $null
+        Message    = "Restore started (snapshot $Snapshot)."
+        Detail     = "PID $($p.Id)"
+        Started    = Get-Date
+        Process    = $p
+        SetId      = $SetId
+        Snapshot   = $Snapshot
+        Target     = $safe.FullPath
+        StatusFile = $statusFile
+    }
+    return $script:RestoreJob.Message
+}
+
+function Update-SyncMeRestoreJob {
+    if (-not $script:RestoreJob.Process) { return }
+    if ($script:RestoreJob.Process.HasExited) {
+        $script:RestoreJob.Running = $false
+        $script:RestoreJob.Finished = $true
+        $script:RestoreJob.ExitCode = $script:RestoreJob.Process.ExitCode
+        $fileMsg = ''
+        if ($script:RestoreJob.StatusFile -and (Test-Path -LiteralPath $script:RestoreJob.StatusFile)) {
+            try {
+                $st = Get-Content -LiteralPath $script:RestoreJob.StatusFile -Raw -ErrorAction Stop | ConvertFrom-Json
+                if ($st.message) { $fileMsg = [string]$st.message }
+                if ($null -ne $st.exitCode) { $script:RestoreJob.ExitCode = [int]$st.exitCode }
+            } catch { }
+        }
+        if ($fileMsg) {
+            $script:RestoreJob.Message = $fileMsg
+        } else {
+            $code = $script:RestoreJob.ExitCode
+            $script:RestoreJob.Message = if ($code -eq 0) {
+                "Restore finished to $($script:RestoreJob.Target)."
+            } else {
+                "Restore finished with exit $code."
+            }
+        }
+        $script:RestoreJob.Detail = ''
+    }
+}
+
+function Stop-SyncMeRestoreJob {
+    Update-SyncMeRestoreJob
+    $killed = New-Object System.Collections.Generic.List[string]
+    if ($script:RestoreJob.Process -and -not $script:RestoreJob.Process.HasExited) {
+        $procId = $script:RestoreJob.Process.Id
+        try {
+            Stop-Process -Id $procId -Force -ErrorAction Stop
+            $killed.Add("restore PID $procId")
+        } catch {
+            throw "Could not stop restore process $procId : $($_.Exception.Message)"
+        }
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+            Where-Object { $_.ParentProcessId -eq $procId } |
+            ForEach-Object {
+                try { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; $killed.Add("child $($_.Name) $($_.ProcessId)") } catch { }
+            }
+    }
+    $script:RestoreJob.Running = $false
+    $script:RestoreJob.Finished = $true
+    $script:RestoreJob.Message = 'Restore cancelled from console.'
+    if ($script:RestoreJob.StatusFile) {
+        try {
+            @{
+                running  = $false
+                finished = $true
+                success  = $false
+                message  = 'Restore cancelled from console.'
+                target   = $script:RestoreJob.Target
+                exitCode = -1
+                setId    = $script:RestoreJob.SetId
+                snapshot = $script:RestoreJob.Snapshot
+                updated  = (Get-Date).ToUniversalTime().ToString('o')
+            } | ConvertTo-Json -Compress | Set-Content -LiteralPath $script:RestoreJob.StatusFile -Encoding UTF8
+        } catch { }
+    }
+    if ($killed.Count -eq 0) { return 'No running restore process found (may already have finished).' }
+    return ('Stopped: ' + ($killed -join '; '))
+}
+
+function Get-SyncMeRestoreStatusPayload {
+    Update-SyncMeRestoreJob
+    $msg = $script:RestoreJob.Message
+    $success = $null
+    if ($script:RestoreJob.StatusFile -and (Test-Path -LiteralPath $script:RestoreJob.StatusFile)) {
+        try {
+            $st = Get-Content -LiteralPath $script:RestoreJob.StatusFile -Raw -ErrorAction Stop | ConvertFrom-Json
+            if ($st.message) { $msg = [string]$st.message }
+            if ($null -ne $st.success) { $success = [bool]$st.success }
+        } catch { }
+    }
+    return @{
+        ok        = $true
+        running   = [bool]$script:RestoreJob.Running
+        finished  = [bool]$script:RestoreJob.Finished
+        exitCode  = $script:RestoreJob.ExitCode
+        message   = $msg
+        detail    = $script:RestoreJob.Detail
+        target    = $script:RestoreJob.Target
+        snapshot  = $script:RestoreJob.Snapshot
+        setId     = $script:RestoreJob.SetId
+        success   = $success
+    }
+}
+
 function Remove-SyncMeBackupSet {
     param([string]$SetId)
     if ([string]::IsNullOrWhiteSpace($SetId)) { throw 'setId required.' }
@@ -1082,7 +1223,7 @@ function Invoke-SyncMeSetupApply {
 
     $pathsRaw = [string]$Body.sourcePaths
     $sourcePaths = @($pathsRaw -split '[\r\n,]+' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-    if ($sourcePaths.Count -eq 0) { throw 'Add at least one source folder (UNC path).' }
+    if ($sourcePaths.Count -eq 0) { throw 'Add at least one source folder (local path or UNC).' }
 
     $resticRepo = ([string]$Body.resticRepo).Trim()
     $archivePath = ([string]$Body.archivePath).Trim()
@@ -1095,13 +1236,13 @@ function Invoke-SyncMeSetupApply {
 
     if ($destType -ne 'rclone') {
         if ([string]::IsNullOrWhiteSpace($resticRepo)) {
-            throw 'Enter Disk 1 destination (full path on this Backup PC, or a NAS UNC path).'
+            throw 'Enter restic repository destination (full path on this Backup PC, or a NAS UNC path).'
         }
         if ($resticRepo -notmatch '^[A-Za-z]:\\' -and $resticRepo -notmatch '^\\\\[^\\]+\\[^\\]+') {
-            throw 'Disk 1 must be a full path (e.g. D:\Backups\repo) or a UNC path (\\server\share\repo). Relative paths are not allowed.'
+            throw 'Repository must be a full path (e.g. D:\Backups\repo) or a UNC path (\\server\share\repo). Relative paths are not allowed.'
         }
         if ($archivePath -and $archivePath -notmatch '^[A-Za-z]:\\' -and $archivePath -notmatch '^\\\\[^\\]+\\[^\\]+') {
-            throw 'Disk 2 must be a full path or UNC when set. Leave it blank to skip the plain-file archive.'
+            throw 'Archive path must be a full path or UNC when set. Leave it blank to skip.'
         }
         if ($archivePath) {
             $archSafe = Test-SyncMeArchivePathSafe -ArchivePath $archivePath
@@ -1109,10 +1250,17 @@ function Invoke-SyncMeSetupApply {
         }
     }
 
+    $hasUncSource = $false
     foreach ($sp in $sourcePaths) {
-        if ($sp -notmatch '^\\\\[^\\]+\\[^\\]+') {
-            throw "Source path must be a UNC share (including `$ shares over Tailscale), e.g. \\pc-name\C$\Path. Got: $sp"
+        if ($sp -match '^\\\\[^\\]+\\[^\\]+') {
+            $hasUncSource = $true
+        } elseif ($sp -notmatch '^[A-Za-z]:\\') {
+            throw "Source path must be a local folder (e.g. D:\Data) or UNC share (e.g. \\pc-name\share). Got: $sp"
         }
+    }
+    $sourceHost = if ($Body.sourceHost) { ([string]$Body.sourceHost).Trim() } else { '' }
+    if ($hasUncSource -and [string]::IsNullOrWhiteSpace($sourceHost)) {
+        throw 'Enter the source computer name when using UNC paths (or use local paths only).'
     }
 
     $existing = @(Get-SyncMeSetsFromConfigFile -ScriptRoot $ScriptRoot)
@@ -1308,7 +1456,7 @@ function Invoke-SyncMeSetupApply {
         SmtpUseSsl               = ($Body.smtpSsl -ne $false)
         MailFrom                 = [string]$Body.mailFrom
         MailTo                   = $mailTo
-        SourceHost               = [string]$Body.sourceHost
+        SourceHost               = $sourceHost
         UseShadowCopySources     = ($Body.useShadowCopy -ne $false)
         EnableWakeOnLan          = ($Body.enableWakeOnLan -eq $true)
         WakeMacAddress           = $(if ($Body.wakeMac) { [string]$Body.wakeMac } else { '' })
@@ -1726,6 +1874,7 @@ try {
                 if ($disk2Info -and $null -ne $disk2Info.percentFree -and $disk2Info.percentFree -lt 15) { $lowDisk = $true }
                 Write-SyncMeJson @{
                     ok                   = $true
+                    packageVersion       = (Get-SyncMePackageVersion)
                     configured           = [bool](Test-SyncMeConfigured)
                     lastSuccess          = $stamp
                     lastRun              = $lastRun
@@ -1855,11 +2004,22 @@ try {
             if ($path -eq '/api/test-source' -and $req.HttpMethod -eq 'POST') {
                 $body = Read-SyncMeBody $req
                 $msgs = New-Object System.Collections.Generic.List[string]
-                $hostName = [string]$body.host
-                $ping = Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue
-                $msgs.Add($(if ($ping) { "Host reachable: $hostName" } else { "Host NOT reachable: $hostName" }))
-                $allOk = [bool]$ping
+                $hostName = ([string]$body.host).Trim()
                 $paths = @([string]$body.paths -split '[\r\n,]+' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+                $hasUnc = [bool]($paths | Where-Object { $_ -match '^\\\\[^\\]+\\[^\\]+' })
+                $allOk = $true
+                if ($hasUnc -or $hostName) {
+                    if ([string]::IsNullOrWhiteSpace($hostName)) {
+                        $msgs.Add('Host name required when testing UNC paths.')
+                        $allOk = $false
+                    } else {
+                        $ping = Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue
+                        $msgs.Add($(if ($ping) { "Host reachable: $hostName" } else { "Host NOT reachable: $hostName" }))
+                        if (-not $ping) { $allOk = $false }
+                    }
+                } else {
+                    $msgs.Add('Local source paths — skipping host ping.')
+                }
                 foreach ($pp in $paths) {
                     $ok = Test-Path -LiteralPath $pp
                     $msgs.Add($(if ($ok) { "Path OK: $pp" } else { "Path NOT reachable: $pp" }))
@@ -1937,10 +2097,88 @@ try {
                 continue
             }
 
+            if ($path -eq '/api/snapshot/ls' -and $req.HttpMethod -eq 'GET') {
+                $qSet = $req.QueryString['setId']
+                $qSnap = [string]$req.QueryString['snapshot']
+                $qPathRaw = $req.QueryString['path']
+                $qPath = if ($null -eq $qPathRaw) { '' } else { ([string]$qPathRaw).Trim() }
+                $setId = if ($qSet) { [string]$qSet } else { 'set1' }
+                $cfg = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId
+                if (-not $cfg) {
+                    Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
+                    continue
+                }
+                if ([string]::IsNullOrWhiteSpace($qSnap)) {
+                    Write-SyncMeJson @{ ok = $false; message = 'Query parameter snapshot is required.' } -StatusCode 400 -Response $res
+                    continue
+                }
+                try {
+                    Update-SyncMeBackupJob
+                    Update-SyncMeRestoreJob
+                    $bakStatus = Get-SyncMeBackupStatusPayload -SetId $setId
+                    if ($bakStatus.running) {
+                        Write-SyncMeJson @{
+                            ok = $false
+                            message = 'Cannot browse while a backup is running (restic repository lock). Wait for the backup to finish.'
+                        } -StatusCode 409 -Response $res
+                        continue
+                    }
+                    if ($script:RestoreJob.Running) {
+                        Write-SyncMeJson @{
+                            ok = $false
+                            message = 'Cannot browse while a restore is running. Wait or cancel the restore first.'
+                        } -StatusCode 409 -Response $res
+                        continue
+                    }
+
+                    $tools = Join-Path $ScriptRoot 'tools'
+                    if (Test-Path $tools) { $env:PATH = "$tools;$env:PATH" }
+                    if ($cfg.RcloneConfigPath) { $env:RCLONE_CONFIG = [string]$cfg.RcloneConfigPath }
+                    elseif (Test-Path (Get-SyncMeRcloneConfigPath)) { $env:RCLONE_CONFIG = Get-SyncMeRcloneConfigPath }
+
+                    $listing = Get-SyncMeSnapshotListing `
+                        -Config $cfg `
+                        -Snapshot $qSnap `
+                        -Path $qPath
+                    if ($listing -is [System.Array]) {
+                        $listing = @($listing) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('Ok') } | Select-Object -Last 1
+                    }
+                    if (-not $listing) {
+                        Write-SyncMeJson @{ ok = $false; message = 'Snapshot browse returned no result.' } -StatusCode 400 -Response $res
+                        continue
+                    }
+                    if (-not $listing.Ok) {
+                        Write-SyncMeJson @{
+                            ok         = $false
+                            message    = [string]$listing.Message
+                            path       = [string]$listing.Path
+                            entries    = @()
+                            truncated  = $false
+                            snapshotId = [string]$listing.SnapshotId
+                        } -StatusCode 400 -Response $res
+                        continue
+                    }
+                    Write-SyncMeJson @{
+                        ok         = $true
+                        message    = [string]$listing.Message
+                        path       = [string]$listing.Path
+                        entries    = @($listing.Entries)
+                        truncated  = [bool]$listing.Truncated
+                        snapshotId = [string]$listing.SnapshotId
+                        setId      = $setId
+                    } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = ('Snapshot browse failed: ' + $_.Exception.Message) } -StatusCode 400 -Response $res
+                } finally {
+                    Remove-Item Env:RCLONE_CONFIG -ErrorAction SilentlyContinue
+                }
+                continue
+            }
+
             if ($path -eq '/api/restore' -and $req.HttpMethod -eq 'POST') {
                 $body = Read-SyncMeBody $req
-                $setId = if ($body.setId) { [string]$body.setId } else { '' }
-                $cfg = if ($setId) { Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId } else { Get-SyncMeConfigOrNull }
+                $setId = if ($body.setId) { [string]$body.setId } else { 'set1' }
+                $cfg = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId
                 if (-not $cfg) {
                     Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
                     continue
@@ -1950,12 +2188,51 @@ try {
                     if (Test-Path $tools) { $env:PATH = "$tools;$env:PATH" }
                     if ($cfg.RcloneConfigPath) { $env:RCLONE_CONFIG = [string]$cfg.RcloneConfigPath }
                     elseif (Test-Path (Get-SyncMeRcloneConfigPath)) { $env:RCLONE_CONFIG = Get-SyncMeRcloneConfigPath }
-                    $result = Invoke-SyncMeRestore -Config $cfg -Snapshot ([string]$body.snapshot) -TargetPath ([string]$body.target) -Include ([string]$body.include)
-                    if ($result.Success) {
-                        Write-SyncMeJson @{ ok = $true; message = $result.Message; target = $result.TargetPath } -Response $res
-                    } else {
-                        Write-SyncMeJson @{ ok = $false; message = $result.Message } -StatusCode 400 -Response $res
-                    }
+                    $msg = Start-SyncMeRestoreJob `
+                        -Config $cfg `
+                        -Snapshot ([string]$body.snapshot) `
+                        -TargetPath ([string]$body.target) `
+                        -Include ([string]$body.include) `
+                        -SetId $setId
+                    Write-SyncMeJson @{ ok = $true; message = $msg; started = $true } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                } finally {
+                    Remove-Item Env:RCLONE_CONFIG -ErrorAction SilentlyContinue
+                }
+                continue
+            }
+
+            if ($path -eq '/api/restore/status' -and $req.HttpMethod -eq 'GET') {
+                Write-SyncMeJson (Get-SyncMeRestoreStatusPayload) -Response $res
+                continue
+            }
+
+            if ($path -eq '/api/restore/cancel' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    $msg = Stop-SyncMeRestoreJob
+                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                continue
+            }
+
+            if ($path -eq '/api/snapshot/delete' -and $req.HttpMethod -eq 'POST') {
+                $body = Read-SyncMeBody $req
+                $setId = if ($body.setId) { [string]$body.setId } else { 'set1' }
+                $cfg = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId
+                if (-not $cfg) {
+                    Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
+                    continue
+                }
+                try {
+                    $tools = Join-Path $ScriptRoot 'tools'
+                    if (Test-Path $tools) { $env:PATH = "$tools;$env:PATH" }
+                    if ($cfg.RcloneConfigPath) { $env:RCLONE_CONFIG = [string]$cfg.RcloneConfigPath }
+                    elseif (Test-Path (Get-SyncMeRcloneConfigPath)) { $env:RCLONE_CONFIG = Get-SyncMeRcloneConfigPath }
+                    $result = Remove-SyncMeSnapshot -Config $cfg -SnapshotId ([string]$body.snapshot)
+                    Write-SyncMeJson @{ ok = $true; message = $result.Message } -Response $res
                 } catch {
                     Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
                 } finally {
@@ -2236,6 +2513,9 @@ try {
                     }
                     'checklist' { $target = Join-Path $ScriptRoot 'RecoveryChecklist.txt' }
                     'officeagent' { $target = Join-Path $ScriptRoot 'OfficeAgent' }
+                    'mount' {
+                        throw 'Browse-as-folder Mount is not available on Windows. Use Restore selected (or Restore latest) instead.'
+                    }
                     default { throw "Unknown open kind: $kind" }
                 }
                 if ($kind -eq 'checklist') {

@@ -12,10 +12,17 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($root)) { $root = (Get-Location).Path }
 if ([string]::IsNullOrWhiteSpace($OutDir)) { $OutDir = Join-Path $root 'dist' }
-$stamp = Get-Date -Format 'yyyyMMdd'
+
+$verFile = Join-Path $root 'VERSION.txt'
+$pkgVer = '0.0.0'
+if (Test-Path -LiteralPath $verFile) {
+    try { $pkgVer = ((Get-Content -LiteralPath $verFile -TotalCount 1).Trim()) } catch { }
+}
+if ([string]::IsNullOrWhiteSpace($pkgVer)) { $pkgVer = '0.0.0' }
+
 $stageStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $stage = Join-Path $OutDir ("SyncMe-stage-" + $stageStamp)
-$zip = Join-Path $OutDir ("SyncMe-" + $stamp + ".zip")
+$zip = Join-Path $OutDir ("SyncMe-" + $pkgVer + ".zip")
 
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue }
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
@@ -24,7 +31,7 @@ if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Forc
 # Customer ship list only — never add website/ (local marketing site).
 $include = @(
     'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Host.ps1',
-    'SyncMe-Backup.ps1', 'Config.ps1',
+    'SyncMe-Backup.ps1', 'SyncMe-Restore.ps1', 'Config.ps1',
     'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1',
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md',

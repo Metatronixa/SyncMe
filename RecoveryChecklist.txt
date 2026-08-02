@@ -4,17 +4,18 @@ Free to use — keep this credit. See LICENSE.txt
 ============================================
 
 KEEP THESE SAFE (offline + password manager):
-[ ] restic repository password — REQUIRED for any Disk 1 restore/mount (Credential Manager: SyncMeRestic or SyncMeRestic-<setId>)
-    Keep a vault copy outside the Backup PC. Lose this password = Disk 1 unrecoverable.
+[ ] restic repository password — REQUIRED for any restore (Credential Manager: SyncMeRestic or SyncMeRestic-<setId>)
+    Keep a vault copy outside the Backup PC. Lose this password = repository unrecoverable.
 [ ] SMTP / share passwords if used (SyncMeSmtp, SyncMeShare / SyncMeShare-<setId>)
 [ ] Windows account password for the SyncMe task (Task Scheduler "run whether logged on")
 [ ] This checklist printed or stored offline
+[ ] Bookmark https://www.syncme.co.za for FAQ / User Guide
 
 VERIFY AFTER BACKUP / BEFORE YOU NEED A REAL DISASTER RESTORE:
 [ ] Run dry run after setup Apply, then a real backup
 [ ] Read Reports/Logs (exit 3 = some source files unread)
 [ ] Operations Check (repo health)
-[ ] Mount or restore to an EMPTY test folder; spot-check critical paths vs the source
+[ ] Restore to an EMPTY test folder; spot-check critical paths vs the source
 
 IF THE RESTIC REPO IS HEALTHY:
 1. On the Backup PC, open SyncMe-Menu.bat -> Operations / Restore
@@ -26,8 +27,11 @@ IF THE RESTIC REPO IS HEALTHY:
 
 GUI restore (recommended):
 - SyncMe.bat or SyncMe-Menu.bat -> Operations
-- Refresh snapshots -> Restore latest or Restore selected
-- Choose a target folder OUTSIDE the restic repo (Suggest button helps)
+- Refresh snapshots -> select a snapshot
+- Browse selected -> open folders -> Use this path (optional include) OR leave include blank for full snapshot
+- Suggest target folder OUTSIDE the restic repo -> Restore selected / Restore latest
+- Windows has no restic mount; browse + restore is the supported path
+- UNC snapshots cannot be restored on Windows — use a newer drive-letter snapshot
 
 IF REPO CHECK FAILS (CORRUPTED / CHECK_FAILED):
 - Do not prune further until investigated
