@@ -1,4 +1,5 @@
 SyncMe — START HERE
+Version: see VERSION.txt (must match the SyncMe-Setup folder name you received)
 Copyright © 2026 Bradford Lotriet (brad@web-zilla.co.za)
 Free to use — keep this credit. See LICENSE.txt
 Third-party tools: THIRD-PARTY-NOTICES.txt (restic, rclone)

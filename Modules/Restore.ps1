@@ -445,23 +445,23 @@ function Get-SyncMeSnapshotListing {
         $normPath = Get-SyncMeNormalizedSnapshotPath -Path $Path
 
         # Root listing: snapshot source paths only (no full-tree ls).
+        # Use plain PS arrays — @($List[object]) throws "Argument types do not match" on Windows PowerShell 5.1.
         if ([string]::IsNullOrWhiteSpace($normPath)) {
-            $roots = New-Object System.Collections.Generic.List[object]
-            foreach ($rp in @($snapObj.Paths)) {
+            $roots = @(foreach ($rp in @($snapObj.Paths)) {
                 if ([string]::IsNullOrWhiteSpace([string]$rp)) { continue }
                 $full = Get-SyncMeNormalizedSnapshotPath -Path ([string]$rp)
-                [void]$roots.Add([pscustomobject]@{
+                [pscustomobject]@{
                     name = Get-SyncMeSnapshotPathName -Path $full
                     path = $full
                     type = 'dir'
                     size = $null
-                })
-            }
+                }
+            })
             return ,@{
                 Ok         = $true
                 Message    = ''
                 Path       = ''
-                Entries    = @($roots)
+                Entries    = $roots
                 Truncated  = $false
                 SnapshotId = $snapId
             }
@@ -474,7 +474,7 @@ function Get-SyncMeSnapshotListing {
 
         $env:RESTIC_PASSWORD = $plain
         $env:RESTIC_REPOSITORY = $Config.ResticRepo
-        $entries = New-Object System.Collections.Generic.List[object]
+        $entries = @()
         $truncated = $false
         $parentNorm = $normPath
 
@@ -558,12 +558,12 @@ function Get-SyncMeSnapshotListing {
                     $truncated = $true
                     break
                 }
-                [void]$entries.Add([pscustomobject]@{
+                $entries += [pscustomobject]@{
                     name = $name
                     path = $entryPath
                     type = $type
                     size = $size
-                })
+                }
             }
 
             $sorted = @($entries | Sort-Object @{ Expression = { if ($_.type -eq 'dir') { 0 } else { 1 } } }, @{ Expression = { $_.name } })

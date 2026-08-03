@@ -124,7 +124,9 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-`VERSION.txt` uses semantic versioning (e.g. `1.1.1`). Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+Current release: **1.2.0**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+
+**1.2.0** fixes snapshot browse on Windows PowerShell 5.1 (`Argument types do not match` when opening a snapshot’s root folders).
 
 ### Console layout
 

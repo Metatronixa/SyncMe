@@ -509,6 +509,7 @@ Backup PC  —  SyncMe console + Task Scheduler
             <tr><td>Cloud / OAuth fails</td><td>Install rclone; re-run OAuth; check bandwidth/throttling</td></tr>
             <tr><td>Task does not run unattended</td><td>Same Windows account as Credential Manager; “run whether logged on”</td></tr>
             <tr><td>Browse / restore fails on UNC snapshot</td><td>Old snapshots stored UNC roots; take a new backup (drive-letter paths), then browse/restore that snapshot</td></tr>
+            <tr><td>Browse fails with “Argument types do not match”</td><td>Upgrade to SyncMe <strong>1.2.0</strong> or newer (Windows PowerShell 5.1 browse fix)</td></tr>
             <tr><td>Browse while backup runs</td><td>Wait for backup to finish (restic repo lock)</td></tr>
           </tbody>
         </table>
