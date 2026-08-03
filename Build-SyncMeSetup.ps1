@@ -45,7 +45,7 @@ $include = @(
     'Deploy-SyncMe.ps1',
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md', 'TECHNICAL.md',
     'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'VERSION.txt',
-    'Modules', 'ui', 'OfficeAgent', 'tools'
+    'Modules', 'ui', 'OfficeAgent'
 )
 
 foreach ($item in $include) {
@@ -63,6 +63,22 @@ foreach ($item in $include) {
         Copy-Item $src $dest -Force
     }
 }
+
+# Design mockups are for local UI work — never ship to customers.
+$mockups = Join-Path $stage 'ui\mockups'
+if (Test-Path -LiteralPath $mockups) {
+    Remove-Item -LiteralPath $mockups -Recurse -Force
+}
+
+# restic/rclone/WinFsp/WinSCP are installed from the console (or PATH) — never bundle binaries.
+$toolsDir = Join-Path $stage 'tools'
+if (-not (Test-Path -LiteralPath $toolsDir)) {
+    New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
+}
+Get-ChildItem -LiteralPath $toolsDir -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Extension -match '^\.(exe|msi|msix|zip)$' -or $_.Name -match '(?i)restic|rclone|winscp|winfsp' } |
+    ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+Set-Content -Path (Join-Path $toolsDir '.gitkeep') -Value '' -Encoding ASCII
 
 New-Item -ItemType Directory -Path (Join-Path $stage 'Logs') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stage 'Reports') -Force | Out-Null
@@ -92,10 +108,14 @@ Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 $zipCheck = [System.IO.Compression.ZipFile]::OpenRead($payloadZip)
 try {
     $blocked = @($zipCheck.Entries | Where-Object {
-        $_.FullName -match '(^|[/\\])website([/\\]|$)'
+        $n = $_.FullName -replace '\\', '/'
+        $n -match '(^|/)website(/|$)' -or
+        $n -match '(^|/)ui/mockups(/|$)' -or
+        $n -match '(?i)\.(exe|msi)$' -or
+        $n -match '(?i)(^|/)(restic|rclone|winscp|winfsp)[^/]*$'
     })
     if ($blocked.Count -gt 0) {
-        throw ("Payload must not include website/ (found: {0})" -f ($blocked[0].FullName))
+        throw ("Payload must not include website/, ui/mockups/, or tool installers (found: {0})" -f ($blocked[0].FullName))
     }
 }
 finally {

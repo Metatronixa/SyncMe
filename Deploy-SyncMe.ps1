@@ -38,7 +38,7 @@ $include = @(
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md', 'TECHNICAL.md',
     'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt',
     'VERSION.txt',
-    'Modules', 'ui', 'OfficeAgent', 'tools'
+    'Modules', 'ui', 'OfficeAgent'
 )
 
 Write-Host "Source: $root" -ForegroundColor Cyan
@@ -91,20 +91,10 @@ foreach ($item in $include) {
     }
     $dest = Join-Path $Target $item
     if (Test-Path -LiteralPath $src -PathType Container) {
-        if ($item -eq 'tools') {
-            # Ensure portable restic/rclone land on the Backup PC
-            if (-not (Test-Path -LiteralPath $dest)) {
-                New-Item -ItemType Directory -Path $dest -Force | Out-Null
-            }
-            Get-ChildItem -LiteralPath $src -File -ErrorAction SilentlyContinue | ForEach-Object {
-                Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $dest $_.Name) -Force
-            }
-        } else {
-            if (-not (Test-Path -LiteralPath $dest)) {
-                New-Item -ItemType Directory -Path $dest -Force | Out-Null
-            }
-            Copy-Item -Path (Join-Path $src '*') -Destination $dest -Recurse -Force
+        if (-not (Test-Path -LiteralPath $dest)) {
+            New-Item -ItemType Directory -Path $dest -Force | Out-Null
         }
+        Copy-Item -Path (Join-Path $src '*') -Destination $dest -Recurse -Force
     } else {
         $destDir = Split-Path -Parent $dest
         if (-not (Test-Path -LiteralPath $destDir)) {
@@ -113,6 +103,18 @@ foreach ($item in $include) {
         Copy-Item -LiteralPath $src -Destination $dest -Force
     }
 }
+
+# Never deploy design mockups or third-party installers (console downloads restic/rclone/WinFsp).
+$mockupsDest = Join-Path $Target 'ui\mockups'
+if (Test-Path -LiteralPath $mockupsDest) {
+    Remove-Item -LiteralPath $mockupsDest -Recurse -Force
+}
+$toolsDest = Join-Path $Target 'tools'
+if (-not (Test-Path -LiteralPath $toolsDest)) {
+    New-Item -ItemType Directory -Path $toolsDest -Force | Out-Null
+}
+# Keep any already-installed restic/rclone on the Backup PC; do not overwrite from this repo's tools\.
+Write-Host 'Skipping tools\ binaries — install restic/rclone from the SyncMe console (or PATH).' -ForegroundColor Yellow
 
 foreach ($d in @('Logs', 'Reports')) {
     $p = Join-Path $Target $d
