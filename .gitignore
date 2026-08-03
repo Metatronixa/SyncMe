@@ -10,6 +10,9 @@ Config/rclone.conf
 # Build output
 dist/
 
+# Marketing site (deployed separately to www.syncme.co.za — not public source)
+website/
+
 # OS / editor
 Thumbs.db
 Desktop.ini

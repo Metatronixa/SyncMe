@@ -65,7 +65,7 @@ SyncMe is a **Windows Backup PC orchestration layer** around [restic](https://re
 | `tools/` | Portable `restic.exe`, `rclone.exe` when installed by console |
 | `Config/` | Runtime `rclone.conf` (OAuth tokens; not for git) |
 | `Logs/`, `Reports/` | Runtime artifacts (per-set under `Logs\sets\<id>\`) |
-| `website/` | Marketing site (www.syncme.co.za) — versioned in git; **excluded** from customer packages |
+| `website/` | Marketing site (www.syncme.co.za); kept local / deployed separately; **not** in the public git tree; **excluded** from customer packages |
 | `dist/` | Build outputs (typically gitignored) |
 | `TECHNICAL.md` | This document |
 | `README.md`, `UserGuide.html`, `START-HERE.txt`, `RecoveryChecklist.txt` | Product / ops docs |
