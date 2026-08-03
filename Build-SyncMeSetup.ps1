@@ -43,7 +43,7 @@ $include = @(
     'SyncMe-Backup.ps1', 'SyncMe-Restore.ps1', 'Config.ps1',
     'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1',
-    'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md',
+    'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md', 'TECHNICAL.md',
     'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'VERSION.txt',
     'Modules', 'ui', 'OfficeAgent', 'tools'
 )

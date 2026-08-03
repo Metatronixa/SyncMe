@@ -20,6 +20,7 @@ $utf8Bom = New-Object System.Text.UTF8Encoding $true
 . (Join-Path $ScriptRoot 'Modules\Notify.ps1')
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
+. (Join-Path $ScriptRoot 'Modules\Report.ps1')
 
 $script:BackupJob = @{
     Running  = $false
@@ -677,6 +678,9 @@ function Update-SyncMeSetPolicy {
             if ($null -ne $Body.keepMonthly) { $s | Add-Member -NotePropertyName KeepMonthly -NotePropertyValue ([int]$Body.keepMonthly) -Force }
             if ($null -ne $Body.enableRepoCheck) { $s | Add-Member -NotePropertyName EnableRepoCheck -NotePropertyValue ([bool]$Body.enableRepoCheck) -Force }
             if ($Body.weeklyDataCheckDay) { $s | Add-Member -NotePropertyName WeeklyDataCheckDay -NotePropertyValue ([string]$Body.weeklyDataCheckDay) -Force }
+            if ($null -ne $Body.appendOnly) { $s | Add-Member -NotePropertyName AppendOnly -NotePropertyValue ([bool]$Body.appendOnly) -Force }
+            if ($null -ne $Body.preBackupScript) { $s | Add-Member -NotePropertyName PreBackupScript -NotePropertyValue ([string]$Body.preBackupScript) -Force }
+            if ($null -ne $Body.postBackupScript) { $s | Add-Member -NotePropertyName PostBackupScript -NotePropertyValue ([string]$Body.postBackupScript) -Force }
             $found = $true
         }
         $s
@@ -2226,6 +2230,13 @@ try {
                     Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
                     continue
                 }
+                if ($cfg.AppendOnly) {
+                    Write-SyncMeJson @{
+                        ok      = $false
+                        message = 'Append-Only Mode is enabled for this set. Snapshot deletion is blocked.'
+                    } -StatusCode 400 -Response $res
+                    continue
+                }
                 try {
                     $tools = Join-Path $ScriptRoot 'tools'
                     if (Test-Path $tools) { $env:PATH = "$tools;$env:PATH" }
@@ -2288,6 +2299,9 @@ try {
                     keepMonthly          = $(if ($null -ne $cfg.KeepMonthly) { [int]$cfg.KeepMonthly } else { 6 })
                     enableRepoCheck      = $(if ($null -ne $cfg.EnableRepoCheck) { [bool]$cfg.EnableRepoCheck } else { $true })
                     weeklyDataCheckDay   = $(if ($cfg.WeeklyDataCheckDay) { $cfg.WeeklyDataCheckDay } else { 'Sunday' })
+                    appendOnly           = $(if ($null -ne $cfg.AppendOnly) { [bool]$cfg.AppendOnly } else { $false })
+                    preBackupScript      = $(if ($cfg.PreBackupScript) { [string]$cfg.PreBackupScript } else { '' })
+                    postBackupScript     = $(if ($cfg.PostBackupScript) { [string]$cfg.PostBackupScript } else { '' })
                     resticLimitUploadKByte = $(if ($null -ne $cfg.ResticLimitUploadKByte) { [int]$cfg.ResticLimitUploadKByte } else { 0 })
                     rcloneRemote         = $rcloneRemote
                     rcloneSubPath        = $rclonePath
@@ -2404,6 +2418,28 @@ try {
                 continue
             }
 
+            if ($path -eq '/api/set/rescue-kit' -and $req.HttpMethod -eq 'POST') {
+                $body = Read-SyncMeBody $req
+                $setId = if ($body.setId) { [string]$body.setId } else { 'set1' }
+                $cfg = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId
+                if (-not $cfg) {
+                    Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
+                    continue
+                }
+                try {
+                    $cfg = ConvertTo-SyncMeSetObject -Config $cfg -Id $(if ($cfg.Id) { [string]$cfg.Id } else { $setId })
+                    $outPath = Export-SyncMeRescueKit -Config $cfg -ScriptRoot $ScriptRoot
+                    Write-SyncMeJson @{
+                        ok      = $true
+                        path    = $outPath
+                        message = "Rescue kit written to $outPath"
+                    } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                continue
+            }
+
             if ($path -eq '/api/mount/status' -and $req.HttpMethod -eq 'GET') {
                 $qSet = [string]$req.QueryString['setId']
                 Write-SyncMeJson (Get-SyncMeMountStatus -SetId $qSet) -Response $res
@@ -2513,6 +2549,11 @@ try {
                     }
                     'checklist' { $target = Join-Path $ScriptRoot 'RecoveryChecklist.txt' }
                     'officeagent' { $target = Join-Path $ScriptRoot 'OfficeAgent' }
+                    'file' {
+                        $target = [string]$body.path
+                        if ([string]::IsNullOrWhiteSpace($target)) { throw 'path is required for kind=file.' }
+                        if (-not (Test-Path -LiteralPath $target)) { throw "File not found: $target" }
+                    }
                     'mount' {
                         throw 'Browse-as-folder Mount is not available on Windows. Use Restore selected (or Restore latest) instead.'
                     }
@@ -2520,6 +2561,8 @@ try {
                 }
                 if ($kind -eq 'checklist') {
                     if (Test-Path $target) { Start-Process notepad.exe -ArgumentList $target }
+                } elseif ($kind -eq 'file') {
+                    Start-Process -FilePath $target
                 } else {
                     if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null }
                     Start-Process explorer.exe -ArgumentList $target

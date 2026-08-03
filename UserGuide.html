@@ -482,7 +482,13 @@ Backup PC  —  SyncMe console + Task Scheduler
           <li>Operations → refresh snapshots.</li>
           <li>Select a snapshot → <strong>Browse selected</strong> to open folders inside that snapshot (roots such as <code>C:\Pastel19</code>). Double-click folders; <strong>Use this path</strong> fills the optional include field (one file or folder). Leave include blank for a full restore.</li>
           <li>Restore latest or selected snapshot to an <strong>empty folder outside</strong> the live restic repo (never into the source share). Use Suggest for a safe target.</li>
+          <li>Optional: Operations → <strong>More…</strong> → <strong>Export Rescue Kit</strong> for a printable recovery sheet (repo path + Credential Manager target — password stays in your vault).</li>
         </ol>
+        <div class="callout">
+          <strong>Retention &amp; integrity (1.3.0)</strong>
+          Dashboard → <strong>Retention &amp; integrity</strong>: keep policies, optional <strong>Append-Only Mode</strong> (skips prune / blocks snapshot delete), and optional pre/post backup script paths (must be non-interactive for Task Scheduler).
+          Weekly data checks can run an automated single-file restore drill.
+        </div>
         <div class="callout">
           <strong>Windows note</strong>
           Official restic builds on Windows do not include <code>mount</code>. SyncMe’s browse panel lists paths via <code>restic ls</code>; restore still copies files out with <code>restic restore</code>.
@@ -509,8 +515,11 @@ Backup PC  —  SyncMe console + Task Scheduler
             <tr><td>Cloud / OAuth fails</td><td>Install rclone; re-run OAuth; check bandwidth/throttling</td></tr>
             <tr><td>Task does not run unattended</td><td>Same Windows account as Credential Manager; “run whether logged on”</td></tr>
             <tr><td>Browse / restore fails on UNC snapshot</td><td>Old snapshots stored UNC roots; take a new backup (drive-letter paths), then browse/restore that snapshot</td></tr>
-            <tr><td>Browse fails with “Argument types do not match”</td><td>Upgrade to SyncMe <strong>1.2.0</strong> or newer (Windows PowerShell 5.1 browse fix)</td></tr>
+            <tr><td>Browse fails with “Argument types do not match”</td><td>Upgrade to SyncMe <strong>1.2.0+</strong> (Windows PowerShell 5.1 browse fix)</td></tr>
             <tr><td>Browse while backup runs</td><td>Wait for backup to finish (restic repo lock)</td></tr>
+            <tr><td>Prune / delete blocked</td><td>Append-Only Mode is on for the set — turn it off in Retention &amp; integrity if you intend to prune</td></tr>
+            <tr><td>Pre-backup script hung the job</td><td>Scripts must be non-interactive; SyncMe kills hooks after 15 minutes</td></tr>
+            <tr><td>Need offline recovery sheet</td><td>Operations → More → Export Rescue Kit; keep password in your vault</td></tr>
           </tbody>
         </table>
       </section>
@@ -524,6 +533,7 @@ Backup PC  —  SyncMe console + Task Scheduler
           <label><input type="checkbox" /> restic password stored offline + Credential Manager</label>
           <label><input type="checkbox" /> Smoke test / dry run succeeded</label>
           <label><input type="checkbox" /> Restore of a sample file verified</label>
+          <label><input type="checkbox" /> Rescue Kit exported and password vaulted offline</label>
           <label><input type="checkbox" /> Email or watchdog configured if you want alerts</label>
         </div>
       </section>

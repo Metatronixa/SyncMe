@@ -1106,6 +1106,10 @@
       if ($('polKeepMonthly')) $('polKeepMonthly').value = d.keepMonthly != null ? d.keepMonthly : 6;
       if ($('polEnableCheck')) $('polEnableCheck').checked = d.enableRepoCheck !== false;
       if ($('polCheckDay') && d.weeklyDataCheckDay) $('polCheckDay').value = d.weeklyDataCheckDay;
+      if ($('polAppendOnly')) $('polAppendOnly').checked = !!d.appendOnly;
+      if ($('polPreScript')) $('polPreScript').value = d.preBackupScript || '';
+      if ($('polPostScript')) $('polPostScript').value = d.postBackupScript || '';
+      if ($('btnPolicyPrune')) $('btnPolicyPrune').disabled = !!d.appendOnly;
       if ($('rcloneBwLimit')) $('rcloneBwLimit').value = d.rcloneBwLimit || 'off';
       if ($('resticLimitUpload')) $('resticLimitUpload').value = d.resticLimitUploadKByte != null ? d.resticLimitUploadKByte : 0;
       if ($('rcloneTransfers')) $('rcloneTransfers').value = d.rcloneTransfers != null ? d.rcloneTransfers : 4;
@@ -1268,11 +1272,15 @@
           keepWeekly: parseInt($('polKeepWeekly').value, 10),
           keepMonthly: parseInt($('polKeepMonthly').value, 10),
           enableRepoCheck: $('polEnableCheck').checked,
-          weeklyDataCheckDay: $('polCheckDay').value
+          weeklyDataCheckDay: $('polCheckDay').value,
+          appendOnly: $('polAppendOnly') ? $('polAppendOnly').checked : false,
+          preBackupScript: $('polPreScript') ? $('polPreScript').value.trim() : '',
+          postBackupScript: $('polPostScript') ? $('polPostScript').value.trim() : ''
         })
       });
       flashStatus($('dashStatus'), d.message || 'Policy saved.', 'ok', 8000);
       closeModal('modalPolicy');
+      if ($('btnPolicyPrune')) $('btnPolicyPrune').disabled = !!( $('polAppendOnly') && $('polAppendOnly').checked );
     } catch (e) {
       flashStatus($('dashStatus'), e.message, 'err', 10000);
     }
@@ -1341,6 +1349,10 @@
 
   async function runBackup(mode) {
     if (mode === 'pruneOnly') {
+      if ($('polAppendOnly') && $('polAppendOnly').checked) {
+        flashStatus(opsStatusEl(), 'Append-Only Mode is enabled — prune is blocked for this set.', 'err', 10000);
+        return;
+      }
       if (!confirm('Run forget --prune now for the active set?\n\nThis permanently removes snapshots outside the retention policy and cleans unreferenced data.')) {
         return;
       }
@@ -1941,6 +1953,27 @@
   if ($('btnOpenReportsDash')) $('btnOpenReportsDash').onclick = () => openPath('reports');
   if ($('btnOpenLastLog')) $('btnOpenLastLog').onclick = () => openPath('logs');
   $('btnOpenLogs').onclick = () => openPath('logs');
+
+  if ($('btnExportRescueKit')) {
+    $('btnExportRescueKit').onclick = async () => {
+      const st = opsStatusEl();
+      setStatus(st, 'Exporting Rescue Kit…', 'busy');
+      try {
+        const d = await api('/api/set/rescue-kit', {
+          method: 'POST',
+          body: JSON.stringify({ setId: state.activeSetId || 'set1' })
+        });
+        flashStatus(st, d.message || ('Rescue kit: ' + (d.path || '')), 'ok', 12000);
+        if (d.path) {
+          try {
+            await api('/api/open', { method: 'POST', body: JSON.stringify({ kind: 'file', path: d.path }) });
+          } catch (e2) { /* ignore open failure */ }
+        }
+      } catch (e) {
+        flashStatus(st, e.message, 'err', 10000);
+      }
+    };
+  }
 
   if ($('btnAddSet')) {
     $('btnAddSet').onclick = () => {

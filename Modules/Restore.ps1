@@ -593,3 +593,131 @@ function Get-SyncMeSnapshotListing {
         }
     }
 }
+
+function Test-SyncMeRestoreDrill {
+    <#
+      Restore one random file from the latest snapshot into a temp sandbox and verify it.
+      Uses the exact restic ls path string for --include (no path rewriting).
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)]$Config,
+        [string]$SetId = '',
+        [string]$LogPath = ''
+    )
+
+    . (Join-Path $PSScriptRoot 'Notify.ps1')
+    $scriptRoot = Split-Path -Parent $PSScriptRoot
+    if ([string]::IsNullOrWhiteSpace($SetId)) {
+        $SetId = if ($Config.Id) { [string]$Config.Id } else { 'set1' }
+    }
+
+    $resticExe = Get-SyncMeResticExePath -Config $Config -ScriptRoot $scriptRoot
+    $cred = Get-BackupStoredCredential -TargetName $Config.ResticCredentialName
+    $plain = $cred.GetNetworkCredential().Password
+
+    $sandbox = Join-Path $env:TEMP ("SyncMe-Drill\" + $SetId)
+    if (Test-Path -LiteralPath $sandbox) {
+        Remove-Item -LiteralPath $sandbox -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    New-Item -ItemType Directory -Path $sandbox -Force | Out-Null
+
+    $env:RESTIC_PASSWORD = $plain
+    $env:RESTIC_REPOSITORY = $Config.ResticRepo
+    if ($Config.RcloneConfigPath) { $env:RCLONE_CONFIG = [string]$Config.RcloneConfigPath }
+
+    try {
+        $rawSnaps = & $resticExe snapshots --json 2>&1
+        $code = $LASTEXITCODE
+        if ($code -ne 0) {
+            throw "restic snapshots failed (exit $code): $($rawSnaps | Out-String)"
+        }
+        $snapText = ($rawSnaps | Out-String).Trim()
+        if ([string]::IsNullOrWhiteSpace($snapText) -or $snapText -eq 'null' -or $snapText -eq '[]') {
+            throw 'No snapshots available for restore drill.'
+        }
+        $items = $snapText | ConvertFrom-Json
+        if ($null -eq $items) { throw 'No snapshots available for restore drill.' }
+        if ($items -isnot [System.Array]) { $items = @($items) }
+        if ($items.Count -lt 1) { throw 'No snapshots available for restore drill.' }
+
+        $latest = $items | Sort-Object { try { [datetime]$_.time } catch { [datetime]::MinValue } } -Descending | Select-Object -First 1
+        $snapId = [string]$latest.id
+        if ([string]::IsNullOrWhiteSpace($snapId)) { throw 'Latest snapshot has no id.' }
+
+        $rawLs = & $resticExe ls $snapId --json 2>&1
+        $lsCode = $LASTEXITCODE
+        if ($lsCode -ne 0) {
+            throw "restic ls failed (exit $lsCode): $($rawLs | Out-String)"
+        }
+
+        $filePaths = @()
+        foreach ($item in @($rawLs)) {
+            $text = if ($item -is [System.Management.Automation.ErrorRecord]) {
+                if ($item.Exception -and $item.Exception.Message) { [string]$item.Exception.Message } else { $item.ToString() }
+            } else { [string]$item }
+            if ([string]::IsNullOrWhiteSpace($text) -or $text -notmatch '^\s*\{') { continue }
+            $obj = $null
+            try { $obj = $text.Trim() | ConvertFrom-Json } catch { continue }
+            if (-not $obj) { continue }
+            $type = ''
+            if ($obj.PSObject.Properties.Name -contains 'type' -and $obj.type) { $type = [string]$obj.type }
+            if ($type -ne 'file') { continue }
+            if (-not ($obj.PSObject.Properties.Name -contains 'path') -or [string]::IsNullOrWhiteSpace([string]$obj.path)) { continue }
+            # Exact snapshot path — do not normalize / rewrite for --include
+            $filePaths += [string]$obj.path
+        }
+        if ($filePaths.Count -lt 1) {
+            throw 'No file entries found in latest snapshot for restore drill.'
+        }
+
+        $pick = $filePaths | Get-Random
+        $restoreOut = & $resticExe restore $snapId --target $sandbox --include $pick 2>&1
+        $restoreCode = $LASTEXITCODE
+        if ($restoreCode -ne 0) {
+            throw "restic restore drill failed (exit $restoreCode) for include='$pick': $($restoreOut | Out-String)"
+        }
+
+        $found = $null
+        $candidates = @(Get-ChildItem -LiteralPath $sandbox -Recurse -File -ErrorAction SilentlyContinue)
+        foreach ($f in $candidates) {
+            if ($f.Length -gt 0) { $found = $f; break }
+        }
+        if (-not $found) {
+            throw "Restore drill completed but no non-empty file found under $sandbox (include='$pick')."
+        }
+
+        $msg = "Restore drill OK: snapshot=$snapId include=$pick size=$($found.Length)"
+        if ($LogPath) {
+            try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue } catch { }
+        }
+        return ,@{
+            Ok         = $true
+            Message    = $msg
+            Path       = $pick
+            Size       = [long]$found.Length
+            SnapshotId = $snapId
+        }
+    } catch {
+        $err = [string]$_.Exception.Message
+        if ($LogPath) {
+            try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) Restore drill FAILED: $err" -ErrorAction SilentlyContinue } catch { }
+        }
+        return ,@{
+            Ok         = $false
+            Message    = $err
+            Path       = ''
+            Size       = [long]0
+            SnapshotId = ''
+        }
+    } finally {
+        Remove-Item Env:RESTIC_PASSWORD -ErrorAction SilentlyContinue
+        Remove-Item Env:RESTIC_REPOSITORY -ErrorAction SilentlyContinue
+        Remove-Item Env:RCLONE_CONFIG -ErrorAction SilentlyContinue
+        try {
+            if (Test-Path -LiteralPath $sandbox) {
+                Remove-Item -LiteralPath $sandbox -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        } catch { }
+    }
+}

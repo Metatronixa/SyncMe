@@ -83,7 +83,9 @@ DAY TO DAY
   SyncMe.bat → Dashboard (or SyncMe-Menu.bat)
   Use Restore on Operations when you need files back (restic snapshots).
   Browse selected walks folders inside a snapshot; Use this path fills include for a partial restore.
-  Periodically re-verify: Check, or test restore to an empty folder.
+  Export Rescue Kit (Operations → More) for a printable recovery sheet — keep the password in your vault.
+  Retention & integrity: optional Append-Only Mode and pre/post backup scripts (non-interactive only).
+  Periodically re-verify: Check / Data check (includes restore drill), or test restore to an empty folder.
 
 DO NOT
   Edit Config.ps1 unless a technician asks you to.

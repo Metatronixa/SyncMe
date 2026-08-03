@@ -120,6 +120,7 @@
           <div id="opsMorePanel" class="ops-more hidden">
             <div class="quick-actions">
               <button type="button" class="btn soft" data-backup="dataCheck">Data check</button>
+              <button type="button" class="btn soft" id="btnExportRescueKit">Export Rescue Kit</button>
               <button type="button" class="btn soft hidden" id="btnStoreResticPass">Store password</button>
               <button type="button" class="btn ghost" id="btnOpenOfficeAgent">OfficeAgent folder</button>
               <button type="button" class="btn ghost" id="btnOpenReports">Open reports</button>
@@ -292,10 +293,19 @@
           </select>
         </label>
         <label class="check" style="align-self:end"><input id="polEnableCheck" type="checkbox" checked /> Enable restic check after backups</label>
+        <label class="check" style="grid-column:1/-1"><input id="polAppendOnly" type="checkbox" /> Append-Only Mode (disable prune / prevent snapshot deletion)</label>
+        <label class="field" style="grid-column:1/-1">Pre-backup script path
+          <input type="text" id="polPreScript" placeholder="C:\Scripts\pre-backup.ps1" />
+          <span class="hint">Must be non-interactive (Task Scheduler). Timeout 15 minutes.</span>
+        </label>
+        <label class="field" style="grid-column:1/-1">Post-backup script path
+          <input type="text" id="polPostScript" placeholder="C:\Scripts\post-backup.ps1" />
+          <span class="hint">Always runs when set (even if pre-script fails). Non-interactive only.</span>
+        </label>
       </div>
       <div class="actions">
         <button type="button" class="btn primary" id="btnSavePolicy">Save policy</button>
-        <button type="button" class="btn soft" data-backup="pruneOnly">Prune now</button>
+        <button type="button" class="btn soft" data-backup="pruneOnly" id="btnPolicyPrune">Prune now</button>
       </div>
     </div>
   </div>

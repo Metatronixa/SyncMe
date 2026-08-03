@@ -16,6 +16,7 @@ Simple **file-level** backup from source PCs to a Backup PC using **restic**, ma
 | **[www.syncme.co.za](https://www.syncme.co.za)** | Product site, FAQ, User Guide |
 | [`START-HERE.txt`](START-HERE.txt) | First steps after install / unzip |
 | [`UserGuide.html`](UserGuide.html) | Full how-to: wizard, sets, restore, verify, Tailscale, troubleshooting |
+| [`TECHNICAL.md`](TECHNICAL.md) | Complete technical architecture, pipelines, and API map |
 | [`RecoveryChecklist.txt`](RecoveryChecklist.txt) | Disaster recovery + password vault checklist |
 | [`LICENSE.txt`](LICENSE.txt) | Free-to-use terms and liability |
 | [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) | restic / rclone licenses |
@@ -64,6 +65,10 @@ SyncMe is an **orchestration frontend** — not a replacement for restic or rclo
 | Retention & prune | Keep* editable in console; Prune now |
 | Integrity check | Structural + weekly data subset; toggle in console |
 | Restore | Browse snapshot folders/files in Operations, then restore latest/selected (optional include path) to an empty folder |
+| Rescue Kit | Export printable HTML recovery sheet (no password) from Operations |
+| Append-only policy | Optional: skip prune and block snapshot delete |
+| Pre/Post hooks | Optional NonInteractive scripts around backup |
+| Restore drill | Random single-file restore during weekly data check |
 | Live progress + cancel | restic JSON %; cancel from console (with warning) |
 | Schedule | Once / Daily / Weekly with start (and optional end) date → Task Scheduler |
 | Wake-on-LAN | Optional MAC per set before backup / Wake button |
@@ -124,7 +129,9 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-Current release: **1.2.0**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+Current release: **1.3.0**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+
+**1.3.0** adds Rescue Kit export, append-only policy (skip prune / block deletes), stale lock auto-unlock, pre/post backup script hooks, and weekly restore drills.
 
 **1.2.0** fixes snapshot browse on Windows PowerShell 5.1 (`Argument types do not match` when opening a snapshot’s root folders).
 

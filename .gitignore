@@ -7,9 +7,6 @@ Config.ps1.bak-*
 Config/rclone.conf
 *.bak
 
-# Local marketing site (not shipped / not on GitHub)
-website/
-
 # Build output
 dist/
 

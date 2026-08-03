@@ -74,6 +74,9 @@ function ConvertTo-SyncMeSetObject {
     if (-not $obj.Contains('RcloneRetries')) { $obj['RcloneRetries'] = 3 }
     if (-not $obj.Contains('RcloneLowLevelRetries')) { $obj['RcloneLowLevelRetries'] = 10 }
     if (-not $obj.Contains('RcloneMultiThreadStreams')) { $obj['RcloneMultiThreadStreams'] = 4 }
+    if (-not $obj.Contains('AppendOnly')) { $obj['AppendOnly'] = $false }
+    if (-not $obj.Contains('PreBackupScript')) { $obj['PreBackupScript'] = '' }
+    if (-not $obj.Contains('PostBackupScript')) { $obj['PostBackupScript'] = '' }
     $obj['ExcludePatterns'] = @(Merge-SyncMeExcludePatterns -Existing $(if ($obj.Contains('ExcludePatterns')) { @($obj['ExcludePatterns']) } else { @() }))
     return [pscustomobject]$obj
 }
@@ -215,6 +218,9 @@ function Write-SyncMeLastRun {
         openFileRisk        = [string]$RunInfo.OpenFileRisk
         warnings            = @(Get-SyncMeRealErrors -Errors $RunInfo.Errors)
         logPath             = [string]$RunInfo.LogPath
+        lastRestoreDrillSuccess = $(if ($RunInfo.ContainsKey('LastRestoreDrillSuccess')) { [bool]$RunInfo.LastRestoreDrillSuccess } else { $null })
+        lastRestoreDrillDate    = [string]$RunInfo.LastRestoreDrillDate
+        lastRestoreDrillDetail  = [string]$RunInfo.LastRestoreDrillDetail
         updatedUtc          = (Get-Date).ToUniversalTime().ToString('o')
     }
     $json = $payload | ConvertTo-Json -Depth 6 -Compress

@@ -1013,6 +1013,153 @@ function Invoke-Restic {
     }
 }
 
+function Test-SyncMeResticLockError {
+    param(
+        [string]$Text,
+        [int]$ExitCode = 1
+    )
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
+    # Explicit lock-acquire messages only — do not treat timeouts / rclone HTTP errors as locks.
+    return [bool]($Text -match '(?i)unable to create lock|repository is already locked|repository is locked|lock file.*(locked|exclusively)|could not.*lock')
+}
+
+function Test-SyncMeOtherResticProcessRunning {
+    $myPid = $PID
+    $hits = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ProcessId -ne $myPid -and
+        $_.CommandLine -and (
+            $_.Name -match '(?i)^restic(\.exe)?$' -or
+            $_.CommandLine -match '(?i)restic\.exe' -or
+            $_.CommandLine -match '(?i)SyncMe-Backup\.ps1' -or
+            $_.CommandLine -match '(?i)SyncMe-Restore\.ps1'
+        )
+    })
+    return ($hits.Count -gt 0)
+}
+
+function Unlock-SyncMeStaleResticLock {
+    param(
+        [string]$ResticExe,
+        [string]$Repo,
+        [string]$Password,
+        [string]$LogPath
+    )
+    if (Test-SyncMeOtherResticProcessRunning) {
+        Write-Log 'Repository appears locked and another restic/SyncMe process is still running — not unlocking.' $LogPath 'ERROR'
+        return $false
+    }
+    Write-Log 'Stale restic lock detected from previous crashed run. Executing automatic restic unlock...' $LogPath 'WARN'
+    $env:RESTIC_REPOSITORY = $Repo
+    $env:RESTIC_PASSWORD = $Password
+    try {
+        $out = & $ResticExe unlock 2>&1 | Out-String
+        $code = $LASTEXITCODE
+        Write-Log ("restic unlock exit={0}: {1}" -f $code, $out.Trim()) $LogPath
+        return ($code -eq 0)
+    } finally {
+        Remove-Item Env:RESTIC_PASSWORD -ErrorAction SilentlyContinue
+        Remove-Item Env:RESTIC_REPOSITORY -ErrorAction SilentlyContinue
+    }
+}
+
+function Invoke-ResticWithLockRetry {
+    param(
+        [string]$ResticExe,
+        [string]$Repo,
+        [string]$Password,
+        [string[]]$Arguments,
+        [string]$LogPath,
+        [string]$JsonLogPath,
+        [string]$ProgressPhase = 'backup'
+    )
+    $result = Invoke-Restic `
+        -ResticExe $ResticExe `
+        -Repo $Repo `
+        -Password $Password `
+        -Arguments $Arguments `
+        -LogPath $LogPath `
+        -JsonLogPath $JsonLogPath `
+        -ProgressPhase $ProgressPhase
+    if ($result -is [System.Array]) {
+        $result = @($result) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('ExitCode') } | Select-Object -Last 1
+    }
+    if (-not $result) { return ,@{ ExitCode = 1; Output = @(); JsonObjects = @() } }
+    if ($result.ExitCode -eq 0 -or $result.ExitCode -eq 3) { return ,$result }
+
+    $logTail = ''
+    if ($LogPath -and (Test-Path -LiteralPath $LogPath)) {
+        try { $logTail = @(Get-Content -LiteralPath $LogPath -Tail 100 -ErrorAction SilentlyContinue) -join "`n" } catch { $logTail = '' }
+    }
+    if (-not (Test-SyncMeResticLockError -Text $logTail -ExitCode ([int]$result.ExitCode))) {
+        return ,$result
+    }
+    if (-not (Unlock-SyncMeStaleResticLock -ResticExe $ResticExe -Repo $Repo -Password $Password -LogPath $LogPath)) {
+        return ,$result
+    }
+    Write-Log 'Retrying restic operation once after unlock…' $LogPath 'WARN'
+    $retry = Invoke-Restic `
+        -ResticExe $ResticExe `
+        -Repo $Repo `
+        -Password $Password `
+        -Arguments $Arguments `
+        -LogPath $LogPath `
+        -JsonLogPath $JsonLogPath `
+        -ProgressPhase $ProgressPhase
+    if ($retry -is [System.Array]) {
+        $retry = @($retry) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('ExitCode') } | Select-Object -Last 1
+    }
+    if (-not $retry) { return ,@{ ExitCode = 1; Output = @(); JsonObjects = @() } }
+    return ,$retry
+}
+
+function Invoke-SyncMeBackupHook {
+    <#
+      Non-interactive script hook with timeout (Task Scheduler safe).
+      Returns @{ Ok = $true/$false; Message = '...' }
+    #>
+    param(
+        [string]$ScriptPath,
+        [string]$Label,
+        [string]$LogPath,
+        [int]$TimeoutSeconds = 900
+    )
+    if ([string]::IsNullOrWhiteSpace($ScriptPath)) {
+        return ,@{ Ok = $true; Message = "$Label skipped (not configured)." }
+    }
+    if (-not (Test-Path -LiteralPath $ScriptPath)) {
+        return ,@{ Ok = $false; Message = "$Label path not found: $ScriptPath" }
+    }
+    Write-Log ("Running {0}: {1} (timeout {2}s, NonInteractive)" -f $Label, $ScriptPath, $TimeoutSeconds) $LogPath
+    $argList = @(
+        '-NoProfile'
+        '-NonInteractive'
+        '-ExecutionPolicy', 'Bypass'
+        '-File', $ScriptPath
+    )
+    try {
+        $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $argList -PassThru -WindowStyle Hidden
+        $finished = $p.WaitForExit($TimeoutSeconds * 1000)
+        if (-not $finished) {
+            try { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue } catch { }
+            $msg = "$Label timed out after ${TimeoutSeconds}s and was killed."
+            Write-Log $msg $LogPath 'ERROR'
+            return ,@{ Ok = $false; Message = $msg }
+        }
+        $code = [int]$p.ExitCode
+        if ($code -ne 0) {
+            $msg = "$Label exited with code $code."
+            Write-Log $msg $LogPath 'ERROR'
+            return ,@{ Ok = $false; Message = $msg }
+        }
+        Write-Log "$Label completed successfully." $LogPath
+        return ,@{ Ok = $true; Message = "$Label OK." }
+    } catch {
+        $msg = "$Label failed: $($_.Exception.Message)"
+        Write-Log $msg $LogPath 'ERROR'
+        return ,@{ Ok = $false; Message = $msg }
+    }
+}
+
 function Get-ResticSummaryMessage {
     param($JsonObjects)
     $summary = @($JsonObjects) | Where-Object { (Get-ResticJsonProp $_ 'message_type') -eq 'summary' } | Select-Object -Last 1
@@ -1221,6 +1368,9 @@ $runInfo = @{
     RepoStatus          = 'NotChecked'
     DataCheckRan        = 'No'
     DataCheckDetail     = ''
+    LastRestoreDrillSuccess = $null
+    LastRestoreDrillDate    = ''
+    LastRestoreDrillDetail  = ''
     LogPath             = $logPath
     ResticJsonLog       = $jsonLog
     Errors              = @()
@@ -1353,6 +1503,13 @@ try {
         $runInfo.BackupExitCode = 'skipped'
         $runInfo.ArchiveDetail = 'Skipped (PruneOnly).'
         $runInfo.ArchiveStatus = 'Skipped'
+        $appendOnly = $false
+        if ($Config.PSObject.Properties.Name -contains 'AppendOnly') { $appendOnly = [bool]$Config.AppendOnly }
+        if ($appendOnly) {
+            $runInfo.PruneRan = 'No'
+            $runInfo.PruneDetail = 'AppendOnly enabled: Skipping prune operation.'
+            Write-Log $runInfo.PruneDetail $logPath 'WARN'
+        } else {
         Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'prune' -Message 'Pruning old snapshots…' -RunId $runId -JsonLog ''
         $runInfo.PruneRan = 'Yes'
         $forgetArgs = @(
@@ -1367,13 +1524,14 @@ try {
         foreach ($tag in $Config.SnapshotTags) {
             $forgetArgs += @('--tag', $tag)
         }
-        $pruneResult = Invoke-Restic `
+        $pruneResult = Invoke-ResticWithLockRetry `
             -ResticExe $resticExe `
             -Repo $Config.ResticRepo `
             -Password $resticPassword `
             -Arguments $forgetArgs `
             -LogPath $logPath `
-            -JsonLogPath $pruneJsonLog
+            -JsonLogPath $pruneJsonLog `
+            -ProgressPhase 'prune'
         if ($pruneResult -is [System.Array]) {
             $pruneResult = @($pruneResult) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('ExitCode') } | Select-Object -Last 1
         }
@@ -1387,6 +1545,7 @@ try {
             $runInfo.PruneDetail = "Forget/prune failed (exit $($pruneResult.ExitCode))."
             Write-Log $runInfo.PruneDetail $logPath 'ERROR'
             $errors.Add($runInfo.PruneDetail)
+        }
         }
     }
 
@@ -1467,7 +1626,27 @@ try {
         Write-Log "Start notification failed (ignored): $($_.Exception.Message)" $logPath 'WARN'
     }
 
-    # --- restic backup ---
+    # --- PreBackupScript (NonInteractive + timeout) then restic backup ---
+    $runBackup = $true
+    $prePath = ''
+    if ($Config.PSObject.Properties.Name -contains 'PreBackupScript') { $prePath = [string]$Config.PreBackupScript }
+    if (-not [string]::IsNullOrWhiteSpace($prePath)) {
+        $preHook = Invoke-SyncMeBackupHook -ScriptPath $prePath -Label 'PreBackupScript' -LogPath $logPath -TimeoutSeconds 900
+        if ($preHook -is [System.Array]) {
+            $preHook = @($preHook) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('Ok') } | Select-Object -Last 1
+        }
+        if (-not $preHook -or -not $preHook.Ok) {
+            $runBackup = $false
+            $overallSuccess = $false
+            $msg = if ($preHook) { [string]$preHook.Message } else { 'PreBackupScript failed.' }
+            $errors.Add($msg)
+            $runInfo.BackupExitCode = 'pre-failed'
+            $runInfo.Summary = $msg
+            Write-Log 'Aborting restic backup because PreBackupScript failed.' $logPath 'ERROR'
+        }
+    }
+
+    if ($runBackup) {
     Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'backup' -Message 'Backing up sources into Disk 1…' -RunId $runId -JsonLog ''
     $backupArgs = @(
         'backup'
@@ -1491,7 +1670,7 @@ try {
     }
     $backupArgs += $effectiveSources
 
-    $backupResult = Invoke-Restic `
+    $backupResult = Invoke-ResticWithLockRetry `
         -ResticExe $resticExe `
         -Repo $Config.ResticRepo `
         -Password $resticPassword `
@@ -1544,7 +1723,13 @@ try {
     }
 
     # --- forget --prune ---
-    if (-not $SkipPrune -and $overallSuccess) {
+    $appendOnly = $false
+    if ($Config.PSObject.Properties.Name -contains 'AppendOnly') { $appendOnly = [bool]$Config.AppendOnly }
+    if ($appendOnly) {
+        $runInfo.PruneRan = 'No'
+        $runInfo.PruneDetail = 'AppendOnly enabled: Skipping prune operation.'
+        Write-Log $runInfo.PruneDetail $logPath 'WARN'
+    } elseif (-not $SkipPrune -and $overallSuccess) {
         Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'prune' -Message 'Pruning old snapshots…' -RunId $runId -JsonLog ''
         $runInfo.PruneRan = 'Yes'
         $forgetArgs = @(
@@ -1560,13 +1745,14 @@ try {
             $forgetArgs += @('--tag', $tag)
         }
 
-        $pruneResult = Invoke-Restic `
+        $pruneResult = Invoke-ResticWithLockRetry `
             -ResticExe $resticExe `
             -Repo $Config.ResticRepo `
             -Password $resticPassword `
             -Arguments $forgetArgs `
             -LogPath $logPath `
-            -JsonLogPath $pruneJsonLog
+            -JsonLogPath $pruneJsonLog `
+            -ProgressPhase 'prune'
 
         if ($pruneResult -is [System.Array]) {
             $pruneResult = @($pruneResult) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('ExitCode') } | Select-Object -Last 1
@@ -1671,6 +1857,23 @@ try {
         Write-Log $runInfo.ArchiveDetail $logPath
     }
 
+    } # end if ($runBackup)
+
+    # PostBackupScript always runs when configured (even if Pre failed / backup skipped)
+    $postPath = ''
+    if ($Config.PSObject.Properties.Name -contains 'PostBackupScript') { $postPath = [string]$Config.PostBackupScript }
+    if (-not [string]::IsNullOrWhiteSpace($postPath)) {
+        $postHook = Invoke-SyncMeBackupHook -ScriptPath $postPath -Label 'PostBackupScript' -LogPath $logPath -TimeoutSeconds 900
+        if ($postHook -is [System.Array]) {
+            $postHook = @($postHook) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('Ok') } | Select-Object -Last 1
+        }
+        if (-not $postHook -or -not $postHook.Ok) {
+            $msg = if ($postHook) { [string]$postHook.Message } else { 'PostBackupScript failed.' }
+            Write-Log $msg $logPath 'WARN'
+            $errors.Add($msg)
+        }
+    }
+
     } # end if (-not $skipBackupPipeline)
 
     # --- restic repository integrity check ---
@@ -1683,13 +1886,18 @@ try {
     if ($enableCheck) {
         $runInfo.RepoCheckRan = 'Yes'
         Write-Log "Running structural restic check..." $logPath
-        $checkResult = Invoke-Restic `
+        $checkResult = Invoke-ResticWithLockRetry `
             -ResticExe $resticExe `
             -Repo $Config.ResticRepo `
             -Password $resticPassword `
             -Arguments @('check') `
             -LogPath $logPath `
-            -JsonLogPath $null
+            -JsonLogPath $null `
+            -ProgressPhase 'check'
+        if ($checkResult -is [System.Array]) {
+            $checkResult = @($checkResult) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('ExitCode') } | Select-Object -Last 1
+        }
+        if (-not $checkResult) { $checkResult = @{ ExitCode = 1 } }
         if ($checkResult.ExitCode -eq 0) {
             $runInfo.RepoStatus = 'OK'
             $runInfo.RepoCheckDetail = 'Structural check passed.'
@@ -1712,16 +1920,35 @@ try {
             $n = Get-WeeklyDataSubsetIndex
             $runInfo.DataCheckRan = 'Yes'
             Write-Log "Running weekly data subset check --read-data-subset=$n/7 ..." $logPath
-            $dataResult = Invoke-Restic `
+            $dataResult = Invoke-ResticWithLockRetry `
                 -ResticExe $resticExe `
                 -Repo $Config.ResticRepo `
                 -Password $resticPassword `
                 -Arguments @('check', '--read-data-subset', "$n/7") `
                 -LogPath $logPath `
-                -JsonLogPath $null
+                -JsonLogPath $null `
+                -ProgressPhase 'check'
             if ($dataResult.ExitCode -eq 0) {
                 $runInfo.DataCheckDetail = "Data subset $n/7 OK."
                 Write-Log $runInfo.DataCheckDetail $logPath
+
+                Write-Log 'Running restore drill (random file from latest snapshot)…' $logPath
+                $drill = Test-SyncMeRestoreDrill -Config $Config -SetId $ActiveSetId -LogPath $logPath
+                if ($drill -is [System.Array]) {
+                    $drill = @($drill) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('Ok') } | Select-Object -Last 1
+                }
+                $runInfo.LastRestoreDrillDate = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+                if ($drill -and $drill.Ok) {
+                    $runInfo.LastRestoreDrillSuccess = $true
+                    $runInfo.LastRestoreDrillDetail = [string]$drill.Message
+                    Write-Log $runInfo.LastRestoreDrillDetail $logPath
+                } else {
+                    $runInfo.LastRestoreDrillSuccess = $false
+                    $runInfo.LastRestoreDrillDetail = if ($drill) { [string]$drill.Message } else { 'Restore drill returned no result.' }
+                    $overallSuccess = $false
+                    Write-Log $runInfo.LastRestoreDrillDetail $logPath 'ERROR'
+                    $errors.Add($runInfo.LastRestoreDrillDetail)
+                }
             } else {
                 $overallSuccess = $false
                 $runInfo.RepoStatus = 'CORRUPTED'

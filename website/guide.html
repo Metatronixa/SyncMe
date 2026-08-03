@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SyncMe — User Guide</title>
+  <meta name="description" content="SyncMe user guide: setup, backup sets, restore, verification, restic password, Tailscale, and troubleshooting.">
+  <link rel="icon" href="assets/syncme-logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+        integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+  <link rel="stylesheet" href="css/site.css">
+</head>
+<body data-github="https://github.com/Metatronixa/SyncMe">
+
+  <nav class="navbar navbar-expand-lg site-nav sticky-top">
+    <div class="container">
+      <a class="navbar-brand" href="index.html">
+        <img class="brand-logo" src="assets/syncme-logo.svg" alt="" width="28" height="28">
+        SyncMe
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navMain"
+              aria-controls="navMain" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navMain">
+        <ul class="navbar-nav ms-auto mb-2 mb-lg-0 align-items-lg-center gap-lg-1">
+          <li class="nav-item"><a class="nav-link" href="index.html#what">What it is</a></li>
+          <li class="nav-item"><a class="nav-link" href="index.html#features">Features</a></li>
+          <li class="nav-item"><a class="nav-link" href="index.html#faq">FAQ</a></li>
+          <li class="nav-item"><a class="nav-link active" href="guide.html" aria-current="page">User Guide</a></li>
+          <li class="nav-item ms-lg-2">
+            <a class="btn btn-outline-light btn-sm px-3 js-github" href="https://github.com/Metatronixa/SyncMe" target="_blank" rel="noopener noreferrer">GitHub</a>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container page-hero">
+    <h1>User Guide</h1>
+    <p class="lede">
+      File-level backup on a Backup PC with restic — LAN and/or Tailscale sources,
+      local disk, NAS, or cloud via rclone. Same guide as in-app <code>UserGuide.html</code>.
+    </p>
+    <p class="text-muted small mb-0">
+      <a href="https://www.syncme.co.za">www.syncme.co.za</a> ·
+      Start with <code>START-HERE.txt</code> after install ·
+      <a href="index.html#faq">FAQ</a>
+    </p>
+  </div>
+
+  <div class="container guide-shell">
+    <aside class="guide-toc" aria-label="Guide contents">
+      <nav>
+        <div class="nav-group">Start</div>
+        <a href="#overview">Overview</a>
+        <a href="#what-you-need">What you need</a>
+        <a href="#limitations">Limitations</a>
+
+        <div class="nav-group">Concepts</div>
+        <a href="#exit-codes">Exit codes</a>
+        <a href="#logs">Logs &amp; reports</a>
+        <a href="#glossary">Glossary</a>
+
+        <div class="nav-group">Setup</div>
+        <a href="#wizard">Setup wizard</a>
+        <a href="#sets">Backup sets</a>
+        <a href="#shadow">Shadow copies</a>
+        <a href="#email">Email</a>
+        <a href="#repocheck">Integrity checks</a>
+        <a href="#tailscale">Tailscale</a>
+
+        <div class="nav-group">Use</div>
+        <a href="#day-to-day">Day to day</a>
+        <a href="#restore">Restore</a>
+        <a href="#troubleshooting">Troubleshooting</a>
+        <a href="#checklist">Checklist</a>
+        <a href="#credits">Third-party tools</a>
+      </nav>
+    </aside>
+
+    <div class="guide-main">
+      <section class="card" id="overview">
+        <h2>Overview</h2>
+        <p>
+          SyncMe runs <strong>only on the Backup PC</strong>. Source PCs only need shared folders
+          (plus Tailscale when offsite). You create one or more <strong>backup sets</strong> —
+          each with its own sources, schedule, and restic repository destination.
+        </p>
+        <div class="diagram">Source PCs (UNC shares)
+        |  LAN and/or Tailscale SMB
+        v
+Backup PC  —  SyncMe console + Task Scheduler
+        |
+        +-- Backup set A --> restic repo (local / NAS / rclone)
+        +-- Backup set B --> restic repo (local / NAS / rclone)
+        +-- ...</div>
+        <ul>
+          <li>Version history comes from <strong>restic snapshots</strong>.</li>
+          <li>LAN-only is fine; Tailscale is optional for offsite sources.</li>
+          <li>Cloud destinations use rclone as restic’s backend (OAuth from the console).</li>
+        </ul>
+      </section>
+
+      <section class="card" id="what-you-need">
+        <h2>What you need before starting</h2>
+        <ul>
+          <li>One Windows <strong>Backup PC</strong> (Windows 10/11 or Windows Server) where SyncMe is installed.</li>
+          <li>One or more <strong>source PCs</strong> with folders shared as UNC
+              (e.g. <code>\\pc-name\Data</code> or <code>\\pc-name\C$\Users\…</code>).</li>
+          <li>Network path: <strong>LAN</strong>, <strong>Tailscale</strong>, or both.</li>
+          <li>Space for each set’s <strong>restic repository</strong> (local disk, NAS UNC, or cloud via rclone).</li>
+          <li><strong>restic</strong> (wizard can install). <strong>rclone</strong> for OneDrive/Google Drive.</li>
+          <li>A password manager for the restic repository password.</li>
+          <li>Time for the first seed backup (hours or longer depending on data size and network).</li>
+        </ul>
+        <div class="callout warn">
+          <strong>Password safety</strong>
+          The restic password encrypts the repository. If you lose it, you cannot restore or recover.
+          Save it in a password manager or other safe place when you create it — Credential Manager on the Backup PC
+          is not enough if that machine dies. Do not put passwords in <code>Config.ps1</code>.
+        </div>
+      </section>
+
+      <section class="card" id="limitations">
+        <h2>Limitations &amp; liability</h2>
+        <p><strong>SyncMe is a simple way to back up files</strong> — UNC sources into restic,
+          with optional cloud via rclone OAuth.</p>
+        <h3>What SyncMe does</h3>
+        <ul>
+          <li>File/folder backup into versioned restic repositories (one per set).</li>
+          <li>HTML console for setup, schedule, restore, and cloud OAuth.</li>
+          <li>Email/toast notifications and repository integrity checks.</li>
+        </ul>
+        <h3>What SyncMe does <em>not</em> do</h3>
+        <ul>
+          <li><strong>Not bare-metal / full-disk imaging</strong> — use a separate imaging tool for whole-system restore.</li>
+          <li><strong>Not antivirus or ransomware protection</strong> — encrypted or wiped disks/shares are still possible.</li>
+          <li><strong>You must verify backups and restores</strong> — locked files (exit 3), network drops, excludes, or cloud throttling can leave gaps. Use dry run, Reports/Logs, Operations Check, and a test restore to an empty folder against your sources.</li>
+          <li><strong>Not a multi-tenant SaaS</strong> — console binds to localhost on the Backup PC.</li>
+        </ul>
+        <div class="callout warn">
+          <strong>Restic password</strong>
+          Without it there is no restore or recovery.
+          Save it in a <strong>password manager or other safe place</strong> when you create it.
+          Credential Manager keeps this Backup PC able to run jobs; your vault copy is for disaster recovery if the PC dies.
+        </div>
+        <div class="callout danger">
+          <strong>Ransomware &amp; liability</strong>
+          SyncMe cannot stop ransomware. The author is not liable for data loss, ransomware, malware, or related claims.
+          See <code>LICENSE.txt</code>. Contact: <a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a>
+        </div>
+      </section>
+
+      <section class="card" id="exit-codes">
+        <h2>Exit codes &amp; file failures</h2>
+        <h3>If a source file cannot be read</h3>
+        <p>
+          restic still creates a <strong>snapshot</strong> of everything it could read. Unreadable files are skipped.
+          restic returns <strong>exit code 3</strong>. SyncMe logs a <strong>WARN</strong>, tags the summary with
+          <code>EXIT3</code>, and (when otherwise successful) continues prune and updates last-success.
+          Prefer Shadow Copies / OfficeAgent for open Office files.
+        </p>
+        <h3>If the backup stops halfway</h3>
+        <p>
+          No half-finished snapshot is committed. The next run is a fresh backup; restic dedupes already-stored chunks.
+        </p>
+        <table>
+          <thead><tr><th>Code</th><th>Meaning</th><th>SyncMe behavior</th></tr></thead>
+          <tbody>
+            <tr><td><code>0</code></td><td>Success</td><td>OK</td></tr>
+            <tr><td><code>1</code></td><td>Fatal error</td><td>FAILED</td></tr>
+            <tr><td><code>2</code></td><td>Go runtime error</td><td>FAILED</td></tr>
+            <tr><td><code>3</code></td><td>Some source files unread</td><td>WARN / EXIT3 — snapshot often usable</td></tr>
+            <tr><td><code>10</code></td><td>Repo does not exist</td><td>FAILED — init via wizard</td></tr>
+            <tr><td><code>11</code></td><td>Repo already exists</td><td>Usually only during init</td></tr>
+            <tr><td><code>12</code></td><td>Wrong password</td><td>FAILED — Credential Manager</td></tr>
+            <tr><td><code>130</code></td><td>Interrupted</td><td>No new snapshot; retry later</td></tr>
+          </tbody>
+        </table>
+        <p>Email subjects use <code>STARTED</code>, <code>SUCCESS</code>, <code>FAILED</code>, or <code>CRITICAL</code> (repo check failure).</p>
+      </section>
+
+      <section class="card" id="logs">
+        <h2>Logs &amp; reports</h2>
+        <p>Per run under <code>Logs\</code> (often <code>Logs\sets\&lt;setId&gt;\</code>) and <code>Reports\</code>:</p>
+        <table>
+          <thead><tr><th>Artifact</th><th>What it is</th></tr></thead>
+          <tbody>
+            <tr><td><code>backup-*.log</code></td><td><code>[timestamp] [INFO|WARN|ERROR] message</code></td></tr>
+            <tr><td><code>restic-*.jsonl</code></td><td>restic <code>--json</code> progress / summary</td></tr>
+            <tr><td><code>Reports\backup-*.html</code></td><td>End-of-run HTML summary</td></tr>
+            <tr><td><code>last-success-utc.txt</code></td><td>Watchdog overdue stamp</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card" id="glossary">
+        <h2>Glossary</h2>
+        <table>
+          <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Backup PC</td><td>Machine where SyncMe is installed and scheduled jobs run</td></tr>
+            <tr><td>Source UNC</td><td>Folder path like <code>\\pc\share</code> or <code>\\pc\C$\Users\…</code></td></tr>
+            <tr><td>Backup set</td><td>Named config: sources + destination + schedule + secrets</td></tr>
+            <tr><td>restic repo</td><td>Versioned encrypted repository for that set</td></tr>
+            <tr><td>Network mode</td><td>LAN, Tailscale, or both</td></tr>
+            <tr><td>rclone remote</td><td>Cloud backend (e.g. OneDrive) for a restic repo</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card" id="wizard">
+        <h2>Setup wizard</h2>
+        <p><span class="chip">Backup PC</span> Double-click <code>SyncMe.bat</code>.</p>
+        <p>Browser opens <code>http://127.0.0.1:17845/</code>. Complete the wizard once:</p>
+        <ol>
+          <li>Confirm this is the Backup PC; name the backup set.</li>
+          <li>Prerequisites — install restic (and rclone if needed).</li>
+          <li>Network mode + source UNC folders.</li>
+          <li>Destination — local folder, NAS UNC, or cloud (rclone OAuth).</li>
+          <li>Passwords (Credential Manager), optional email, schedule.</li>
+          <li>Apply — Task Scheduler registers the job.</li>
+        </ol>
+        <div class="callout">
+          <strong>Recommended path</strong>
+          Use the wizard and dashboard. You do not need to edit <code>Config.ps1</code> by hand for a normal install.
+        </div>
+      </section>
+
+      <section class="card" id="sets">
+        <h2>Backup sets</h2>
+        <p>
+          Use <strong>Add backup set</strong> for another source PC, user, or schedule.
+          Each set has its own restic repository path, task, and last-success stamp.
+          The SyncMe-Watchdog task watches <em>all</em> sets for overdue runs.
+        </p>
+        <p>Stagger run times when several sets share the same Backup PC or uplink.</p>
+      </section>
+
+      <section class="card" id="shadow">
+        <h2>Shadow copies (open Office files)</h2>
+        <p>
+          VSS cannot be created across SMB from the Backup PC. On the <strong>source</strong> PC, enable
+          Shadow Copies for Shared Folders, then run <code>OfficeAgent\Enable-SyncMeShadowCopies.ps1</code> (elevated).
+        </p>
+        <div class="callout warn">
+          <strong>restic exit code 3</strong>
+          Often open .xlsx/.docx/.pst on a live share. Prefer ShadowCopy mode. See <a href="#exit-codes">exit codes</a>.
+        </div>
+      </section>
+
+      <section class="card" id="email">
+        <h2>Email notifications</h2>
+        <p>Optional SMTP from the wizard. Subjects include <code>STARTED</code>, <code>SUCCESS</code>, <code>FAILED</code>, or <code>CRITICAL</code>.
+          Passwords stay in Credential Manager (<code>SyncMeSmtp</code>).</p>
+      </section>
+
+      <section class="card" id="repocheck">
+        <h2>Repository integrity checks</h2>
+        <ul>
+          <li>Structural <code>restic check</code> (configurable).</li>
+          <li>Weekly data subset check rotating by weekday.</li>
+          <li>Automated <strong>restore drill</strong> (random single file) during data checks (SyncMe 1.3.0+).</li>
+          <li>Failures can mark the run CRITICAL and fail the job.</li>
+        </ul>
+      </section>
+
+      <section class="card" id="policy">
+        <h2>Retention, append-only, and hooks (1.3.0)</h2>
+        <p>Dashboard → <strong>Retention &amp; integrity</strong>:</p>
+        <ul>
+          <li>Keep last / daily / weekly / monthly policies and prune.</li>
+          <li><strong>Append-Only Mode</strong> — SyncMe skips prune and blocks snapshot deletion for that set.</li>
+          <li><strong>Pre/post backup scripts</strong> — must be non-interactive (Task Scheduler). Post still runs if pre fails.</li>
+        </ul>
+      </section>
+
+      <section class="card" id="tailscale">
+        <h2>Tailscale (optional)</h2>
+        <p>Only needed when the Backup PC cannot reach source shares on the LAN.</p>
+        <ol>
+          <li>Install Tailscale on source and Backup PC; same account / tailnet.</li>
+          <li>Confirm <code>tailscale status</code> and that UNC paths work.</li>
+          <li>In SyncMe, set network mode to Tailscale or Both.</li>
+        </ol>
+      </section>
+
+      <section class="card" id="day-to-day">
+        <h2>Day to day</h2>
+        <ul>
+          <li><code>SyncMe.bat</code> or <code>SyncMe-Menu.bat</code> — dashboard / operations.</li>
+          <li>Scheduled jobs run without leaving the console open.</li>
+          <li>Switch sets on the dashboard; Run now / dry run / prune from Operations.</li>
+          <li>Keep both ends awake for the backup window on large first seeds.</li>
+        </ul>
+      </section>
+
+      <section class="card" id="restore">
+        <h2>Restore</h2>
+        <ol>
+          <li>Operations → refresh snapshots.</li>
+          <li>Select a snapshot → <strong>Browse selected</strong> to walk folders; <strong>Use this path</strong> for optional include.</li>
+          <li>Restore latest or selected snapshot to an <strong>empty folder outside</strong> the live restic repo (never into the source share).</li>
+          <li>Optional: <strong>More… → Export Rescue Kit</strong> for printable recovery instructions (password stays in your vault).</li>
+        </ol>
+        <div class="callout">
+          <strong>Verify against the source</strong>
+          Spot-check restored files (names, sizes, dates) against the live share for critical paths.
+          After backups: read Reports/Logs (exit 3 = unread files), run Operations Check / Data check, and periodically test-restore.
+          You need the restic password — keep a vault copy, not only Credential Manager.
+        </div>
+        <p>See also <code>RecoveryChecklist.txt</code> and the <a href="index.html#faq">FAQ</a>.</p>
+      </section>
+
+      <section class="card" id="troubleshooting">
+        <h2>Troubleshooting</h2>
+        <table>
+          <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
+          <tbody>
+            <tr><td>Cannot reach share</td><td>UNC path, share permissions, LAN/Tailscale, share credentials</td></tr>
+            <tr><td>Wrong password / exit 12</td><td>Operations → Store password; must match <code>restic init</code></td></tr>
+            <tr><td>Exit code 3</td><td>Locked files — Shadow Copies / close Office; read log for paths</td></tr>
+            <tr><td>Cloud / OAuth fails</td><td>Install rclone; re-run OAuth; check bandwidth/throttling</td></tr>
+            <tr><td>Task does not run unattended</td><td>Same Windows account as Credential Manager; “run whether logged on”</td></tr>
+            <tr><td>Port 17845 in use</td><td>Close another SyncMe Host window</td></tr>
+            <tr><td>Prune / delete blocked</td><td>Append-Only Mode is enabled — Retention &amp; integrity</td></tr>
+            <tr><td>Need offline recovery sheet</td><td>Operations → More → Export Rescue Kit</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card" id="checklist">
+        <h2>Final checklist</h2>
+        <div class="checklist">
+          <label><input type="checkbox"> SyncMe installed only on Backup PC</label>
+          <label><input type="checkbox"> Source UNC reachable (LAN and/or Tailscale)</label>
+          <label><input type="checkbox"> At least one backup set applied with schedule</label>
+          <label><input type="checkbox"> restic password stored offline + Credential Manager</label>
+          <label><input type="checkbox"> Rescue Kit exported after major set changes</label>
+          <label><input type="checkbox"> Smoke test / dry run succeeded</label>
+          <label><input type="checkbox"> Restore of a sample file verified against source</label>
+          <label><input type="checkbox"> Email or watchdog configured if you want alerts</label>
+        </div>
+      </section>
+
+      <section class="card" id="credits">
+        <h2>Third-party tools</h2>
+        <p>
+          SyncMe orchestrates separate open-source programs. SyncMe is <strong>not affiliated with</strong> or endorsed by their authors.
+        </p>
+        <ul>
+          <li><strong>restic</strong> — BSD-2-Clause — <a href="https://restic.net" target="_blank" rel="noopener noreferrer">restic.net</a></li>
+          <li><strong>rclone</strong> — MIT — <a href="https://rclone.org" target="_blank" rel="noopener noreferrer">rclone.org</a></li>
+          <li><strong>Tailscale</strong> — optional, for offsite UNC access</li>
+        </ul>
+        <p>Full notices: <code>THIRD-PARTY-NOTICES.txt</code> in the SyncMe folder.</p>
+      </section>
+
+      <p class="text-muted small mb-0">
+        Same content as the in-app <code>UserGuide.html</code>. Free to use — keep author credit.
+        Package builds: <code>Build-SyncMePackage.ps1</code> / <code>Build-SyncMeSetup.ps1</code> → GitHub Release assets when published.
+        <a href="index.html#faq">Back to FAQ</a> ·
+        <a href="index.html">Home</a>
+      </p>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="container footer-row">
+      <a class="footer-brand" href="index.html">
+        <img src="assets/syncme-logo.svg" alt="" width="24" height="24">
+        SyncMe
+      </a>
+      <div class="footer-links">
+        <a href="index.html">www.syncme.co.za</a>
+        <a href="guide.html">User Guide</a>
+        <a href="index.html#faq">FAQ</a>
+        <a class="js-github" href="https://github.com/Metatronixa/SyncMe" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a>
+        <span>&copy; <span id="year">2026</span> Bradford Lotriet</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+          crossorigin="anonymous"></script>
+  <script src="js/site.js"></script>
+</body>
+</html>

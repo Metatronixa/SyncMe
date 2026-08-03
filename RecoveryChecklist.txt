@@ -6,6 +6,7 @@ Free to use — keep this credit. See LICENSE.txt
 KEEP THESE SAFE (offline + password manager):
 [ ] restic repository password — REQUIRED for any restore (Credential Manager: SyncMeRestic or SyncMeRestic-<setId>)
     Keep a vault copy outside the Backup PC. Lose this password = repository unrecoverable.
+[ ] Printed or stored SyncMe Rescue Kit HTML (Operations → More → Export Rescue Kit) — does NOT contain the password
 [ ] SMTP / share passwords if used (SyncMeSmtp, SyncMeShare / SyncMeShare-<setId>)
 [ ] Windows account password for the SyncMe task (Task Scheduler "run whether logged on")
 [ ] This checklist printed or stored offline
@@ -14,8 +15,9 @@ KEEP THESE SAFE (offline + password manager):
 VERIFY AFTER BACKUP / BEFORE YOU NEED A REAL DISASTER RESTORE:
 [ ] Run dry run after setup Apply, then a real backup
 [ ] Read Reports/Logs (exit 3 = some source files unread)
-[ ] Operations Check (repo health)
+[ ] Operations Check / Data check (weekly data check may run a restore drill)
 [ ] Restore to an EMPTY test folder; spot-check critical paths vs the source
+[ ] Export Rescue Kit after each major set change
 
 IF THE RESTIC REPO IS HEALTHY:
 1. On the Backup PC, open SyncMe-Menu.bat -> Operations / Restore
