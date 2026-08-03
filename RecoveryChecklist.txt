@@ -15,7 +15,7 @@ KEEP THESE SAFE (offline + password manager):
 VERIFY AFTER BACKUP / BEFORE YOU NEED A REAL DISASTER RESTORE:
 [ ] Run dry run after setup Apply, then a real backup
 [ ] Read Reports/Logs (exit 3 = some source files unread)
-[ ] Operations Check / Data check (weekly data check may run a restore drill)
+[ ] Operations Check / Data check (weekly data check may run an advisory restore drill; FAIL does not fail the job)
 [ ] Restore to an EMPTY test folder; spot-check critical paths vs the source
 [ ] Export Rescue Kit after each major set change
 

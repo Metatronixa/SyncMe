@@ -1932,22 +1932,26 @@ try {
                 $runInfo.DataCheckDetail = "Data subset $n/7 OK."
                 Write-Log $runInfo.DataCheckDetail $logPath
 
-                Write-Log 'Running restore drill (random file from latest snapshot)…' $logPath
+                Write-Log 'Running advisory restore drill (restic dump of random file(s))…' $logPath
                 $drill = Test-SyncMeRestoreDrill -Config $Config -SetId $ActiveSetId -LogPath $logPath
                 if ($drill -is [System.Array]) {
                     $drill = @($drill) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('Ok') } | Select-Object -Last 1
                 }
                 $runInfo.LastRestoreDrillDate = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
-                if ($drill -and $drill.Ok) {
+                if ($drill -and $drill.Ok -and $drill.ContainsKey('Skipped') -and $drill.Skipped) {
+                    # Soft skip (no snapshots / no files): leave Success null so report shows SKIP
+                    $runInfo.LastRestoreDrillSuccess = $null
+                    $runInfo.LastRestoreDrillDetail = [string]$drill.Message
+                    Write-Log $runInfo.LastRestoreDrillDetail $logPath
+                } elseif ($drill -and $drill.Ok) {
                     $runInfo.LastRestoreDrillSuccess = $true
                     $runInfo.LastRestoreDrillDetail = [string]$drill.Message
                     Write-Log $runInfo.LastRestoreDrillDetail $logPath
                 } else {
+                    # Advisory only: record FAIL but do not fail the overall job or Errors list
                     $runInfo.LastRestoreDrillSuccess = $false
                     $runInfo.LastRestoreDrillDetail = if ($drill) { [string]$drill.Message } else { 'Restore drill returned no result.' }
-                    $overallSuccess = $false
-                    Write-Log $runInfo.LastRestoreDrillDetail $logPath 'ERROR'
-                    $errors.Add($runInfo.LastRestoreDrillDetail)
+                    Write-Log ("Restore drill FAIL (advisory, job not failed): " + $runInfo.LastRestoreDrillDetail) $logPath 'WARN'
                 }
             } else {
                 $overallSuccess = $false

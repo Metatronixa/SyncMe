@@ -68,7 +68,7 @@ SyncMe is an **orchestration frontend** — not a replacement for restic or rclo
 | Rescue Kit | Export printable HTML recovery sheet (no password) from Operations |
 | Append-only policy | Optional: skip prune and block snapshot delete |
 | Pre/Post hooks | Optional NonInteractive scripts around backup |
-| Restore drill | Random single-file restore during weekly data check |
+| Restore drill | Advisory: dumps up to 3 random files during weekly data check (PASS/FAIL/SKIP in report; does not fail the job) |
 | Live progress + cancel | restic JSON %; cancel from console (with warning) |
 | Schedule | Once / Daily / Weekly with start (and optional end) date → Task Scheduler |
 | Wake-on-LAN | Optional MAC per set before backup / Wake button |
@@ -129,7 +129,9 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-Current release: **1.3.0**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+Current release: **1.3.1**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+
+**1.3.1** makes the weekly restore drill advisory (report PASS/FAIL/SKIP only; never fails the overall job), verifies with `restic dump` plus retries, and soft-skips when no snapshots/files exist. Official setup zips still do not bundle restic/rclone (install from the console).
 
 **1.3.0** adds Rescue Kit export, append-only policy (skip prune / block deletes), stale lock auto-unlock, pre/post backup script hooks, and weekly restore drills.
 

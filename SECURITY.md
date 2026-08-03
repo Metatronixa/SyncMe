@@ -165,9 +165,9 @@ Encrypted backups that nobody verifies are a false sense of safety. Operators sh
 
 1. Run dry run, then a real backup.
 2. Read Reports and Logs (restic exit 3 often means some files were locked/unread).
-3. Use Operations Check (structural and weekly data subset).
+3. Use Operations Check (structural and weekly data subset). Structural check and data-subset failures fail the job.
 4. Restore to an empty test folder and spot-check critical paths.
-5. Keep the weekly restore drill results in mind when they run.
+5. Review the weekly restore drill line in the HTML report (PASS / FAIL / SKIP). From **1.3.1** the drill is advisory only: it uses `restic dump` with retries, soft-skips when no snapshots/files exist, and never fails the overall job by itself. Treat a repeated FAIL as a signal to investigate restore health, not as a backup outage.
 
 ## What is in scope
 

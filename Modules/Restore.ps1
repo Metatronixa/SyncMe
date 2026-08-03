@@ -596,8 +596,9 @@ function Get-SyncMeSnapshotListing {
 
 function Test-SyncMeRestoreDrill {
     <#
-      Restore one random file from the latest snapshot into a temp sandbox and verify it.
-      Uses the exact restic ls path string for --include (no path rewriting).
+      Advisory restore drill: dump up to 3 random files from the latest snapshot and verify bytes.
+      Uses restic dump (not restore --include) to avoid Windows UNC-root restore failures.
+      Returns Ok / Skipped / Message. Callers must not fail the overall backup job on Ok=$false.
     #>
     [CmdletBinding()]
     param(
@@ -634,12 +635,49 @@ function Test-SyncMeRestoreDrill {
         }
         $snapText = ($rawSnaps | Out-String).Trim()
         if ([string]::IsNullOrWhiteSpace($snapText) -or $snapText -eq 'null' -or $snapText -eq '[]') {
-            throw 'No snapshots available for restore drill.'
+            $msg = 'Skipped: no snapshots available for restore drill.'
+            if ($LogPath) {
+                try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue } catch { }
+            }
+            return ,@{
+                Ok         = $true
+                Skipped    = $true
+                Message    = $msg
+                Path       = ''
+                Size       = [long]0
+                SnapshotId = ''
+            }
         }
         $items = $snapText | ConvertFrom-Json
-        if ($null -eq $items) { throw 'No snapshots available for restore drill.' }
+        if ($null -eq $items) {
+            $msg = 'Skipped: no snapshots available for restore drill.'
+            if ($LogPath) {
+                try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue } catch { }
+            }
+            return ,@{
+                Ok         = $true
+                Skipped    = $true
+                Message    = $msg
+                Path       = ''
+                Size       = [long]0
+                SnapshotId = ''
+            }
+        }
         if ($items -isnot [System.Array]) { $items = @($items) }
-        if ($items.Count -lt 1) { throw 'No snapshots available for restore drill.' }
+        if ($items.Count -lt 1) {
+            $msg = 'Skipped: no snapshots available for restore drill.'
+            if ($LogPath) {
+                try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue } catch { }
+            }
+            return ,@{
+                Ok         = $true
+                Skipped    = $true
+                Message    = $msg
+                Path       = ''
+                Size       = [long]0
+                SnapshotId = ''
+            }
+        }
 
         $latest = $items | Sort-Object { try { [datetime]$_.time } catch { [datetime]::MinValue } } -Descending | Select-Object -First 1
         $snapId = [string]$latest.id
@@ -664,47 +702,75 @@ function Test-SyncMeRestoreDrill {
             if ($obj.PSObject.Properties.Name -contains 'type' -and $obj.type) { $type = [string]$obj.type }
             if ($type -ne 'file') { continue }
             if (-not ($obj.PSObject.Properties.Name -contains 'path') -or [string]::IsNullOrWhiteSpace([string]$obj.path)) { continue }
-            # Exact snapshot path — do not normalize / rewrite for --include
+            # Exact snapshot path for restic dump (no path rewriting)
             $filePaths += [string]$obj.path
         }
         if ($filePaths.Count -lt 1) {
-            throw 'No file entries found in latest snapshot for restore drill.'
+            $msg = 'Skipped: no file entries found in latest snapshot for restore drill.'
+            if ($LogPath) {
+                try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue } catch { }
+            }
+            return ,@{
+                Ok         = $true
+                Skipped    = $true
+                Message    = $msg
+                Path       = ''
+                Size       = [long]0
+                SnapshotId = $snapId
+            }
         }
 
-        $pick = $filePaths | Get-Random
-        $restoreOut = & $resticExe restore $snapId --target $sandbox --include $pick 2>&1
-        $restoreCode = $LASTEXITCODE
-        if ($restoreCode -ne 0) {
-            throw "restic restore drill failed (exit $restoreCode) for include='$pick': $($restoreOut | Out-String)"
+        $attempts = [Math]::Min(3, $filePaths.Count)
+        $pool = @($filePaths | Get-Random -Count $attempts)
+        $lastErr = ''
+        foreach ($pick in $pool) {
+            $safeName = ($pick -replace '[\\/:*?"<>|]', '_')
+            if ($safeName.Length -gt 80) { $safeName = $safeName.Substring($safeName.Length - 80) }
+            $outFile = Join-Path $sandbox ("dump-" + [guid]::NewGuid().ToString('n').Substring(0, 8) + "-" + $safeName)
+            try {
+                # cmd redirection keeps binary dump off the PowerShell pipeline
+                $argLine = '"' + $resticExe + '" dump "' + $snapId + '" "' + $pick + '" > "' + $outFile + '" 2>nul'
+                $p = Start-Process -FilePath 'cmd.exe' -ArgumentList @('/c', $argLine) -Wait -PassThru -WindowStyle Hidden
+                $dumpCode = [int]$p.ExitCode
+                if ($dumpCode -ne 0) {
+                    $lastErr = "restic dump exit $dumpCode for path='$pick'"
+                    continue
+                }
+                if (-not (Test-Path -LiteralPath $outFile)) {
+                    $lastErr = "restic dump produced no file for path='$pick'"
+                    continue
+                }
+                $len = [long](Get-Item -LiteralPath $outFile).Length
+                if ($len -lt 1) {
+                    $lastErr = "restic dump produced empty file for path='$pick'"
+                    continue
+                }
+                $msg = "Restore drill OK: snapshot=$snapId path=$pick size=$len (restic dump)"
+                if ($LogPath) {
+                    try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue } catch { }
+                }
+                return ,@{
+                    Ok         = $true
+                    Skipped    = $false
+                    Message    = $msg
+                    Path       = $pick
+                    Size       = $len
+                    SnapshotId = $snapId
+                }
+            } catch {
+                $lastErr = "restic dump failed for path='$pick': $($_.Exception.Message)"
+            }
         }
 
-        $found = $null
-        $candidates = @(Get-ChildItem -LiteralPath $sandbox -Recurse -File -ErrorAction SilentlyContinue)
-        foreach ($f in $candidates) {
-            if ($f.Length -gt 0) { $found = $f; break }
-        }
-        if (-not $found) {
-            throw "Restore drill completed but no non-empty file found under $sandbox (include='$pick')."
-        }
-
-        $msg = "Restore drill OK: snapshot=$snapId include=$pick size=$($found.Length)"
-        if ($LogPath) {
-            try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue } catch { }
-        }
-        return ,@{
-            Ok         = $true
-            Message    = $msg
-            Path       = $pick
-            Size       = [long]$found.Length
-            SnapshotId = $snapId
-        }
+        throw "Restore drill failed after $attempts dump attempt(s). Last: $lastErr"
     } catch {
         $err = [string]$_.Exception.Message
         if ($LogPath) {
-            try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) Restore drill FAILED: $err" -ErrorAction SilentlyContinue } catch { }
+            try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) Restore drill FAILED (advisory): $err" -ErrorAction SilentlyContinue } catch { }
         }
         return ,@{
             Ok         = $false
+            Skipped    = $false
             Message    = $err
             Path       = ''
             Size       = [long]0

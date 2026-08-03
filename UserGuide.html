@@ -485,9 +485,9 @@ Backup PC  —  SyncMe console + Task Scheduler
           <li>Optional: Operations → <strong>More…</strong> → <strong>Export Rescue Kit</strong> for a printable recovery sheet (repo path + Credential Manager target — password stays in your vault).</li>
         </ol>
         <div class="callout">
-          <strong>Retention &amp; integrity (1.3.0)</strong>
+          <strong>Retention &amp; integrity (1.3.0+)</strong>
           Dashboard → <strong>Retention &amp; integrity</strong>: keep policies, optional <strong>Append-Only Mode</strong> (skips prune / blocks snapshot delete), and optional pre/post backup script paths (must be non-interactive for Task Scheduler).
-          Weekly data checks can run an automated single-file restore drill.
+          Weekly data checks run an <strong>advisory</strong> restore drill (`restic dump` of up to three random files). Results show as PASS / FAIL / SKIP in the HTML report and do <strong>not</strong> fail the overall job. Structural check and data-subset failures still fail the run.
         </div>
         <div class="callout">
           <strong>Windows note</strong>

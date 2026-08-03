@@ -30,7 +30,8 @@ CUSTOMER PACKAGE (minimal)
 UPDATE FROM THIS PROJECT (technicians)
   On the Backup PC, from THIS SyncMe folder:
     .\Deploy-SyncMe.ps1 -Target C:\SyncMe
-  That keeps your existing Config.ps1 and copies tools\restic.exe when present.
+  That keeps your existing Config.ps1. restic/rclone are not copied from the repo;
+  install them from the SyncMe console (Prerequisites) or ensure they are on PATH.
   Then run SyncMe.bat.
 
 WINDOWS SERVER (customer / unattended)
@@ -85,7 +86,8 @@ DAY TO DAY
   Browse selected walks folders inside a snapshot; Use this path fills include for a partial restore.
   Export Rescue Kit (Operations → More) for a printable recovery sheet — keep the password in your vault.
   Retention & integrity: optional Append-Only Mode and pre/post backup scripts (non-interactive only).
-  Periodically re-verify: Check / Data check (includes restore drill), or test restore to an empty folder.
+  Periodically re-verify: Check / Data check (includes advisory restore drill in the report),
+  or test restore to an empty folder. A drill FAIL is logged but does not fail the job.
 
 DO NOT
   Edit Config.ps1 unless a technician asks you to.

@@ -1,6 +1,6 @@
 # SyncMe — Technical Breakdown
 
-**Version:** 1.3.0 (see [`VERSION.txt`](VERSION.txt))  
+**Version:** 1.3.1 (see [`VERSION.txt`](VERSION.txt))  
 **Website:** [www.syncme.co.za](https://www.syncme.co.za)  
 **Copyright © 2026 Bradford Lotriet** (`brad@web-zilla.co.za`)
 
@@ -128,7 +128,7 @@ flowchart LR
 | Cloud OAuth | Add OneDrive / Google Drive from wizard or Cloud settings |
 | rclone bandwidth | `RCLONE_BWLIMIT`, transfers/retries; optional restic upload limit |
 | Retention & prune | KeepLast / Daily / Weekly / Monthly; Prune now |
-| Integrity check | Structural `restic check`; optional weekly data subset + restore drill |
+| Integrity check | Structural `restic check`; optional weekly data subset + advisory restore drill (`restic dump`, does not fail the job) |
 | Snapshot browse | Lazy one-level listing in Operations (no Windows mount) |
 | Restore | Latest or selected snapshot; optional include path; Suggest target |
 | Rescue Kit | Printable HTML export (repo paths, credential target, recovery steps — no password) |
@@ -354,7 +354,7 @@ All APIs are served by [`SyncMe-Host.ps1`](SyncMe-Host.ps1) on `http://127.0.0.1
 | `Build-SyncMeSetup.ps1` | `dist\SyncMe-Setup-<VERSION>\` with `SyncMe-Setup.cmd` + `SyncMe-Payload.zip` (+ START-HERE). Unpacks to `C:\SyncMe`, keeps existing `Config.ps1`. Does **not** ship `website/`. |
 | `Build-SyncMePackage.ps1` | Full zip `dist\SyncMe-<VERSION>.zip` (same product include list). |
 | `Deploy-SyncMe.ps1` | Copy project → target (default `C:\SyncMe`); preserve Config and set JSON under Logs; stop running host; copy `tools\` binaries. |
-| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.3.0`). |
+| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.3.1`). |
 
 **Typical shipped include list:** bats, host/backup/restore/watchdog, Register/Deploy, Config template, docs (including this file), Modules, ui, OfficeAgent, tools — not `website/`, not customer log/report contents beyond placeholders.
 
