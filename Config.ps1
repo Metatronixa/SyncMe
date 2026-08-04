@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
   Configuration for SyncMe.
-  Fill paths for THIS Backup PC — do not assume drive letters from another machine.
+  Fill paths for THIS Backup PC - do not assume drive letters from another machine.
   Do not store the restic password here - use Windows Credential Manager (see README).
   Prefer the SyncMe setup wizard; this file is the on-disk result / advanced edit surface.
 #>
@@ -20,15 +20,15 @@ $script:BackupConfig = [pscustomobject]@{
     # Drive letter used only for the duration of the run (empty = use UNC directly)
     ShareDriveLetter    = ''
 
-    # --- Destination (this Backup PC) — use YOUR drive letters ---
+    # --- Destination (this Backup PC) - use YOUR drive letters ---
     # Versioned restic repository (required). Example: 'D:\Backups\repo'
     ResticRepo   = ''
-    # Legacy optional plain-file archive path — leave empty (not used in current SyncMe UX)
+    # Legacy optional plain-file archive path - leave empty (not used in current SyncMe UX)
     ArchivePath  = ''
 
     # Credential Manager generic target that holds the restic repository password
     # Create with: cmdkey /generic:SyncMeRestic /user:restic /pass:YOUR_PASSWORD
-    # Prefer SyncMe Operations → Store password.
+    # Prefer SyncMe Operations -> Store password.
     ResticCredentialName = 'SyncMeRestic'
 
     # Optional explicit path to restic.exe if not on PATH

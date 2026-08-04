@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableExtensions
-title SyncMe - © 2026 Bradford Lotriet
+title SyncMe - (c) 2026 Bradford Lotriet
 cd /d "%~dp0"
 
 if not exist "Logs" mkdir "Logs"
@@ -11,7 +11,7 @@ echo  ============================================================
 echo   SyncMe
 echo   Copyright (c) 2026 Bradford Lotriet
 echo   brad@web-zilla.co.za
-echo   Free to use — keep this credit. See LICENSE.txt
+echo   Free to use - keep this credit. See LICENSE.txt
 echo  ============================================================
 echo.
 echo   Open the SyncMe User Guide now? [Y/N]

@@ -2,7 +2,7 @@
 <#
 .SYNOPSIS
   Registers a Scheduled Task for SyncMe backup (SyncMe-Backup.ps1).
-  Default LogonType is Password (run whether logged on or not) — required for Windows Server.
+  Default LogonType is Password (run whether logged on or not) - required for Windows Server.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 param(

@@ -88,7 +88,7 @@ if ($overdueItems.Count -gt 0) {
     if (-not $NoNotify -and $emailConfig -and $emailConfig.EnableEmailNotifications) {
         $body = @"
 <!DOCTYPE html><html><body style="font-family:Segoe UI,sans-serif;color:#1c2430;">
-<p><strong>SyncMe watchdog</strong> — one or more backup sets are overdue on <strong>$([System.Net.WebUtility]::HtmlEncode($env:COMPUTERNAME))</strong>.</p>
+<p><strong>SyncMe watchdog</strong> - one or more backup sets are overdue on <strong>$([System.Net.WebUtility]::HtmlEncode($env:COMPUTERNAME))</strong>.</p>
 <pre style="background:#eef1f5;padding:12px;border-radius:8px;">$([System.Net.WebUtility]::HtmlEncode($detail))</pre>
 <p>Check Task Scheduler (SyncMe-Backup*), Disk 1 free space, source shares, and <code>Logs\</code>.</p>
 <p><strong>Backup by SyncMe</strong></p>

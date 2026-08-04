@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SyncMe Monitor</title>
+  <link rel="icon" type="image/svg+xml" href="/ui/assets/syncme-logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/ui/css/app.css" />
+</head>
+<body>
+  <div class="shell">
+    <aside class="rail">
+      <div class="rail-brand">
+        <img src="/ui/assets/syncme-logo.svg" alt="" />
+        <div>
+          <h1>SyncMe</h1>
+          <div class="by">Monitor</div>
+        </div>
+      </div>
+      <nav>
+        <a href="/" class="active">Fleet</a>
+      </nav>
+      <p class="rail-note">Self-hosted · LAN / Tailscale · read-only heartbeats</p>
+    </aside>
+
+    <div class="main">
+      <div class="page-head">
+        <div>
+          <h2>Fleet dashboard</h2>
+          <p class="sub">Status from Backup PCs after each run — or immediately when you save Monitor settings (test ping). No restic passwords. No remote start/stop.</p>
+        </div>
+        <div class="chips">
+          <span class="chip ok" id="listenChip"><span class="dot"></span> Listening</span>
+          <span class="chip" id="siteCount">0 sites</span>
+          <button type="button" class="btn soft" id="btnRefresh">Refresh</button>
+        </div>
+      </div>
+
+      <section class="summary" aria-label="Summary">
+        <div class="stat ok">
+          <div class="k">Healthy</div>
+          <div class="v" id="statHealthy">0</div>
+        </div>
+        <div class="stat warn">
+          <div class="k">Attention</div>
+          <div class="v" id="statAttention">0</div>
+        </div>
+        <div class="stat danger">
+          <div class="k">Failed</div>
+          <div class="v" id="statFailed">0</div>
+        </div>
+        <div class="stat">
+          <div class="k">Running now</div>
+          <div class="v" id="statRunning">0</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div id="siteList" class="set-list"></div>
+        <p class="empty-hint" id="emptyHint">No heartbeats yet. On each Backup PC: Operations → Monitor add-on → set this host URL (e.g. http://127.0.0.1:17846) and the same token from Config\Monitor.json, then <strong>Save</strong> (sends a test ping). Heartbeats also arrive after each backup.</p>
+      </section>
+
+      <p class="footer-note">© 2026 Bradford Lotriet · SyncMe Monitor · not for public internet</p>
+    </div>
+  </div>
+  <script src="/ui/js/app.js"></script>
+</body>
+</html>

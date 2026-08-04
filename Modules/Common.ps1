@@ -152,7 +152,7 @@ function Add-SyncMeSharedLine {
             Start-Sleep -Milliseconds (40 * ($i + 1))
         }
     }
-    # Last resort — may still fail under hard lock
+    # Last resort - may still fail under hard lock
     Add-Content -LiteralPath $Path -Value $Line -Encoding UTF8 -ErrorAction SilentlyContinue
 }
 

@@ -11,7 +11,8 @@ This document explains how SyncMe handles security, what trust boundaries exist,
 
 | Version | Supported for security fixes |
 |---|---|
-| 1.3.x (current) | Yes |
+| 1.4.x (current) | Yes |
+| 1.3.x | Critical issues only, while practical |
 | 1.2.x | Critical issues only, while practical |
 | 1.1.x and older | No (please upgrade) |
 | Unreleased / custom forks | Not supported unless agreed in writing |

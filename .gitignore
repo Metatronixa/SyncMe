@@ -7,11 +7,16 @@ Config.ps1.bak-*
 Config/rclone.conf
 *.bak
 
-# Build output
-dist/
+# Build output (track customer release folders only)
+dist/*
+!dist/SyncMe-Release-*/
+!dist/SyncMe-Release-*/**
 
 # Marketing site (deployed separately to www.syncme.co.za — not public source)
 website/
+
+# Local design mockups (not shipped, not committed)
+Monitor/ui/mockups/
 
 # OS / editor
 Thumbs.db

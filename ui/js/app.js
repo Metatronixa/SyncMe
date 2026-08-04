@@ -24,6 +24,8 @@
     pollTimer: null,
     pollTimerOauth: null,
     pollTimerRestore: null,
+    updateInfo: null,
+    updatePrompted: false,
     setupAppliedSetId: '',
     etaSamples: [],
     form: {
@@ -1923,6 +1925,7 @@
       closeModal('modalCloud');
       closeModal('modalPolicy');
       closeModal('modalResticPass');
+      closeModal('modalUpdate');
     }
   });
 
@@ -2024,6 +2027,7 @@
     show('view-ops');
     loadDash();
     refreshSnaps();
+    loadMonitorOptions();
   };
 
   $('btnRefreshSnaps').onclick = refreshSnaps;
@@ -2053,6 +2057,111 @@
     } catch (e) { alert(e.message); }
   };
 
+  function showUpdateModal(info) {
+    state.updateInfo = info || null;
+    const summary = $('updateModalSummary');
+    const notes = $('updateModalNotes');
+    const status = $('updateModalStatus');
+    if (summary) {
+      summary.textContent = 'SyncMe ' + (info.currentVersion || '?') + ' → ' + (info.version || '?');
+    }
+    if (notes) {
+      notes.textContent = info.notes ? String(info.notes) : '';
+      notes.classList.toggle('hidden', !info.notes);
+    }
+    if (status) setStatus(status, '', '');
+    openModal('modalUpdate');
+  }
+
+  async function checkForUpdates(opts) {
+    const quiet = !!(opts && opts.quiet);
+    const statusEl = $('updateStatus');
+    const btn = $('btnCheckUpdates');
+    try {
+      if (!quiet && statusEl) setStatus(statusEl, 'Checking for updates…', '');
+      if (btn && !quiet) btn.disabled = true;
+      const d = await api('/api/update/check');
+      state.updateInfo = d;
+      if (d.updateAvailable) {
+        if (statusEl) setStatus(statusEl, 'Update available: ' + (d.version || ''), 'warn');
+        if (quiet) {
+          if (!state.updatePrompted) {
+            state.updatePrompted = true;
+            showUpdateModal(d);
+          }
+        } else {
+          showUpdateModal(d);
+        }
+      } else {
+        if (statusEl) setStatus(statusEl, 'You are on the latest version (' + (d.currentVersion || '') + ').', 'ok');
+        if (!quiet) alert('You are on the latest version (' + (d.currentVersion || '') + ').');
+      }
+    } catch (e) {
+      if (statusEl) setStatus(statusEl, e.message, 'danger');
+      if (!quiet) alert(e.message);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function installUpdate() {
+    const status = $('updateModalStatus');
+    const btn = $('btnInstallUpdate');
+    try {
+      if (btn) btn.disabled = true;
+      if (status) setStatus(status, 'Downloading and verifying… SyncMe will restart.', 'warn');
+      const d = await api('/api/update/install', { method: 'POST', body: '{}' });
+      if (status) setStatus(status, d.message || 'Installing…', 'ok');
+      setTimeout(() => {
+        alert((d.message || 'Update started.') + '\n\nSyncMe will close and reopen. Your Config.ps1 was backed up.');
+      }, 200);
+    } catch (e) {
+      if (status) setStatus(status, e.message, 'danger');
+      if (btn) btn.disabled = false;
+      alert(e.message);
+    }
+  }
+
+  async function loadMonitorOptions() {
+    try {
+      const d = await api('/api/options');
+      if ($('monitorUrl')) $('monitorUrl').value = d.monitorUrl || '';
+      if ($('monitorSiteId')) $('monitorSiteId').value = d.monitorSiteId || '';
+      if ($('monitorToken')) $('monitorToken').value = d.monitorToken || '';
+    } catch (e) { /* ignore */ }
+  }
+
+  async function saveMonitorOptions() {
+    const statusEl = $('monitorStatus');
+    try {
+      if (statusEl) setStatus(statusEl, 'Saving and sending test heartbeat…', '');
+      const body = {
+        monitorUrl: $('monitorUrl') ? $('monitorUrl').value.trim() : '',
+        monitorSiteId: $('monitorSiteId') ? $('monitorSiteId').value.trim() : '',
+        monitorToken: $('monitorToken') ? $('monitorToken').value.trim() : ''
+      };
+      const d = await api('/api/options', { method: 'POST', body: JSON.stringify(body) });
+      const kind = (d.heartbeatOk === false) ? 'warn' : 'ok';
+      if (statusEl) setStatus(statusEl, d.message || 'Saved.', kind);
+    } catch (e) {
+      if (statusEl) setStatus(statusEl, e.message, 'danger');
+      alert(e.message);
+    }
+  }
+
+  if ($('btnCheckUpdates')) {
+    $('btnCheckUpdates').addEventListener('click', (e) => {
+      e.preventDefault();
+      checkForUpdates({ quiet: false });
+    });
+  }
+  if ($('btnInstallUpdate')) {
+    $('btnInstallUpdate').onclick = () => installUpdate();
+  }
+  if ($('btnSaveMonitor')) {
+    $('btnSaveMonitor').onclick = () => saveMonitorOptions();
+  }
+
   async function boot() {
     try {
       const d = await api('/api/status');
@@ -2064,6 +2173,8 @@
       } else {
         show('view-dash');
         await loadDash();
+        loadMonitorOptions();
+        checkForUpdates({ quiet: true });
       }
     } catch (e) {
       setTop('Host error', 'danger');

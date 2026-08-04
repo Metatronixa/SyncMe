@@ -1,0 +1,17 @@
+﻿SyncMe Release 1.4.2
+======================
+This folder contains both customer packages:
+
+1) SyncMe-Setup-1.4.2.zip
+   Backup PC console (wizard, backups, restore, schedule, HTTPS updates).
+   Unzip, then run SyncMe-Setup.cmd (admin recommended on Windows Server).
+
+2) SyncMe-Monitor-Setup-1.4.2.zip  (optional add-on)
+   Self-hosted fleet dashboard for LAN / Tailscale.
+   Unzip to a Monitor PC, edit Config\Monitor.json token, run SyncMe-Monitor.bat.
+   On each Backup PC: Operations → Monitor add-on → Save (sends a test ping).
+
+Update feed (website): upload dist\updates\latest.json and SyncMe-Setup-1.4.2.zip
+to https://www.syncme.co.za/updates/
+
+SHA256 (SyncMe-Setup-1.4.2.zip): e63211a50e59a79d32cad298bca4baff28833f3ec9ec95cdfa29c048003cc94c

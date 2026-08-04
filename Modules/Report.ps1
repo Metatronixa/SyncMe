@@ -111,7 +111,7 @@ function New-BackupHtmlReport {
     if (-not [string]::IsNullOrWhiteSpace([string]$RunInfo.ArchivePath)) {
         $archiveSection = @"
 <section>
-  <h2>Disk 2 — plain archive</h2>
+  <h2>Disk 2 - plain archive</h2>
   <table>
     <tr><th>Ran this cycle</th><td>{0}</td></tr>
     <tr><th>Archive path</th><td><code>{1}</code></td></tr>
@@ -135,7 +135,7 @@ function New-BackupHtmlReport {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SyncMe backup report — $(ConvertTo-HtmlEncoded $RunInfo.RunId)</title>
+  <title>SyncMe backup report - $(ConvertTo-HtmlEncoded $RunInfo.RunId)</title>
   <style>
     :root {
       --ink: #1c2430;
@@ -297,7 +297,7 @@ function New-BackupHtmlReport {
         <tr><th>Files new</th><td>$(ConvertTo-HtmlEncoded $RunInfo.FilesNew)</td></tr>
         <tr><th>Files changed</th><td>$(ConvertTo-HtmlEncoded $RunInfo.FilesChanged)</td></tr>
         <tr><th>Files unmodified</th><td>$(ConvertTo-HtmlEncoded $RunInfo.FilesUnmodified)</td></tr>
-        <tr><th>Dirs new / changed</th><td>$(if ([string]::IsNullOrWhiteSpace([string]$RunInfo.DirsNew) -and [string]::IsNullOrWhiteSpace([string]$RunInfo.DirsChanged)) { '—' } else { (ConvertTo-HtmlEncoded $RunInfo.DirsNew) + ' / ' + (ConvertTo-HtmlEncoded $RunInfo.DirsChanged) })</td></tr>
+        <tr><th>Dirs new / changed</th><td>$(if ([string]::IsNullOrWhiteSpace([string]$RunInfo.DirsNew) -and [string]::IsNullOrWhiteSpace([string]$RunInfo.DirsChanged)) { '-' } else { (ConvertTo-HtmlEncoded $RunInfo.DirsNew) + ' / ' + (ConvertTo-HtmlEncoded $RunInfo.DirsChanged) })</td></tr>
         <tr><th>Data added</th><td>$(ConvertTo-HtmlEncoded $RunInfo.DataAdded)</td></tr>
         <tr><th>Total bytes processed</th><td>$(ConvertTo-HtmlEncoded $RunInfo.TotalBytesProcessed)</td></tr>
         <tr><th>Backup exit code</th><td>$(ConvertTo-HtmlEncoded $RunInfo.BackupExitCode)</td></tr>
@@ -305,7 +305,7 @@ function New-BackupHtmlReport {
     </section>
 
     <section>
-      <h2>Retention (forget — prune)</h2>
+      <h2>Retention (forget - prune)</h2>
       <table>
         <tr><th>Ran</th><td>$(ConvertTo-HtmlEncoded $RunInfo.PruneRan)</td></tr>
         <tr><th>Exit code</th><td>$(ConvertTo-HtmlEncoded $RunInfo.PruneExitCode)</td></tr>
@@ -319,10 +319,10 @@ function New-BackupHtmlReport {
     <section>
       <h2>Repository integrity</h2>
       <table>
-        <tr><th>Structural check</th><td>$(ConvertTo-HtmlEncoded $RunInfo.RepoCheckRan) — $(ConvertTo-HtmlEncoded $RunInfo.RepoCheckDetail)</td></tr>
+        <tr><th>Structural check</th><td>$(ConvertTo-HtmlEncoded $RunInfo.RepoCheckRan) - $(ConvertTo-HtmlEncoded $RunInfo.RepoCheckDetail)</td></tr>
         <tr><th>Repo status</th><td>$(ConvertTo-HtmlEncoded $RunInfo.RepoStatus)</td></tr>
-        <tr><th>Data subset check</th><td>$(ConvertTo-HtmlEncoded $RunInfo.DataCheckRan) — $(ConvertTo-HtmlEncoded $RunInfo.DataCheckDetail)</td></tr>
-        <tr><th>Restore drill</th><td>$(if ($null -ne $RunInfo.LastRestoreDrillSuccess) { if ($RunInfo.LastRestoreDrillSuccess) { 'PASS' } else { 'FAIL (advisory)' } } elseif ($RunInfo.LastRestoreDrillDetail -and ([string]$RunInfo.LastRestoreDrillDetail).StartsWith('Skipped:')) { 'SKIP' } elseif ($RunInfo.LastRestoreDrillDetail) { 'SKIP' } else { '—' }) - $(ConvertTo-HtmlEncoded $RunInfo.LastRestoreDrillDetail)$(if ($RunInfo.LastRestoreDrillDate) { ' (' + (ConvertTo-HtmlEncoded $RunInfo.LastRestoreDrillDate) + ')' } else { '' })</td></tr>
+        <tr><th>Data subset check</th><td>$(ConvertTo-HtmlEncoded $RunInfo.DataCheckRan) - $(ConvertTo-HtmlEncoded $RunInfo.DataCheckDetail)</td></tr>
+        <tr><th>Restore drill</th><td>$(if ($null -ne $RunInfo.LastRestoreDrillSuccess) { if ($RunInfo.LastRestoreDrillSuccess) { 'PASS' } else { 'FAIL (advisory)' } } elseif ($RunInfo.LastRestoreDrillDetail -and ([string]$RunInfo.LastRestoreDrillDetail).StartsWith('Skipped:')) { 'SKIP' } elseif ($RunInfo.LastRestoreDrillDetail) { 'SKIP' } else { '-' }) - $(ConvertTo-HtmlEncoded $RunInfo.LastRestoreDrillDetail)$(if ($RunInfo.LastRestoreDrillDate) { ' (' + (ConvertTo-HtmlEncoded $RunInfo.LastRestoreDrillDate) + ')' } else { '' })</td></tr>
       </table>
     </section>
 
@@ -411,7 +411,7 @@ function Export-SyncMeRescueKit {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SyncMe Rescue Kit — $(ConvertTo-HtmlEncoded $setId)</title>
+  <title>SyncMe Rescue Kit - $(ConvertTo-HtmlEncoded $setId)</title>
   <style>
     body { font-family: "Segoe UI", system-ui, sans-serif; margin: 0; color: #1c2430; background: #eef1f5; line-height: 1.5; }
     header { background: #2c3644; color: #fff; padding: 1.5rem 2rem; border-bottom: 4px solid #6ea8d9; }
@@ -438,7 +438,7 @@ function Export-SyncMeRescueKit {
   </header>
   <main>
     <section class="warn">
-      <h2>Password vault (write by hand — never auto-filled)</h2>
+      <h2>Password vault (write by hand - never auto-filled)</h2>
       <p>The restic repository password is <strong>not</strong> stored in this file. Retrieve it from Windows Credential Manager target <code>$(ConvertTo-HtmlEncoded $credName)</code> on the Backup PC, or from your offline password manager.</p>
       <p><strong>Hand-written password (print &amp; store offline):</strong></p>
       <div class="blank"></div>
@@ -459,8 +459,8 @@ function Export-SyncMeRescueKit {
         <tr><th>Destination type</th><td>$(ConvertTo-HtmlEncoded $destType)</td></tr>
         <tr><th>ResticRepo</th><td><code>$(ConvertTo-HtmlEncoded $repo)</code></td></tr>
         <tr><th>Credential Manager target</th><td><code>$(ConvertTo-HtmlEncoded $credName)</code></td></tr>
-        <tr><th>rclone remote</th><td>$(if ($rcloneRemote) { '<code>' + (ConvertTo-HtmlEncoded $rcloneRemote) + '</code>' } else { '—' })</td></tr>
-        <tr><th>rclone path</th><td>$(if ($rclonePath) { '<code>' + (ConvertTo-HtmlEncoded $rclonePath) + '</code>' } else { '—' })</td></tr>
+        <tr><th>rclone remote</th><td>$(if ($rcloneRemote) { '<code>' + (ConvertTo-HtmlEncoded $rcloneRemote) + '</code>' } else { '-' })</td></tr>
+        <tr><th>rclone path</th><td>$(if ($rclonePath) { '<code>' + (ConvertTo-HtmlEncoded $rclonePath) + '</code>' } else { '-' })</td></tr>
         <tr><th>Rclone config</th><td><code>$(ConvertTo-HtmlEncoded $(if ($Config.RcloneConfigPath) { [string]$Config.RcloneConfigPath } else { (Join-Path $ScriptRoot 'Config\rclone.conf') }))</code></td></tr>
         <tr><th>Append-only policy</th><td>$(if ($Config.AppendOnly) { 'Yes (SyncMe skips prune / blocks delete)' } else { 'No' })</td></tr>
       </table>
@@ -472,11 +472,11 @@ function Export-SyncMeRescueKit {
     <section>
       <h2>Manual recovery with restic CLI</h2>
       <ol>
-        <li>Install restic (and rclone if the repo is <code>rclone:…</code>). Set <code>RCLONE_CONFIG</code> to the path above when using cloud.</li>
+        <li>Install restic (and rclone if the repo is <code>rclone:...</code>). Set <code>RCLONE_CONFIG</code> to the path above when using cloud.</li>
         <li>Set environment variables <code>RESTIC_REPOSITORY</code> to the repo path above and <code>RESTIC_PASSWORD</code> from your vault (never store the password in this file).</li>
         <li>List snapshots: <code>restic snapshots</code></li>
         <li>Restore to an empty folder: <code>restic restore latest --target C:\SyncMe-Restore\manual</code> (or a specific snapshot ID).</li>
-        <li>Optional include: <code>restic restore &lt;id&gt; --target … --include "exact\snapshot\path"</code></li>
+        <li>Optional include: <code>restic restore &lt;id&gt; --target ... --include "exact\snapshot\path"</code></li>
       </ol>
       <p>Also see <code>$(ConvertTo-HtmlEncoded $checklist)</code> on the Backup PC.</p>
     </section>

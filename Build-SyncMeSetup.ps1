@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Builds a minimal customer hand-off: SyncMe-Setup.cmd + SyncMe-Payload.zip only.
@@ -37,7 +37,7 @@ if (Test-Path $setupDir) { Remove-Item $setupDir -Recurse -Force -ErrorAction Si
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 New-Item -ItemType Directory -Path $setupDir -Force | Out-Null
 
-# Customer ship list only — never add website/ (local marketing site).
+# Customer ship list only - never add website/ (local marketing site).
 $include = @(
     'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Host.ps1',
     'SyncMe-Backup.ps1', 'SyncMe-Restore.ps1', 'Config.ps1',
@@ -64,13 +64,13 @@ foreach ($item in $include) {
     }
 }
 
-# Design mockups are for local UI work — never ship to customers.
+# Design mockups are for local UI work - never ship to customers.
 $mockups = Join-Path $stage 'ui\mockups'
 if (Test-Path -LiteralPath $mockups) {
     Remove-Item -LiteralPath $mockups -Recurse -Force
 }
 
-# restic/rclone/WinFsp/WinSCP are installed from the console (or PATH) — never bundle binaries.
+# restic/rclone/WinFsp/WinSCP are installed from the console (or PATH) - never bundle binaries.
 $toolsDir = Join-Path $stage 'tools'
 if (-not (Test-Path -LiteralPath $toolsDir)) {
     New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null
@@ -93,7 +93,7 @@ SyncMe setup package $pkgVer
 2. Files unpack to $InstallDir (existing Config.ps1 is kept if present).
 3. SyncMe opens the browser wizard.
 4. Use a dedicated Windows account for unattended backups; enter that password in Schedule.
-5. Each backup set needs its own restic repository path (dedicated subfolder — never a drive root).
+5. Each backup set needs its own restic repository path (dedicated subfolder - never a drive root).
 
 Passwords stay in Windows Credential Manager. See START-HERE.txt, LICENSE.txt, and THIRD-PARTY-NOTICES.txt after install.
 Confirm VERSION.txt shows $pkgVer after install.
@@ -154,9 +154,12 @@ echo.
   "`$tmpExtract = Join-Path `$env:TEMP ('SyncMe-Extract-' + [guid]::NewGuid().ToString());" ^
   "New-Item -ItemType Directory -Path `$tmpExtract -Force | Out-Null;" ^
   "[IO.Compression.ZipFile]::ExtractToDirectory(`$zip, `$tmpExtract);" ^
-  "Get-ChildItem -LiteralPath `$tmpExtract -Force | ForEach-Object { Copy-Item -LiteralPath `$_.FullName -Destination (Join-Path `$install `$_.Name) -Recurse -Force };" ^
+  ". (Join-Path `$tmpExtract 'Modules\InstallMerge.ps1');" ^
+  "Copy-SyncMeTreeMerge -SourceRoot `$tmpExtract -DestRoot `$install;" ^
+  "Clear-SyncMeNestedInstallJunk -InstallRoot `$install;" ^
   "Remove-Item -LiteralPath `$tmpExtract -Recurse -Force -ErrorAction SilentlyContinue;" ^
   "if (`$preserve -and `$tmp -and (Test-Path -LiteralPath `$tmp)) { Copy-Item -LiteralPath `$tmp -Destination `$cfg -Force; Remove-Item -LiteralPath `$tmp -Force -ErrorAction SilentlyContinue };" ^
+  "foreach (`$req in @('SyncMe-Host.ps1','Modules\Update.ps1','Modules\MonitorClient.ps1','Modules\InstallMerge.ps1','ui\js\app.js')) { if (-not (Test-Path -LiteralPath (Join-Path `$install `$req))) { throw ('Setup incomplete: missing ' + `$req + ' under ' + `$install) } };" ^
   "Write-Host ('Installed to ' + `$install) -ForegroundColor Green"
 
 if errorlevel 1 (
@@ -172,10 +175,94 @@ exit /b 0
 "@
 
 Set-Content -Path $setupCmd -Value $cmd.Trim() -Encoding ASCII
+# cmd.exe breaks if Setup.cmd has a UTF-8 BOM - rewrite as raw ASCII bytes.
+[IO.File]::WriteAllBytes($setupCmd, [Text.Encoding]::ASCII.GetBytes(((Get-Content -LiteralPath $setupCmd -Raw) -replace "^\uFEFF", '')))
+
+# Customer download zip + website update feed artifacts
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$setupZipName = "SyncMe-Setup-$pkgVer.zip"
+$setupZipPath = Join-Path $OutDir $setupZipName
+if (Test-Path -LiteralPath $setupZipPath) { Remove-Item -LiteralPath $setupZipPath -Force }
+[System.IO.Compression.ZipFile]::CreateFromDirectory($setupDir, $setupZipPath)
+$sha = (Get-FileHash -LiteralPath $setupZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+
+$updatesDir = Join-Path $OutDir 'updates'
+if (-not (Test-Path -LiteralPath $updatesDir)) {
+    New-Item -ItemType Directory -Path $updatesDir -Force | Out-Null
+}
+Copy-Item -LiteralPath $setupZipPath -Destination (Join-Path $updatesDir $setupZipName) -Force
+
+$notes = @"
+SyncMe $pkgVer - HTTPS in-app updates, Monitor add-on test heartbeat on Save, install merge fixes, ASCII setup scripts (no BOM). Optional SyncMe Monitor package is separate (same version).
+"@
+$latest = [ordered]@{
+    version = $pkgVer
+    file    = $setupZipName
+    sha256  = $sha
+    notes   = $notes.Trim()
+    url     = "https://www.syncme.co.za/updates/$setupZipName"
+}
+$latestJson = ($latest | ConvertTo-Json -Depth 4) + "`r`n"
+$latestPath = Join-Path $updatesDir 'latest.json'
+[IO.File]::WriteAllText($latestPath, $latestJson, (New-Object System.Text.UTF8Encoding $false))
+
+$websiteUpdates = Join-Path $root 'website\updates'
+if (Test-Path -LiteralPath (Join-Path $root 'website')) {
+    if (-not (Test-Path -LiteralPath $websiteUpdates)) {
+        New-Item -ItemType Directory -Path $websiteUpdates -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $setupZipPath -Destination (Join-Path $websiteUpdates $setupZipName) -Force
+    [IO.File]::WriteAllText((Join-Path $websiteUpdates 'latest.json'), $latestJson, (New-Object System.Text.UTF8Encoding $false))
+    Write-Host "Staged website/updates/ for FTP upload." -ForegroundColor Cyan
+}
+
+# Build Monitor add-on (same version line) and assemble SyncMe-Release-<ver>
+$monitorBuild = Join-Path $root 'Build-SyncMeMonitorSetup.ps1'
+$monitorZipName = "SyncMe-Monitor-Setup-$pkgVer.zip"
+$monitorZipPath = Join-Path $OutDir $monitorZipName
+if (Test-Path -LiteralPath $monitorBuild) {
+    & $monitorBuild -OutDir $OutDir
+    if (-not (Test-Path -LiteralPath $monitorZipPath)) {
+        Write-Warning "Monitor zip missing after build: $monitorZipPath"
+    }
+}
+
+$releaseDir = Join-Path $OutDir ("SyncMe-Release-" + $pkgVer)
+if (Test-Path -LiteralPath $releaseDir) { Remove-Item -LiteralPath $releaseDir -Recurse -Force }
+New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
+Copy-Item -LiteralPath $setupZipPath -Destination (Join-Path $releaseDir $setupZipName) -Force
+if (Test-Path -LiteralPath $monitorZipPath) {
+    Copy-Item -LiteralPath $monitorZipPath -Destination (Join-Path $releaseDir $monitorZipName) -Force
+}
+$releaseStart = @"
+SyncMe Release $pkgVer
+======================
+This folder contains both customer packages:
+
+1) $setupZipName
+   Backup PC console (wizard, backups, restore, schedule, HTTPS updates).
+   Unzip, then run SyncMe-Setup.cmd (admin recommended on Windows Server).
+
+2) $monitorZipName  (optional add-on)
+   Self-hosted fleet dashboard for LAN / Tailscale.
+   Unzip to a Monitor PC, edit Config\Monitor.json token, run SyncMe-Monitor.bat.
+   On each Backup PC: Operations → Monitor add-on → Save (sends a test ping).
+
+Update feed (website): upload dist\updates\latest.json and $setupZipName
+to https://www.syncme.co.za/updates/
+
+SHA256 ($setupZipName): $sha
+"@
+Set-Content -Path (Join-Path $releaseDir 'START-HERE.txt') -Value $releaseStart.Trim() -Encoding UTF8
 
 Write-Host "Created setup folder: $setupDir" -ForegroundColor Green
 Write-Host "  Version: $pkgVer"
 Write-Host "  SyncMe-Setup.cmd"
 Write-Host "  SyncMe-Payload.zip"
 Write-Host "  START-HERE.txt"
-Write-Host "Hand customers only that folder (two payload files + START-HERE)."
+Write-Host "Created download zip: $setupZipPath" -ForegroundColor Green
+Write-Host "  SHA256: $sha"
+Write-Host "Created update feed: $latestPath" -ForegroundColor Green
+Write-Host "Created release folder: $releaseDir" -ForegroundColor Green
+Write-Host "Hand customers only the setup folder (or the .zip). Upload dist/updates/* to https://www.syncme.co.za/updates/"
+

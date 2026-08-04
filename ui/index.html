@@ -140,6 +140,35 @@
           <div id="setList" class="set-list"></div>
         </div>
 
+        <div class="card">
+          <h2>Updates</h2>
+          <p class="sub">Checks <code>https://www.syncme.co.za/updates/latest.json</code> for a newer SyncMe package. Install keeps your <code>Config.ps1</code> (with a timestamped backup).</p>
+          <div class="actions" style="margin-top:10px">
+            <button type="button" class="btn primary" id="btnCheckUpdates">Check for updates</button>
+          </div>
+          <div class="status-line" id="updateStatus" style="margin-top:10px"></div>
+        </div>
+
+        <div class="card">
+          <h2>Monitor add-on</h2>
+          <p class="sub">Optional. Point this Backup PC at a self-hosted SyncMe Monitor host so heartbeats appear on the fleet dashboard. Leave blank to disable.</p>
+          <div class="grid two">
+            <label class="field">Monitor URL
+              <input type="text" id="monitorUrl" placeholder="http://monitor-pc:17846" />
+            </label>
+            <label class="field">Site id
+              <input type="text" id="monitorSiteId" placeholder="Office-BackupPC" />
+            </label>
+            <label class="field">Shared token
+              <input type="password" id="monitorToken" autocomplete="off" placeholder="Same token as Monitor" />
+            </label>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button type="button" class="btn soft" id="btnSaveMonitor">Save Monitor settings</button>
+          </div>
+          <div class="status-line" id="monitorStatus" style="margin-top:10px"></div>
+        </div>
+
         <div class="card restore-workspace">
           <h2>Restore workspace</h2>
           <p class="sub">Snapshots for the active set. Select a row, then <strong>Restore selected</strong> (or Restore latest) to copy files to an empty folder outside the live repository. Never restore into the live repository or source share.</p>
@@ -307,6 +336,25 @@
         <button type="button" class="btn primary" id="btnSavePolicy">Save policy</button>
         <button type="button" class="btn soft" data-backup="pruneOnly" id="btnPolicyPrune">Prune now</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Update available modal -->
+  <div id="modalUpdate" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalUpdateTitle">
+    <div class="modal-backdrop" data-close-modal="modalUpdate"></div>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="modalUpdateTitle">Update available</h2>
+        <button type="button" class="btn ghost modal-close" data-close-modal="modalUpdate">Close</button>
+      </div>
+      <p class="sub" id="updateModalSummary">A newer SyncMe package is available.</p>
+      <p class="sub" id="updateModalNotes"></p>
+      <p class="sub">Install downloads the package, verifies SHA-256, backs up <code>Config.ps1</code>, then applies the update without overwriting your backup sets. SyncMe will restart when finished.</p>
+      <div class="actions" style="margin-top:12px">
+        <button type="button" class="btn primary" id="btnInstallUpdate">Install</button>
+        <button type="button" class="btn ghost" data-close-modal="modalUpdate" id="btnUpdateLater">Later</button>
+      </div>
+      <div class="status-line" id="updateModalStatus" style="margin-top:10px"></div>
     </div>
   </div>
 

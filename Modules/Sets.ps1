@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Multi backup-set helpers for SyncMe. Compatible with legacy single BackupConfig.
@@ -330,7 +330,7 @@ function Format-SyncMeBytes {
 
 function Test-SyncMeArchivePathSafe {
     <#
-      Refuse ArchivePath that is a drive root (e.g. E:\) — ClearArchiveBeforeRestore would wipe the volume.
+      Refuse ArchivePath that is a drive root (e.g. E:\) - ClearArchiveBeforeRestore would wipe the volume.
     #>
     param([string]$ArchivePath)
     if ([string]::IsNullOrWhiteSpace($ArchivePath)) {

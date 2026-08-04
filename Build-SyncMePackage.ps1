@@ -28,7 +28,7 @@ if (Test-Path $stage) { Remove-Item $stage -Recurse -Force -ErrorAction Silently
 New-Item -ItemType Directory -Path $stage -Force | Out-Null
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }
 
-# Customer ship list only — never add website/ (local marketing site).
+# Customer ship list only - never add website/ (local marketing site).
 $include = @(
     'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Host.ps1',
     'SyncMe-Backup.ps1', 'SyncMe-Restore.ps1', 'Config.ps1',
@@ -55,13 +55,13 @@ foreach ($item in $include) {
     }
 }
 
-# Design mockups are for local UI work — never ship to customers.
+# Design mockups are for local UI work - never ship to customers.
 $mockups = Join-Path $stage 'ui\mockups'
 if (Test-Path -LiteralPath $mockups) {
     Remove-Item -LiteralPath $mockups -Recurse -Force
 }
 
-# restic/rclone/WinFsp/WinSCP are installed from the console (or PATH) — never bundle binaries.
+# restic/rclone/WinFsp/WinSCP are installed from the console (or PATH) - never bundle binaries.
 $toolsDir = Join-Path $stage 'tools'
 if (-not (Test-Path -LiteralPath $toolsDir)) {
     New-Item -ItemType Directory -Path $toolsDir -Force | Out-Null

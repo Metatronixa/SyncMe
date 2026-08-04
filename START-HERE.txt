@@ -27,6 +27,15 @@ CUSTOMER PACKAGE (minimal)
   Build with: .\Build-SyncMeSetup.ps1
   Setup unpacks into C:\SyncMe and launches the wizard. Existing Config.ps1 is kept.
 
+UPDATES (1.4.0+)
+  The console can check https://www.syncme.co.za/updates/latest.json and offer Install.
+  Config.ps1 is backed up and preserved. Or re-run SyncMe-Setup.cmd from a newer zip.
+
+MONITOR ADD-ON (optional)
+  Separate SyncMe-Monitor-Setup package for a self-hosted fleet dashboard (LAN/Tailscale).
+  Configure Monitor URL + token under Operations → Monitor add-on on each Backup PC.
+  See UserGuide.html section "SyncMe Monitor add-on".
+
 UPDATE FROM THIS PROJECT (technicians)
   On the Backup PC, from THIS SyncMe folder:
     .\Deploy-SyncMe.ps1 -Target C:\SyncMe

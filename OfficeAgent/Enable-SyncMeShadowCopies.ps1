@@ -38,7 +38,7 @@ function Read-Default([string]$Prompt, [string]$Default = '') {
     return $r.Trim()
 }
 
-Write-Host "SyncMe — Office Shadow Copies setup" -ForegroundColor Cyan
+Write-Host "SyncMe - Office Shadow Copies setup" -ForegroundColor Cyan
 Write-Host "By Bradford Lotriet"
 Write-Host "This runs on the source PC (office) and must be elevated."
 Write-Host ""

@@ -1,6 +1,6 @@
 # SyncMe — Technical Breakdown
 
-**Version:** 1.3.3 (see [`VERSION.txt`](VERSION.txt))  
+**Version:** 1.4.2 (see [`VERSION.txt`](VERSION.txt))  
 **Website:** [www.syncme.co.za](https://www.syncme.co.za)  
 **Copyright © 2026 Bradford Lotriet** (`brad@web-zilla.co.za`)
 
@@ -341,6 +341,9 @@ All APIs are served by [`SyncMe-Host.ps1`](SyncMe-Host.ps1) on `http://127.0.0.1
 
 | Method | Path | Role |
 |---|---|---|
+| GET | `/api/update/check` | Compare local version to HTTPS `latest.json` feed |
+| POST | `/api/update/install` | Download, SHA-256 verify, apply update (preserves Config) |
+| GET/POST | `/api/options` | Update feed URL + Monitor heartbeat settings (`Config\SyncMeOptions.json`) |
 | POST | `/api/open` | Open Explorer / editor for logs or reports |
 | POST | `/api/shutdown` | Stop the host |
 | GET | `/`, `/ui/*` | Static UI |
@@ -351,10 +354,11 @@ All APIs are served by [`SyncMe-Host.ps1`](SyncMe-Host.ps1) on `http://127.0.0.1
 
 | Script | Output / behavior |
 |---|---|
-| `Build-SyncMeSetup.ps1` | `dist\SyncMe-Setup-<VERSION>\` with `SyncMe-Setup.cmd` + `SyncMe-Payload.zip` (+ START-HERE). Unpacks to `C:\SyncMe`, keeps existing `Config.ps1`. Does **not** ship `website/`. |
+| `Build-SyncMeSetup.ps1` | `dist\SyncMe-Setup-<VERSION>\` with `SyncMe-Setup.cmd` + `SyncMe-Payload.zip` (+ START-HERE). Unpacks to `C:\SyncMe`, keeps existing `Config.ps1`, merges folder contents (avoids nested `Modules\Modules`). Also stages `dist\updates\latest.json` + setup zip for the website update feed. Does **not** ship `website/`. |
+| `Build-SyncMeMonitorSetup.ps1` | Optional add-on: `dist\SyncMe-Monitor-Setup-<ver>\` (+ zip). |
 | `Build-SyncMePackage.ps1` | Full zip `dist\SyncMe-<VERSION>.zip` (same product include list). |
 | `Deploy-SyncMe.ps1` | Copy project → target (default `C:\SyncMe`); preserve Config and set JSON under Logs; stop running host; copy `tools\` binaries. |
-| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.3.3`). |
+| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.4.1`). |
 
 **Typical shipped include list:** bats, host/backup/restore/watchdog, Register/Deploy, Config template, docs (including this file), Modules, ui, OfficeAgent, tools — not `website/`, not customer log/report contents beyond placeholders.
 

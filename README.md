@@ -30,12 +30,19 @@ Simple **file-level** backup from source PCs to a Backup PC using **restic**, ma
 5. **Verify** before trusting the schedule: Run dry run → real backup → read Reports/Logs → Operations Check → restore to an empty test folder and spot-check critical paths against the source.
 6. Use the dashboard for progress, schedule edits, restore, and **Add backup set**.
 
-**Customer hand-off zip**
+**Downloads / packages**
+
+| Package | What it is |
+|---|---|
+| **`SyncMe-Setup-<ver>.zip`** | Backup PC console — wizard, backups, restore, schedule, HTTPS in-app updates. Unzip and run `SyncMe-Setup.cmd` (admin recommended on Windows Server). |
+| **`SyncMe-Monitor-Setup-<ver>.zip`** | Optional **SyncMe Monitor** add-on — self-hosted fleet dashboard (see below). Separate install; not required for backups. |
+
+Both zips (plus a short `START-HERE.txt`) are produced under `dist\SyncMe-Release-<ver>\`. Build:
 
 ```powershell
-.\Build-SyncMePackage.ps1
-# or minimal setup package:
-.\Build-SyncMeSetup.ps1
+.\Build-SyncMeSetup.ps1          # SyncMe setup + Monitor package + SyncMe-Release-<ver>
+.\Build-SyncMeMonitorSetup.ps1   # Monitor alone
+.\Build-SyncMePackage.ps1        # full product tree zip
 ```
 
 ## Technology
@@ -48,7 +55,7 @@ Simple **file-level** backup from source PCs to a Backup PC using **restic**, ma
 | Schedule | Windows Task Scheduler (+ SyncMe-Watchdog) |
 | UI | Static HTML5 + CSS + vanilla JavaScript (`ui/`), Source Sans 3 |
 | Config / secrets | `Config.ps1` (no database); Windows Credential Manager; `Config\rclone.conf` |
-| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source) |
+| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source), SyncMe Monitor (fleet heartbeats) |
 | Platform | Windows 10/11 or Windows Server (Backup PC) |
 
 SyncMe is an **orchestration frontend** — not a replacement for restic or rclone. Third-party notices: [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
@@ -74,6 +81,27 @@ SyncMe is an **orchestration frontend** — not a replacement for restic or rclo
 | Wake-on-LAN | Optional MAC per set before backup / Wake button |
 | Shadow copies | OfficeAgent scripts on source PC |
 | Detached Run now | Manual backup survives closing SyncMe |
+| In-app updates | HTTPS feed (`latest.json`), SHA-256 verify, keeps existing `Config.ps1` |
+| SyncMe Monitor | Optional self-hosted fleet dashboard via post-backup (and Save) heartbeats |
+
+## SyncMe Monitor (optional add-on)
+
+**What it is:** a small, self-hosted Windows package that shows which Backup PCs last reported a backup — success, failure, stale, or running. It is **not** installed on a public web server. Run it on a PC on your **LAN or Tailscale** network. Read-only in this release (no remote start/stop/restore). No restic passwords are sent.
+
+**What it is not:** a replacement for SyncMe, restic, or email reports. Backups still run only on each Backup PC. Monitor only receives lightweight status heartbeats.
+
+**How it works**
+
+1. Unzip **`SyncMe-Monitor-Setup-<ver>.zip`** on the Monitor PC. Edit `Config\Monitor.json` — set a shared `Token` (not `change-me`) and `Port` (default **17846**).
+2. Run **`SyncMe-Monitor.bat`** (Run as Administrator once if binding to `http://+:port` fails). Open `http://127.0.0.1:17846/` (or `http://THIS-PC:17846/` from another machine).
+3. On each **Backup PC**, SyncMe console → **Operations** → **Monitor add-on**:
+   - **Monitor URL** — e.g. `http://MONITOR-PC:17846` (same PC: `http://127.0.0.1:17846`)
+   - **Site id** — friendly name for that Backup PC
+   - **Shared token** — same value as `Monitor.json`
+   - Click **Save** — SyncMe sends a **test heartbeat** immediately so the site should appear on the dashboard.
+4. After each backup finishes, SyncMe also POSTs a heartbeat (Bearer token). The Monitor UI refreshes on a short interval.
+
+Keep Monitor off the public internet. Heartbeat ingest requires the shared token.
 
 ## Secrets
 
@@ -129,7 +157,13 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-Current release: **1.3.3**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+Current release: **1.4.2**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (SyncMe setup + Monitor zips).
+
+**1.4.2** solidifies the 1.4 line: ASCII-safe scripts/batch (no UTF-8 BOM on `.bat`/`.cmd`), Monitor test heartbeat on Save, Monitor UI refresh, combined `SyncMe-Release-1.4.2` hand-off, and PowerShell 5.1-safe source (no UTF-8 arrows misread as ANSI).
+
+**1.4.1** fixes setup/update folder merge (no nested `ui\ui` / `Modules\Modules`), makes Check for updates a primary action, and ships InstallMerge helpers for reliable upgrades.
+
+**1.4.0** adds in-app updates (HTTPS feed at `www.syncme.co.za/updates/latest.json`, SHA-256 verify, Config.ps1 backup+preserve) and an optional self-hosted **SyncMe Monitor** add-on (heartbeat fleet dashboard).
 
 **1.3.3** fixes snapshot folder browse: converts Windows paths to restic-absolute `/C/...` form before `restic ls` (and restore `--include`), so double-clicking a browsed folder no longer fails with “path filters must be absolute”.
 
@@ -144,8 +178,8 @@ Current release: **1.3.3**. `VERSION.txt` uses semantic versioning. Setup packag
 ### Console layout
 
 - **Setup wizard** — configure sets (including schedule and optional dry run at the end).
-- **Dashboard** — status cards (restic/rclone/disk), live activity, last-run details, Cloud & Retention modals.
-- **Operations** — backup actions, set list (edit/delete), snapshot browse and restore.
+- **Dashboard** — status cards (restic/rclone/disk), live activity, last-run details, Cloud & Retention modals; update popup when a newer package is published.
+- **Operations** — backup actions, set list (edit/delete), snapshot browse and restore, Check for updates, optional Monitor add-on settings.
 
 ## Prerequisites
 
@@ -154,8 +188,10 @@ Current release: **1.3.3**. `VERSION.txt` uses semantic versioning. Setup packag
 - [restic](https://restic.net/) (wizard can install into `tools\`)
 - Optional: rclone (console can install) for cloud destinations
 - Optional: Tailscale for offsite UNC; OfficeAgent for locked files on the source
+- Optional: SyncMe Monitor package on a LAN/Tailscale PC for a fleet status dashboard
 
 ## Links
 
 - Product site: [www.syncme.co.za](https://www.syncme.co.za)
+- In-app update feed: [www.syncme.co.za/updates/latest.json](https://www.syncme.co.za/updates/latest.json)
 - Contact: brad@web-zilla.co.za

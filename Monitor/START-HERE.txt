@@ -1,0 +1,23 @@
+SyncMe Monitor (add-on) 1.4.2
+=============================
+
+Self-hosted HTML dashboard for SyncMe Backup PCs. Not for a public webserver —
+run this package on a Windows PC on your LAN or Tailscale network.
+
+Quick start
+-----------
+1. Edit Config\Monitor.json — set a shared Token (not "change-me") and Port (default 17846).
+2. Double-click SyncMe-Monitor.bat (Run as Administrator once if bind to http://+:port fails).
+3. Open http://127.0.0.1:17846/ (or http://THIS-PC:17846/ from another machine).
+4. On each Backup PC SyncMe console → Operations → Monitor add-on:
+   - Monitor URL: http://THIS-PC:17846  (same PC: http://127.0.0.1:17846)
+   - Site id: friendly name
+   - Shared token: same as Monitor.json
+   - Click Save — SyncMe sends a test heartbeat immediately (you should see the site on the dashboard).
+5. After each backup finishes, SyncMe also posts a heartbeat (no restic passwords).
+
+Security
+--------
+- Keep Monitor on LAN/Tailscale; do not expose to the public internet.
+- Heartbeat ingest requires the Bearer token.
+- Dashboard is read-only in v1 (no remote start/stop/restore).

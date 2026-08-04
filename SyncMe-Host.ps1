@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  SyncMe local host — serves HTML UI and JSON API on 127.0.0.1 (no PHP, no DB).
+  SyncMe local host - serves HTML UI and JSON API on 127.0.0.1 (no PHP, no DB).
 #>
 [CmdletBinding()]
 param(
@@ -21,6 +21,13 @@ $utf8Bom = New-Object System.Text.UTF8Encoding $true
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
 . (Join-Path $ScriptRoot 'Modules\Report.ps1')
+foreach ($mod in @('Update.ps1', 'MonitorClient.ps1')) {
+    $modPath = Join-Path $ScriptRoot ('Modules\' + $mod)
+    if (-not (Test-Path -LiteralPath $modPath)) {
+        throw "Missing $modPath. Re-run SyncMe-Setup 1.4.0 (or copy Modules\$mod into the install folder)."
+    }
+    . $modPath
+}
 
 $script:BackupJob = @{
     Running  = $false
@@ -388,7 +395,7 @@ function Get-SyncMeRclone {
 function Invoke-SyncMeRclone {
     param([string[]]$Arguments)
     $rc = Get-SyncMeRclone
-    if (-not $rc.Ok) { throw 'rclone not found. Use Prerequisites → Install rclone.' }
+    if (-not $rc.Ok) { throw 'rclone not found. Use Prerequisites -> Install rclone.' }
     $conf = Get-SyncMeRcloneConfigPath
     if (-not (Test-Path -LiteralPath $conf)) {
         '' | Set-Content -LiteralPath $conf -Encoding UTF8
@@ -479,7 +486,7 @@ function Start-SyncMeRcloneAuthorize {
         Name     = $Name
         Url      = ''
         Token    = ''
-        Message  = 'Waiting for browser authorization…'
+        Message  = 'Waiting for browser authorization...'
         Finished = $false
         Ok       = $false
         Process  = $p
@@ -617,7 +624,7 @@ function Test-SyncMeRcloneRemote {
     if ($path -notmatch ':') { throw 'Use remote:path format.' }
     $r = Invoke-SyncMeRclone -Arguments @('about', $path)
     if ($r.ExitCode -ne 0) {
-        # about not supported on all backends — fall back to lsf
+        # about not supported on all backends - fall back to lsf
         $r2 = Invoke-SyncMeRclone -Arguments @('lsf', $path, '--max-depth', '1')
         if ($r2.ExitCode -ne 0) {
             throw $(if ($r2.StdErr) { $r2.StdErr } else { "rclone probe failed for $path" })
@@ -661,7 +668,7 @@ function Update-SyncMeSetRclone {
     }
     if (-not $found) { throw "Set not found: $setId" }
     Write-SyncMeSetsConfigFile -Sets @($updated)
-    return "Saved cloud destination for $setId → $repo"
+    return "Saved cloud destination for $setId -> $repo"
 }
 
 function Update-SyncMeSetPolicy {
@@ -1338,7 +1345,7 @@ function Invoke-SyncMeSetupApply {
 
     if ($destType -eq 'rclone') {
         $rclone = Get-SyncMeRclone
-        if (-not $rclone.Ok) { throw 'rclone not found. Use Prerequisites → Install rclone, then add a cloud remote in the console.' }
+        if (-not $rclone.Ok) { throw 'rclone not found. Use Prerequisites -> Install rclone, then add a cloud remote in the console.' }
         if ($resticRepo -notmatch '^rclone:') { throw 'Cloud destination must look like rclone:remote:path' }
     }
 
@@ -1347,7 +1354,7 @@ function Invoke-SyncMeSetupApply {
     if ($resticExe -eq 'restic' -or -not (Test-Path -LiteralPath $resticExe)) {
         $resolved = Get-ResticOnPath
         if (-not $resolved.Ok) {
-            throw 'restic not found. Use Prerequisites → Install restic (downloads into SyncMe\tools).'
+            throw 'restic not found. Use Prerequisites -> Install restic (downloads into SyncMe\tools).'
         }
         $resticExe = $resolved.Path
     }
@@ -1620,7 +1627,7 @@ function Start-SyncMeBackupJob {
         'dataCheck' { $args += @('-SkipArchive', '-SkipPrune', '-CheckOnly', '-RunDataCheck') }
         'pruneOnly' { $args += @('-SkipArchive', '-PruneOnly', '-SkipCheck') }
     }
-    Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $SetId -Phase 'starting' -Message 'Starting backup job…' -RunId '' -JsonLog ''
+    Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $SetId -Phase 'starting' -Message 'Starting backup job...' -RunId '' -JsonLog ''
     # Detached process: survives SyncMe console close; progress still via live-progress.json / lock
     $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $args -PassThru -WindowStyle Hidden
     $script:BackupJob = @{
@@ -1780,7 +1787,7 @@ $listener.Prefixes.Add($url)
 try {
     $listener.Start()
 } catch {
-    Write-Host "Could not bind $url — is SyncMe already running?" -ForegroundColor Red
+    Write-Host "Could not bind $url - is SyncMe already running?" -ForegroundColor Red
     Write-Host $_.Exception.Message
     exit 1
 }
@@ -1789,7 +1796,7 @@ Write-Host ""
 Write-Host "  SyncMe is running" -ForegroundColor Cyan
 Write-Host "  Open: $url" -ForegroundColor Green
 Write-Host "  Copyright (c) 2026 Bradford Lotriet (brad@web-zilla.co.za)" -ForegroundColor DarkCyan
-Write-Host "  Free to use — keep this credit. See LICENSE.txt" -ForegroundColor DarkCyan
+Write-Host "  Free to use - keep this credit. See LICENSE.txt" -ForegroundColor DarkCyan
 Write-Host "  Close this window to stop SyncMe." -ForegroundColor Yellow
 Write-Host ""
 
@@ -1876,9 +1883,12 @@ try {
                 $lowDisk = $false
                 if ($disk1Info -and $null -ne $disk1Info.percentFree -and $disk1Info.percentFree -lt 15) { $lowDisk = $true }
                 if ($disk2Info -and $null -ne $disk2Info.percentFree -and $disk2Info.percentFree -lt 15) { $lowDisk = $true }
+                $opts = Get-SyncMeOptions -ScriptRoot $ScriptRoot
                 Write-SyncMeJson @{
                     ok                   = $true
                     packageVersion       = (Get-SyncMePackageVersion)
+                    updateFeedUrl        = [string]$opts.UpdateFeedUrl
+                    monitorConfigured    = (-not [string]::IsNullOrWhiteSpace([string]$opts.MonitorUrl))
                     configured           = [bool](Test-SyncMeConfigured)
                     lastSuccess          = $stamp
                     lastRun              = $lastRun
@@ -1934,6 +1944,121 @@ try {
                     winfspMessage    = $winfsp.Message
                     winfspUrl        = $(if ($winfsp.Url) { $winfsp.Url } else { 'https://winfsp.dev/rel/' })
                 } -Response $res
+                continue
+            }
+
+            if ($path -eq '/api/update/check' -and $req.HttpMethod -eq 'GET') {
+                try {
+                    $info = Get-SyncMeUpdateInfo -ScriptRoot $ScriptRoot -CurrentVersion (Get-SyncMePackageVersion)
+                    Write-SyncMeJson @{
+                        ok              = $true
+                        updateAvailable = [bool]$info.UpdateAvailable
+                        currentVersion  = $info.CurrentVersion
+                        version         = $info.Version
+                        file            = $info.File
+                        url             = $info.Url
+                        notes           = $info.Notes
+                        feedUrl         = $info.FeedUrl
+                    } -Response $res
+                } catch {
+                    Write-SyncMeJson @{
+                        ok              = $false
+                        updateAvailable = $false
+                        message         = $_.Exception.Message
+                        currentVersion  = (Get-SyncMePackageVersion)
+                    } -StatusCode 400 -Response $res
+                }
+                continue
+            }
+
+            if ($path -eq '/api/update/install' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    $info = Get-SyncMeUpdateInfo -ScriptRoot $ScriptRoot -CurrentVersion (Get-SyncMePackageVersion)
+                    if (-not $info.UpdateAvailable) {
+                        Write-SyncMeJson @{
+                            ok      = $false
+                            message = "Already on latest version ($($info.CurrentVersion))."
+                        } -StatusCode 400 -Response $res
+                        continue
+                    }
+                    $result = Start-SyncMeUpdateApply -ScriptRoot $ScriptRoot -UpdateInfo $info
+                    Write-SyncMeJson @{
+                        ok      = $true
+                        message = $result.Message
+                        version = $result.Version
+                        backup  = $result.Backup
+                        restart = $true
+                    } -Response $res
+                    $psExit = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+                    Start-Process -FilePath $psExit -ArgumentList @(
+                        '-NoProfile',
+                        '-Command', "Start-Sleep -Seconds 2; Stop-Process -Id $PID -Force -ErrorAction SilentlyContinue"
+                    ) -WindowStyle Hidden | Out-Null
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                continue
+            }
+
+            if ($path -eq '/api/options' -and $req.HttpMethod -eq 'GET') {
+                $opts = Get-SyncMeOptions -ScriptRoot $ScriptRoot
+                Write-SyncMeJson @{
+                    ok            = $true
+                    updateFeedUrl = [string]$opts.UpdateFeedUrl
+                    monitorUrl    = [string]$opts.MonitorUrl
+                    monitorSiteId = [string]$opts.MonitorSiteId
+                    monitorToken  = [string]$opts.MonitorToken
+                } -Response $res
+                continue
+            }
+
+            if ($path -eq '/api/options' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    $body = Read-SyncMeBody $req
+                    if ($null -eq $body) {
+                        throw 'Request body is required (JSON with monitorUrl / monitorSiteId / monitorToken).'
+                    }
+                    $propNames = @($body.PSObject.Properties | ForEach-Object { $_.Name })
+                    $saveArgs = @{ ScriptRoot = $ScriptRoot }
+                    if ($propNames -contains 'updateFeedUrl') { $saveArgs.UpdateFeedUrl = [string]$body.updateFeedUrl }
+                    if ($propNames -contains 'monitorUrl') { $saveArgs.MonitorUrl = [string]$body.monitorUrl }
+                    if ($propNames -contains 'monitorSiteId') { $saveArgs.MonitorSiteId = [string]$body.monitorSiteId }
+                    if ($propNames -contains 'monitorToken') { $saveArgs.MonitorToken = [string]$body.monitorToken }
+                    if (
+                        -not $saveArgs.ContainsKey('UpdateFeedUrl') -and
+                        -not $saveArgs.ContainsKey('MonitorUrl') -and
+                        -not $saveArgs.ContainsKey('MonitorSiteId') -and
+                        -not $saveArgs.ContainsKey('MonitorToken')
+                    ) {
+                        throw 'No options fields provided to save.'
+                    }
+                    $saved = Save-SyncMeOptions @saveArgs
+                    $hb = $null
+                    if (-not [string]::IsNullOrWhiteSpace([string]$saved.MonitorUrl)) {
+                        try {
+                            $hb = Send-SyncMeMonitorTestHeartbeat -ScriptRoot $ScriptRoot
+                        } catch {
+                            $hb = @{ Ok = $false; Message = $_.Exception.Message }
+                        }
+                    }
+                    $msg = 'Options saved.'
+                    if ($hb) {
+                        if ($hb.Ok) { $msg = 'Options saved. Test heartbeat OK.' }
+                        else { $msg = 'Options saved, but test heartbeat failed: ' + [string]$hb.Message }
+                    }
+                    Write-SyncMeJson @{
+                        ok            = $true
+                        message       = $msg
+                        updateFeedUrl = [string]$saved.UpdateFeedUrl
+                        monitorUrl    = [string]$saved.MonitorUrl
+                        monitorSiteId = [string]$saved.MonitorSiteId
+                        monitorToken  = [string]$saved.MonitorToken
+                        heartbeatOk   = $(if ($hb) { [bool]$hb.Ok } else { $null })
+                        heartbeatMsg  = $(if ($hb) { [string]$hb.Message } else { '' })
+                    } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
                 continue
             }
 
@@ -2022,7 +2147,7 @@ try {
                         if (-not $ping) { $allOk = $false }
                     }
                 } else {
-                    $msgs.Add('Local source paths — skipping host ping.')
+                    $msgs.Add('Local source paths - skipping host ping.')
                 }
                 foreach ($pp in $paths) {
                     $ok = Test-Path -LiteralPath $pp

@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Copies THIS SyncMe project folder onto a Backup PC install path (default C:\SyncMe).
@@ -53,7 +53,7 @@ if (-not $SkipStopHost) {
             $_.CommandLine -match 'SyncMe-Host\.ps1'
         } |
         ForEach-Object {
-            Write-Host "Stopping SyncMe host PID $($_.ProcessId)…" -ForegroundColor Yellow
+            Write-Host "Stopping SyncMe host PID $($_.ProcessId)..." -ForegroundColor Yellow
             Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
             $stopped++
         }
@@ -114,7 +114,7 @@ if (-not (Test-Path -LiteralPath $toolsDest)) {
     New-Item -ItemType Directory -Path $toolsDest -Force | Out-Null
 }
 # Keep any already-installed restic/rclone on the Backup PC; do not overwrite from this repo's tools\.
-Write-Host 'Skipping tools\ binaries — install restic/rclone from the SyncMe console (or PATH).' -ForegroundColor Yellow
+Write-Host 'Skipping tools\ binaries - install restic/rclone from the SyncMe console (or PATH).' -ForegroundColor Yellow
 
 foreach ($d in @('Logs', 'Reports')) {
     $p = Join-Path $Target $d
@@ -126,7 +126,7 @@ foreach ($d in @('Logs', 'Reports')) {
 $installedVer = (Get-Content -LiteralPath (Join-Path $Target 'VERSION.txt') -TotalCount 1).Trim()
 $reportCheck = Select-String -Path (Join-Path $Target 'Modules\Report.ps1') -Pattern 'Backup by SyncMe' -Quiet
 if (-not $reportCheck) {
-    Write-Warning 'Modules\Report.ps1 does not contain "Backup by SyncMe" — wrong source?'
+    Write-Warning 'Modules\Report.ps1 does not contain "Backup by SyncMe" - wrong source?'
 }
 
 Write-Host ''

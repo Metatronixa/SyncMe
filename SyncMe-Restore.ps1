@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Detached restore runner for SyncMe (cancellable from the host).
@@ -47,7 +47,7 @@ Write-RestoreStatus @{
     running  = $true
     finished = $false
     success  = $false
-    message  = "Restoring $Snapshot…"
+    message  = "Restoring $Snapshot..."
     target   = $Target
     exitCode = $null
     setId    = $SetId

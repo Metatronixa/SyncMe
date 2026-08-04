@@ -7,7 +7,7 @@
 function Resolve-SyncMeResticExe {
     <#
       Finds restic.exe for SyncMe.
-      Order: configured full path → SyncMe\tools\restic.exe → PATH → common install locations.
+      Order: configured full path -> SyncMe\tools\restic.exe -> PATH -> common install locations.
       Returns @{ Ok = $true/$false; Path = '...' }
     #>
     [CmdletBinding()]
@@ -85,7 +85,7 @@ function Get-SyncMeResticExePath {
     }
     $r = Resolve-SyncMeResticExe -ConfiguredPath $configured -ScriptRoot $ScriptRoot
     if (-not $r.Ok) {
-        throw 'restic not found. Use SyncMe → Install restic (saves into tools\restic.exe), or set a full ResticPath.'
+        throw 'restic not found. Use SyncMe -> Install restic (saves into tools\restic.exe), or set a full ResticPath.'
     }
     return $r.Path
 }
@@ -140,7 +140,7 @@ function Get-SyncMeSnapshots {
             if ($s.paths) { $paths = @($s.paths) }
             $hasUnc = [bool](@($paths) | Where-Object { $_ -match '^\\\\' })
             $snapHostname = [string]$s.hostname
-            $uncNote = if ($hasUnc) { '  [UNC — Windows restore unsupported]' } else { '' }
+            $uncNote = if ($hasUnc) { '  [UNC - Windows restore unsupported]' } else { '' }
             $display = "$short  backup $timeLocal$uncNote  tags=[$($tags -join ',')]  $($paths -join ', ')"
             [pscustomobject]@{
                 Id          = $id
@@ -171,7 +171,7 @@ function Test-SyncMeRestoreTargetSafe {
         return @{ Ok = $false; Message = 'Target folder is empty.' }
     }
     if ($ResticRepo -match '^rclone:') {
-        # Cloud repo — only ensure target is a normal local/UNC path
+        # Cloud repo - only ensure target is a normal local/UNC path
         if ($TargetPath -match '^rclone:') {
             return @{ Ok = $false; Message = 'Restore target must be a local or UNC folder, not rclone:.' }
         }
@@ -223,7 +223,7 @@ function Test-SyncMeSnapshotHasUncPaths {
     }
     if ($s.HasUncPaths) {
         $uncPaths = @($s.Paths | Where-Object { $_ -match '^\\\\' })
-        $msg = "This snapshot was backed up using UNC paths ($($uncPaths -join ', ')). Windows restic cannot restore those snapshots (invalid child node name). Run a new backup — SyncMe now stores drive-letter paths — then restore the new snapshot."
+        $msg = "This snapshot was backed up using UNC paths ($($uncPaths -join ', ')). Windows restic cannot restore those snapshots (invalid child node name). Run a new backup - SyncMe now stores drive-letter paths - then restore the new snapshot."
         return @{ HasUnc = $true; Message = $msg; Snapshot = $s }
     }
     return @{ HasUnc = $false; Message = ''; Snapshot = $s }
@@ -371,7 +371,7 @@ function Get-SyncMeNormalizedSnapshotPath {
         $p = $p.Replace('\\', '\')
     }
     $p = $p.TrimEnd('\')
-    # restic-style \C\Foo → C:\Foo
+    # restic-style \C\Foo -> C:\Foo
     if ($p -match '^\\([A-Za-z])\\(.+)$') {
         return ($Matches[1].ToUpperInvariant() + ':\' + $Matches[2])
     }
@@ -390,7 +390,7 @@ function Get-SyncMeNormalizedSnapshotPath {
 function ConvertTo-SyncMeResticAbsPath {
     <#
       Convert UI/Windows path to restic directory filter form (must start with /).
-      C:\Foo\Bar → /C/Foo/Bar ; /C/Foo stays /C/Foo.
+      C:\Foo\Bar -> /C/Foo/Bar ; /C/Foo stays /C/Foo.
     #>
     param([AllowNull()][string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
@@ -424,7 +424,7 @@ function Get-SyncMeSnapshotPathParent {
     $idx = $p.LastIndexOf('\')
     if ($idx -lt 0) { return '' }
     if ($idx -eq 2 -and $p.Length -ge 3 -and $p[1] -eq ':') {
-        # Parent of C:\Foo is C:  — treat drive root specially
+        # Parent of C:\Foo is C:  - treat drive root specially
         return $p.Substring(0, 2)
     }
     return $p.Substring(0, $idx)
@@ -501,7 +501,7 @@ function Get-SyncMeSnapshotListing {
         $normPath = Get-SyncMeNormalizedSnapshotPath -Path $Path
 
         # Root listing: snapshot source paths only (no full-tree ls).
-        # Use plain PS arrays — @($List[object]) throws "Argument types do not match" on Windows PowerShell 5.1.
+        # Use plain PS arrays - @($List[object]) throws "Argument types do not match" on Windows PowerShell 5.1.
         if ([string]::IsNullOrWhiteSpace($normPath)) {
             $roots = @(foreach ($rp in @($snapObj.Paths)) {
                 if ([string]::IsNullOrWhiteSpace([string]$rp)) { continue }
@@ -572,7 +572,7 @@ function Get-SyncMeSnapshotListing {
                 if ($msg -match '(?i)invalid child node name') {
                     $msg = 'Windows restic rejected UNC path nodes in this snapshot. Run a new backup, then browse that snapshot.'
                 } elseif ($msg -match '(?i)path filters must be absolute|starting with a forward slash') {
-                    $msg = "Folder path must use restic absolute form (e.g. $resticPath). SyncMe should convert automatically — update to the latest SyncMe build if this persists."
+                    $msg = "Folder path must use restic absolute form (e.g. $resticPath). SyncMe should convert automatically - update to the latest SyncMe build if this persists."
                 }
                 return ,@{
                     Ok         = $false

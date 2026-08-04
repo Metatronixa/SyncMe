@@ -92,7 +92,7 @@ function Get-BackupStoredCredential {
         if ($TargetName -match 'Share') {
             throw "Share credentials not stored ('$TargetName'). In SyncMe, edit the set and store share credentials under Passwords."
         }
-        throw "Repository password not stored ('$TargetName'). In SyncMe, open Operations → Store password (or Edit set → Passwords)."
+        throw "Repository password not stored ('$TargetName'). In SyncMe, open Operations -> Store password (or Edit set -> Passwords)."
     }
     $secure = ConvertTo-SecureString $pass -AsPlainText -Force
     return (New-Object System.Management.Automation.PSCredential ($user, $secure))
@@ -159,13 +159,13 @@ function Send-BackupToast {
         [switch]$Silent
     )
 
-    # Toasts must never fail a backup — swallow all errors.
+    # Toasts must never fail a backup - swallow all errors.
     try {
         if ($Silent) { return }
 
         $rawTitle = [string]$Title
         $rawText = [string]$Text
-        # Keep toast/balloon text short — long multi-line strings break NotifyIcon ("Argument types do not match")
+        # Keep toast/balloon text short - long multi-line strings break NotifyIcon ("Argument types do not match")
         $safeTitle = if ($rawTitle.Length -gt 63) { $rawTitle.Substring(0, 60) + '...' } else { $rawTitle }
         $oneLine = ($rawText -replace '[\r\n]+', ' ').Trim()
         if ($oneLine.Length -gt 200) { $oneLine = $oneLine.Substring(0, 197) + '...' }
@@ -456,7 +456,7 @@ function Send-BackupCompleteNotification {
             $ok = [bool]$Success
             $title = if ($ok) { 'SyncMe backup completed' } else { 'SyncMe backup FAILED' }
             $status = if ($ok) { 'Success' } else { 'Failure' }
-            # Do not append report path — long paths / newlines break Windows balloon toasts
+            # Do not append report path - long paths / newlines break Windows balloon toasts
             $text = if ([string]::IsNullOrWhiteSpace($Summary)) {
                 if ($ok) { 'Backup finished successfully.' } else { 'Backup finished with errors.' }
             } else {
@@ -479,7 +479,7 @@ function Send-BackupCompleteNotification {
         $finished = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
         $exit3Note = ''
         if ($Summary -match 'EXIT3') {
-            $exit3Note = '<p style="margin:14px 0 0;padding:10px 12px;background:#f8f1e4;border-radius:6px;font-size:13px;color:#6b5a3a;">Some source files were unread (EXIT3) — often open Office files on a live share. Prefer Shadow Copies via OfficeAgent on the source PC.</p>'
+            $exit3Note = '<p style="margin:14px 0 0;padding:10px 12px;background:#f8f1e4;border-radius:6px;font-size:13px;color:#6b5a3a;">Some source files were unread (EXIT3) - often open Office files on a live share. Prefer Shadow Copies via OfficeAgent on the source PC.</p>'
         }
         $attachNote = if ($ReportPath -and (Test-Path -LiteralPath $ReportPath)) {
             '<p style="margin:14px 0 0;color:#5a6b64;font-size:13px;">Full HTML report is attached.</p>'

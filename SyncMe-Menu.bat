@@ -1,13 +1,13 @@
 @echo off
 setlocal EnableExtensions
-title SyncMe - © 2026 Bradford Lotriet
+title SyncMe - (c) 2026 Bradford Lotriet
 cd /d "%~dp0"
 
 if not exist "Logs" mkdir "Logs"
 
 echo.
 echo  ============================================================
-echo   SyncMe — Management console
+echo   SyncMe - Management console
 echo   Copyright (c) 2026 Bradford Lotriet
 echo   brad@web-zilla.co.za
 echo  ============================================================

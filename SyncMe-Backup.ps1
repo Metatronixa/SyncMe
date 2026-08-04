@@ -39,6 +39,13 @@ $ScriptRoot = $PSScriptRoot
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Report.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
+foreach ($mod in @('Update.ps1', 'MonitorClient.ps1')) {
+    $modPath = Join-Path $ScriptRoot ('Modules\' + $mod)
+    if (-not (Test-Path -LiteralPath $modPath)) {
+        throw "Missing $modPath. Re-run SyncMe-Setup 1.4.0 (or copy Modules\$mod into the install folder)."
+    }
+    . $modPath
+}
 
 $Config = $null
 if ($SetId) {
@@ -525,7 +532,7 @@ public static class NativeCred {
 
     $password = [NativeCred]::ReadPassword($TargetName)
     if ([string]::IsNullOrEmpty($password)) {
-        throw "Repository password not stored ('$TargetName'). In SyncMe, open Operations → Store password (or Edit set → Passwords)."
+        throw "Repository password not stored ('$TargetName'). In SyncMe, open Operations -> Store password (or Edit set -> Passwords)."
     }
     return $password
 }
@@ -563,7 +570,7 @@ function Connect-BackupShare {
     # Use the root of the first UNC path as the share to map (skip local drive paths)
     $firstUnc = $SourcePaths | Where-Object { $_ -match '^\\\\[^\\]+\\[^\\]+' } | Select-Object -First 1
     if (-not $firstUnc) {
-        Write-Log 'Share credentials configured but sources are local paths — skipping SMB map.' $LogPath
+        Write-Log 'Share credentials configured but sources are local paths - skipping SMB map.' $LogPath
         return $null
     }
     if ($firstUnc -notmatch '^\\\\([^\\]+)\\([^\\]+)') {
@@ -910,9 +917,9 @@ function Invoke-Restic {
                                     $parts = New-Object System.Collections.Generic.List[string]
                                     if ($mode -eq 'scanning') {
                                         if ($null -ne $displayTotal -and $displayTotal -gt 0) {
-                                            try { [void]$parts.Add(('Scanning source… {0} found so far' -f (Format-SyncMeBytes $displayTotal))) } catch { [void]$parts.Add('Scanning source…') }
+                                            try { [void]$parts.Add(('Scanning source... {0} found so far' -f (Format-SyncMeBytes $displayTotal))) } catch { [void]$parts.Add('Scanning source...') }
                                         } else {
-                                            [void]$parts.Add('Scanning source…')
+                                            [void]$parts.Add('Scanning source...')
                                         }
                                     } elseif ($null -ne $bytesDone -and $null -ne $displayTotal -and $displayTotal -gt 0) {
                                         try { [void]$parts.Add(('{0} of {1}' -f (Format-SyncMeBytes $bytesDone), (Format-SyncMeBytes $displayTotal))) } catch { }
@@ -937,7 +944,7 @@ function Invoke-Restic {
                                             -ScriptRoot $ScriptRoot `
                                             -SetId $ActiveSetId `
                                             -Phase $ProgressPhase `
-                                            -Message $(if ($mode -eq 'scanning') { 'Scanning source…' } elseif ($mode -eq 'done') { 'Backup step finishing…' } else { 'Backing up…' }) `
+                                            -Message $(if ($mode -eq 'scanning') { 'Scanning source...' } elseif ($mode -eq 'done') { 'Backup step finishing...' } else { 'Backing up...' }) `
                                             -RunId $runId `
                                             -JsonLog '' `
                                             -Percent $uiPercent `
@@ -1019,7 +1026,7 @@ function Test-SyncMeResticLockError {
         [int]$ExitCode = 1
     )
     if ([string]::IsNullOrWhiteSpace($Text)) { return $false }
-    # Explicit lock-acquire messages only — do not treat timeouts / rclone HTTP errors as locks.
+    # Explicit lock-acquire messages only - do not treat timeouts / rclone HTTP errors as locks.
     return [bool]($Text -match '(?i)unable to create lock|repository is already locked|repository is locked|lock file.*(locked|exclusively)|could not.*lock')
 }
 
@@ -1045,7 +1052,7 @@ function Unlock-SyncMeStaleResticLock {
         [string]$LogPath
     )
     if (Test-SyncMeOtherResticProcessRunning) {
-        Write-Log 'Repository appears locked and another restic/SyncMe process is still running — not unlocking.' $LogPath 'ERROR'
+        Write-Log 'Repository appears locked and another restic/SyncMe process is still running - not unlocking.' $LogPath 'ERROR'
         return $false
     }
     Write-Log 'Stale restic lock detected from previous crashed run. Executing automatic restic unlock...' $LogPath 'WARN'
@@ -1096,7 +1103,7 @@ function Invoke-ResticWithLockRetry {
     if (-not (Unlock-SyncMeStaleResticLock -ResticExe $ResticExe -Repo $Repo -Password $Password -LogPath $LogPath)) {
         return ,$result
     }
-    Write-Log 'Retrying restic operation once after unlock…' $LogPath 'WARN'
+    Write-Log 'Retrying restic operation once after unlock...' $LogPath 'WARN'
     $retry = Invoke-Restic `
         -ResticExe $ResticExe `
         -Repo $Repo `
@@ -1378,7 +1385,7 @@ $runInfo = @{
 
 Write-Log "=== SyncMe backup run $runId ===" $logPath
 Write-Log "Copyright (c) 2026 Bradford Lotriet (brad@web-zilla.co.za)" $logPath
-Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'starting' -Message 'Starting backup job…' -RunId $runId -JsonLog ''
+Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'starting' -Message 'Starting backup job...' -RunId $runId -JsonLog ''
 if ($Config.PSObject.Properties.Name -contains 'EnableWakeOnLan' -and $Config.EnableWakeOnLan -and $Config.WakeMacAddress) {
     try {
         . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
@@ -1453,7 +1460,7 @@ try {
         Write-Log "Cloud restic repository: $($Config.ResticRepo)" $logPath
     }
 
-    # Tailscale advisory — never fail local/LAN backups over a missing Tailscale install.
+    # Tailscale advisory - never fail local/LAN backups over a missing Tailscale install.
     $netMode = 'both'
     if ($Config.PSObject.Properties.Name -contains 'NetworkMode' -and $Config.NetworkMode) {
         $netMode = [string]$Config.NetworkMode
@@ -1510,7 +1517,7 @@ try {
             $runInfo.PruneDetail = 'AppendOnly enabled: Skipping prune operation.'
             Write-Log $runInfo.PruneDetail $logPath 'WARN'
         } else {
-        Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'prune' -Message 'Pruning old snapshots…' -RunId $runId -JsonLog ''
+        Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'prune' -Message 'Pruning old snapshots...' -RunId $runId -JsonLog ''
         $runInfo.PruneRan = 'Yes'
         $forgetArgs = @(
             'forget'
@@ -1585,7 +1592,7 @@ try {
     $resolved = Resolve-BackupSourcePaths -ConfiguredPaths $Config.SourcePaths -Config $Config -LogPath $logPath
     $effectiveSources = @($resolved.EffectivePaths)
 
-    # Rewrite UNC → drive letters so restic stores restorable paths on Windows
+    # Rewrite UNC -> drive letters so restic stores restorable paths on Windows
     $uncRewrite = Convert-BackupSourcesToDriveLetters `
         -SourcePaths $effectiveSources `
         -PreferredLetter $(if ($Config.ShareDriveLetter) { [string]$Config.ShareDriveLetter } else { '' }) `
@@ -1647,7 +1654,7 @@ try {
     }
 
     if ($runBackup) {
-    Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'backup' -Message 'Backing up sources into Disk 1…' -RunId $runId -JsonLog ''
+    Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'backup' -Message 'Backing up sources into Disk 1...' -RunId $runId -JsonLog ''
     $backupArgs = @(
         'backup'
         '--json'
@@ -1694,7 +1701,7 @@ try {
     }
     if (-not (Set-RunInfoFromResticSummary -RunInfo $runInfo -SummaryMsg $summaryMsg)) {
         if ($backupResult.ExitCode -eq 0 -or $backupResult.ExitCode -eq 3) {
-            Write-Log 'restic returned success but no JSON summary was parsed — attempting recovery.' $logPath 'WARN'
+            Write-Log 'restic returned success but no JSON summary was parsed - attempting recovery.' $logPath 'WARN'
             Recover-ResticBackupStats `
                 -RunInfo $runInfo `
                 -JsonLogPath $jsonLog `
@@ -1730,7 +1737,7 @@ try {
         $runInfo.PruneDetail = 'AppendOnly enabled: Skipping prune operation.'
         Write-Log $runInfo.PruneDetail $logPath 'WARN'
     } elseif (-not $SkipPrune -and $overallSuccess) {
-        Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'prune' -Message 'Pruning old snapshots…' -RunId $runId -JsonLog ''
+        Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'prune' -Message 'Pruning old snapshots...' -RunId $runId -JsonLog ''
         $runInfo.PruneRan = 'Yes'
         $forgetArgs = @(
             'forget'
@@ -1785,11 +1792,11 @@ try {
     if ($archiveDue -and $overallSuccess) {
         if ([string]::IsNullOrWhiteSpace([string]$Config.ArchivePath)) {
             $runInfo.ArchiveStatus = 'Skipped'
-            $runInfo.ArchiveDetail = 'Skipped — ArchivePath is empty (typical for cloud-only Disk 1).'
+            $runInfo.ArchiveDetail = 'Skipped - ArchivePath is empty (typical for cloud-only Disk 1).'
             Write-Log $runInfo.ArchiveDetail $logPath
         } else {
         $runInfo.ArchiveRan = 'Yes'
-        Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'archive' -Message 'Refreshing Disk 2 plain archive…' -RunId $runId -JsonLog ''
+        Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $ActiveSetId -Phase 'archive' -Message 'Refreshing Disk 2 plain archive...' -RunId $runId -JsonLog ''
         Write-Log "Biweekly archive is due - restoring latest snapshot to $($Config.ArchivePath)" $logPath
         $safeArch = Test-SyncMeArchivePathSafe -ArchivePath ([string]$Config.ArchivePath)
         if (-not $safeArch.Ok) {
@@ -1932,7 +1939,7 @@ try {
                 $runInfo.DataCheckDetail = "Data subset $n/7 OK."
                 Write-Log $runInfo.DataCheckDetail $logPath
 
-                Write-Log 'Running advisory restore drill (restic dump of random file(s))…' $logPath
+                Write-Log 'Running advisory restore drill (restic dump of random file(s))...' $logPath
                 $drill = Test-SyncMeRestoreDrill -Config $Config -SetId $ActiveSetId -LogPath $logPath
                 if ($drill -is [System.Array]) {
                     $drill = @($drill) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('Ok') } | Select-Object -Last 1
@@ -1975,7 +1982,7 @@ try {
         Write-Log "Ignored notify noise (not a backup failure): $fatalMsg" $logPath 'WARN'
         # Do not keep SUCCESS unless restic exit + snapshot prove the backup finished.
         if ($runInfo.BackupExitCode -notin @('0', '3') -or [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
-            # Attempt recovery before deciding — restic may have finished before the noise threw.
+            # Attempt recovery before deciding - restic may have finished before the noise threw.
             try {
                 if ([string]::IsNullOrWhiteSpace([string]$runInfo.BackupExitCode) -or [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
                     Recover-ResticBackupStats `
@@ -1989,7 +1996,7 @@ try {
             } catch { }
             if ($runInfo.BackupExitCode -notin @('0', '3') -or [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
                 $overallSuccess = $false
-                Write-Log 'Notify noise occurred before restic stats were captured — marking run unsuccessful until exit/snapshot are known.' $logPath 'WARN'
+                Write-Log 'Notify noise occurred before restic stats were captured - marking run unsuccessful until exit/snapshot are known.' $logPath 'WARN'
             }
         }
     } else {
@@ -2059,12 +2066,12 @@ if (-not $CheckOnly -and -not $PruneOnly -and -not $skippedDueToLock) {
     }
     if ([string]::IsNullOrWhiteSpace([string]$runInfo.BackupExitCode) -and [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
         $overallSuccess = $false
-        $msg = 'Backup finished without a captured restic exit code or snapshot — report stats may be incomplete. Check Logs\restic-backup-*.jsonl.'
+        $msg = 'Backup finished without a captured restic exit code or snapshot - report stats may be incomplete. Check Logs\restic-backup-*.jsonl.'
         if ($errors -notcontains $msg) { [void]$errors.Add($msg) }
         Write-Log $msg $logPath 'ERROR'
     } elseif ($runInfo.BackupExitCode -in @('0', '3') -and -not [string]::IsNullOrWhiteSpace([string]$runInfo.SnapshotId)) {
         # Drop the obsolete "blank exit" error if recovery filled stats after the fact.
-        $drop = 'Backup finished without a captured restic exit code — report stats may be incomplete. Check Logs\restic-backup-*.jsonl.'
+        $drop = 'Backup finished without a captured restic exit code - report stats may be incomplete. Check Logs\restic-backup-*.jsonl.'
         for ($i = $errors.Count - 1; $i -ge 0; $i--) {
             if ([string]$errors[$i] -eq $drop) { $errors.RemoveAt($i) }
         }
@@ -2132,6 +2139,18 @@ try {
     Write-SyncMeLastRun -ScriptRoot $ScriptRoot -SetId $ActiveSetId -RunInfo $runInfo
 } catch {
     Write-Log "Failed to write last-run.json: $($_.Exception.Message)" $logPath 'WARN'
+}
+
+try {
+    if (-not $CheckOnly -and -not $WhatIf) {
+        $hbRun = $runInfo | Select-Object *
+        $hbRun | Add-Member -NotePropertyName DisplayName -NotePropertyValue $(
+            if ($Config.DisplayName) { [string]$Config.DisplayName } else { $ActiveSetId }
+        ) -Force
+        Send-SyncMeMonitorHeartbeat -ScriptRoot $ScriptRoot -SetId $ActiveSetId -RunInfo $hbRun -LogPath $logPath
+    }
+} catch {
+    Write-Log "Monitor heartbeat failed (non-fatal): $($_.Exception.Message)" $logPath 'WARN'
 }
 
 if (-not $overallSuccess) {
