@@ -11,7 +11,7 @@ This folder contains both customer packages:
    Unzip to a Monitor PC, edit Config\Monitor.json token, run SyncMe-Monitor.bat.
    On each Backup PC: Operations → Monitor add-on → Save (sends a test ping).
 
-Update feed (website): upload dist\updates\latest.json and SyncMe-Setup-1.4.2.zip
-to https://www.syncme.co.za/updates/
+Update feed (website): upload dist\updates\latest.json, SyncMe-Setup-1.4.2.zip, and SyncMe-Monitor-Setup-1.4.2.zip
+to https://www.syncme.co.za/updates/ (site Downloads section uses the same folder).
 
-SHA256 (SyncMe-Setup-1.4.2.zip): e63211a50e59a79d32cad298bca4baff28833f3ec9ec95cdfa29c048003cc94c
+SHA256 (SyncMe-Setup-1.4.2.zip): d540d4f2a793ee889e07d7aba7e438bc838e683ed7bc4f313c307804b655407a

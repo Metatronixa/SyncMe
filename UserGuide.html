@@ -502,12 +502,16 @@ Backup PC  â€”  SyncMe console + Task Scheduler
         <p>
           Separate self-hosted package for a <strong>fleet status dashboard</strong> (HTML + local host on Windows).
           Not part of the main SyncMe zip and not meant for public web hosting.
+          Download <strong>SyncMe-Monitor-Setup-1.4.2.zip</strong> from
+          <a href="https://github.com/Metatronixa/SyncMe/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>
+          or <a href="https://www.syncme.co.za" target="_blank" rel="noopener noreferrer">www.syncme.co.za</a> Downloads.
         </p>
         <ol>
-          <li>Download <strong>SyncMe-Monitor-Setup</strong> from GitHub Releases; edit <code>Config\Monitor.json</code> (shared token + port, default 17846).</li>
-          <li>Run <code>SyncMe-Monitor.bat</code> on one LAN/Tailscale PC; open the Monitor URL in a browser.</li>
-          <li>On each Backup PC â†’ Operations â†’ <strong>Monitor add-on</strong>: Monitor URL, site id, same shared token.</li>
-          <li>After each backup, SyncMe posts a compact heartbeat (no restic passwords). Failures to reach Monitor never fail the backup.</li>
+          <li>Unzip on a LAN/Tailscale Windows PC; edit <code>Config\Monitor.json</code> (shared token + port, default <strong>17846</strong>).</li>
+          <li>Run <code>SyncMe-Monitor.bat</code>; open <code>http://127.0.0.1:17846/</code> (or that PC&rsquo;s hostname on port 17846).</li>
+          <li>On each Backup PC: Operations &rarr; <strong>Monitor add-on</strong> &mdash; Monitor URL, site id, same shared token &mdash; click <strong>Save</strong>
+              (SyncMe sends a <strong>test heartbeat</strong> immediately so the site should appear on the dashboard).</li>
+          <li>After each backup, SyncMe also posts a compact heartbeat (no restic passwords). Failures to reach Monitor never fail the backup.</li>
         </ol>
       </section>
 

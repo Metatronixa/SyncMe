@@ -23,7 +23,8 @@ USER GUIDE
   SyncMe.bat asks whether to open the guide before starting the console.
 
 CUSTOMER PACKAGE (minimal)
-  Hand customers ONLY: SyncMe-Setup.cmd + SyncMe-Payload.zip (+ START-HERE).
+  Hand customers SyncMe-Setup.cmd + SyncMe-Payload.zip (+ START-HERE),
+  or the combined folder dist\SyncMe-Release-<ver>\ (SyncMe + Monitor zips).
   Build with: .\Build-SyncMeSetup.ps1
   Setup unpacks into C:\SyncMe and launches the wizard. Existing Config.ps1 is kept.
 
@@ -32,8 +33,13 @@ UPDATES (1.4.0+)
   Config.ps1 is backed up and preserved. Or re-run SyncMe-Setup.cmd from a newer zip.
 
 MONITOR ADD-ON (optional)
-  Separate SyncMe-Monitor-Setup package for a self-hosted fleet dashboard (LAN/Tailscale).
-  Configure Monitor URL + token under Operations → Monitor add-on on each Backup PC.
+  Separate package: SyncMe-Monitor-Setup-<ver>.zip (same version as SyncMe).
+  Download from GitHub Releases or https://www.syncme.co.za (Downloads).
+  1. Unzip on a LAN/Tailscale Windows PC; edit Config\Monitor.json (shared token, port 17846).
+  2. Run SyncMe-Monitor.bat; open http://127.0.0.1:17846/
+  3. On each Backup PC: Operations -> Monitor add-on -> URL, site id, same token -> Save
+     (Save sends a test heartbeat so the site should appear immediately).
+  Heartbeats also arrive after each backup. No restic passwords. Not for public internet.
   See UserGuide.html section "SyncMe Monitor add-on".
 
 UPDATE FROM THIS PROJECT (technicians)

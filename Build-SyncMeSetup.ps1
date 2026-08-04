@@ -227,6 +227,15 @@ if (Test-Path -LiteralPath $monitorBuild) {
     }
 }
 
+# Stage Monitor zip next to the in-app update feed (site Downloads section)
+if ((Test-Path -LiteralPath $monitorZipPath) -and (Test-Path -LiteralPath (Join-Path $root 'website'))) {
+    $websiteUpdates = Join-Path $root 'website\updates'
+    if (-not (Test-Path -LiteralPath $websiteUpdates)) {
+        New-Item -ItemType Directory -Path $websiteUpdates -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $monitorZipPath -Destination (Join-Path $websiteUpdates $monitorZipName) -Force
+}
+
 $releaseDir = Join-Path $OutDir ("SyncMe-Release-" + $pkgVer)
 if (Test-Path -LiteralPath $releaseDir) { Remove-Item -LiteralPath $releaseDir -Recurse -Force }
 New-Item -ItemType Directory -Path $releaseDir -Force | Out-Null
@@ -248,8 +257,8 @@ This folder contains both customer packages:
    Unzip to a Monitor PC, edit Config\Monitor.json token, run SyncMe-Monitor.bat.
    On each Backup PC: Operations → Monitor add-on → Save (sends a test ping).
 
-Update feed (website): upload dist\updates\latest.json and $setupZipName
-to https://www.syncme.co.za/updates/
+Update feed (website): upload dist\updates\latest.json, $setupZipName, and $monitorZipName
+to https://www.syncme.co.za/updates/ (site Downloads section uses the same folder).
 
 SHA256 ($setupZipName): $sha
 "@
