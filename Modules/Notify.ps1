@@ -100,7 +100,7 @@ function Get-BackupStoredCredential {
 
 function Test-SyncMeNotifyNoiseMessage {
     <#
-      True for Windows toast / NotifyIcon binder noise that must never fail a backup report.
+      True for toast / SMTP / Host-automatic-variable noise that must never fail a backup report.
     #>
     param([AllowNull()][string]$Message)
     if ([string]::IsNullOrWhiteSpace($Message)) { return $false }
@@ -109,7 +109,13 @@ function Test-SyncMeNotifyNoiseMessage {
         ($Message -match '(?i)arguments do not match') -or
         ($Message -match '(?i)ShowBalloonTip') -or
         ($Message -match '(?i)NotifyIcon') -or
-        ($Message -match '(?i)BurntToast')
+        ($Message -match '(?i)BurntToast') -or
+        ($Message -match '(?i)Cannot overwrite variable Host') -or
+        ($Message -match '(?i)Email send failed') -or
+        ($Message -match '(?i)Email (error|failed)') -or
+        ($Message -match '(?i)remote certificate is invalid') -or
+        ($Message -match '(?i)Authentication or Security error') -or
+        ($Message -match '(?i)The remote certificate is invalid')
     )
 }
 
@@ -223,6 +229,7 @@ function Send-BackupMailMessage {
     <#
       Sends email via System.Net.Mail. Returns $true on success, $false on failure.
       Does not throw by default (backup must not fail because mail failed).
+      Enables TLS 1.2; keeps full certificate validation (no bypass).
     #>
     [CmdletBinding()]
     param(
@@ -252,12 +259,19 @@ function Send-BackupMailMessage {
 
         [switch]$BodyAsHtml,
 
-        [switch]$ThrowOnError
+        [switch]$ThrowOnError,
+
+        [string]$LogPath = ''
     )
 
     $message = $null
     $client = $null
     try {
+        try {
+            [Net.ServicePointManager]::SecurityProtocol =
+                [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        } catch { }
+
         $message = New-Object System.Net.Mail.MailMessage
         $message.From = New-Object System.Net.Mail.MailAddress($From)
         foreach ($addr in $To) {
@@ -285,7 +299,21 @@ function Send-BackupMailMessage {
         return $true
     } catch {
         if ($ThrowOnError) { throw }
-        Write-Warning "Email send failed: $($_.Exception.Message)"
+        $exMsg = [string]$_.Exception.Message
+        if ($_.Exception.InnerException -and $_.Exception.InnerException.Message) {
+            $exMsg = $exMsg + ' | ' + [string]$_.Exception.InnerException.Message
+        }
+        $hint = 'Check SmtpServer hostname matches the certificate, Windows trusted roots, TLS 1.2, and provider auth. SyncMe does not bypass invalid certificates. Disable email notifications until SMTP is correct, or fix trust on this Backup PC.'
+        if ($exMsg -match '(?i)certificate|Authentication or Security') {
+            $hint = 'Remote certificate / TLS failed. Verify SmtpServer name, port, SmtpUseSsl, and that this PC trusts the SMTP cert CA. SyncMe never ignores invalid certificates.'
+        }
+        $failMsg = "Email send failed (smtp=$SmtpServer port=$SmtpPort ssl=$UseSsl): $exMsg. $hint"
+        Write-Warning $failMsg
+        if (-not [string]::IsNullOrWhiteSpace($LogPath)) {
+            try {
+                Add-Content -LiteralPath $LogPath -Value ("[{0}] [WARN] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $failMsg) -Encoding UTF8
+            } catch { }
+        }
         return $false
     } finally {
         if ($message) { $message.Dispose() }
@@ -327,18 +355,15 @@ function Send-BackupEmailFromConfig {
             -Body $Body `
             -AttachmentPath $AttachmentPath `
             -Credential $cred `
-            -BodyAsHtml:$BodyAsHtml
+            -BodyAsHtml:$BodyAsHtml `
+            -LogPath $LogPath
 
-        if ($LogPath) {
-            if ($ok) {
-                Add-Content -LiteralPath $LogPath -Value ("[{0}] [INFO] Email sent: {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Subject) -Encoding UTF8
-            } else {
-                Add-Content -LiteralPath $LogPath -Value ("[{0}] [WARN] Email failed: {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Subject) -Encoding UTF8
-            }
+        if ($LogPath -and $ok) {
+            Add-Content -LiteralPath $LogPath -Value ("[{0}] [INFO] Email sent: {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Subject) -Encoding UTF8
         }
         return $ok
     } catch {
-        $msg = "Email error: $($_.Exception.Message)"
+        $msg = "Email error: $($_.Exception.Message). Email is non-fatal; backup is not failed for mail issues."
         Write-Warning $msg
         if ($LogPath) {
             Add-Content -LiteralPath $LogPath -Value ("[{0}] [WARN] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $msg) -Encoding UTF8
@@ -402,10 +427,10 @@ function Send-BackupStartNotification {
     }
     if ($Config -and $Config.EnableEmailNotifications -and $Config.EmailOnStart) {
         $encSrc = [System.Net.WebUtility]::HtmlEncode($SourceSummary)
-        $encHost = [System.Net.WebUtility]::HtmlEncode($env:COMPUTERNAME)
+        $encComputer = [System.Net.WebUtility]::HtmlEncode($env:COMPUTERNAME)
         $started = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
         $inner = @"
-<p style="margin:0 0 12px;">A SyncMe backup has started on <strong>$encHost</strong>.</p>
+<p style="margin:0 0 12px;">A SyncMe backup has started on <strong>$encComputer</strong>.</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;">
   <tr><td style="color:#5a6b64;padding:4px 0;width:120px;">Started</td><td style="padding:4px 0;">$started</td></tr>
   <tr><td style="color:#5a6b64;padding:4px 0;">Sources</td><td style="padding:4px 0;word-break:break-all;"><code style="font-size:12px;">$encSrc</code></td></tr>
@@ -449,7 +474,7 @@ function Send-BackupCompleteNotification {
         }
         $subjectPrefix = if ($statusWord -eq 'CRITICAL') { '[SyncMe] CRITICAL' } else { "[SyncMe] $statusWord" }
         $encSummary = [System.Net.WebUtility]::HtmlEncode($Summary)
-        $encHost = [System.Net.WebUtility]::HtmlEncode($env:COMPUTERNAME)
+        $encComputer = [System.Net.WebUtility]::HtmlEncode($env:COMPUTERNAME)
         $encReport = [System.Net.WebUtility]::HtmlEncode($ReportPath)
         $finished = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
         $exit3Note = ''
@@ -462,7 +487,7 @@ function Send-BackupCompleteNotification {
             ''
         }
         $inner = @"
-<p style="margin:0 0 12px;">Backup finished on <strong>$encHost</strong>.</p>
+<p style="margin:0 0 12px;">Backup finished on <strong>$encComputer</strong>.</p>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;">
   <tr><td style="color:#5a6b64;padding:4px 0;width:120px;">Finished</td><td style="padding:4px 0;">$finished</td></tr>
   <tr><td style="color:#5a6b64;padding:4px 0;">Summary</td><td style="padding:4px 0;">$encSummary</td></tr>

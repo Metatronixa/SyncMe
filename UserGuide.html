@@ -444,7 +444,8 @@ Backup PC  —  SyncMe console + Task Scheduler
       <section class="card" id="email">
         <h2>Email notifications</h2>
         <p>Optional SMTP from the wizard. Subjects include <code>STARTED</code>, <code>SUCCESS</code>, <code>FAILED</code>, or <code>CRITICAL</code>.
-          Complete emails can attach the HTML report. Passwords stay in Credential Manager (<code>SyncMeSmtp</code>).</p>
+          Complete emails can attach the HTML report. Passwords stay in Credential Manager (<code>SyncMeSmtp</code>).
+          SyncMe enables TLS 1.2 and validates the SMTP certificate (no bypass). Mail failures are logged as warnings and do not fail the backup job.</p>
       </section>
 
       <section class="card" id="repocheck">
@@ -512,6 +513,8 @@ Backup PC  —  SyncMe console + Task Scheduler
             <tr><td>Cannot reach share</td><td>UNC path, share permissions, LAN/Tailscale, share credentials</td></tr>
             <tr><td>Wrong password / exit 12</td><td>Operations → Store password; must match <code>restic init</code></td></tr>
             <tr><td>Exit code 3</td><td>Locked files — Shadow Copies / close Office; read log for paths</td></tr>
+            <tr><td>Email: remote certificate is invalid</td><td>Fix SmtpServer name / Windows trusted roots / TLS; SyncMe 1.3.2+ uses TLS 1.2 and never bypasses certs. Disable email until SMTP is correct — backup still succeeds</td></tr>
+            <tr><td>Cannot overwrite variable Host</td><td>Notify noise on older builds; upgrade to <strong>1.3.2+</strong>. Does not stop restic; scrubbed from report Errors</td></tr>
             <tr><td>Cloud / OAuth fails</td><td>Install rclone; re-run OAuth; check bandwidth/throttling</td></tr>
             <tr><td>Task does not run unattended</td><td>Same Windows account as Credential Manager; “run whether logged on”</td></tr>
             <tr><td>Browse / restore fails on UNC snapshot</td><td>Old snapshots stored UNC roots; take a new backup (drive-letter paths), then browse/restore that snapshot</td></tr>

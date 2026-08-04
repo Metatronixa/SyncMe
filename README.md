@@ -129,7 +129,9 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-Current release: **1.3.1**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+Current release: **1.3.2**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+
+**1.3.2** enables TLS 1.2 for SMTP email, keeps full certificate validation (no bypass), clears Host/SMTP notify noise from failing backup reports, and improves email failure logging.
 
 **1.3.1** makes the weekly restore drill advisory (report PASS/FAIL/SKIP only; never fails the overall job), verifies with `restic dump` plus retries, and soft-skips when no snapshots/files exist. Official setup zips still do not bundle restic/rclone (install from the console).
 

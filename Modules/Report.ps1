@@ -67,7 +67,14 @@ function New-BackupHtmlReport {
             ($_ -notmatch '(?i)Argument types do not match') -and
             ($_ -notmatch '(?i)arguments do not match') -and
             ($_ -notmatch '(?i)ShowBalloonTip') -and
-            ($_ -notmatch '(?i)NotifyIcon')
+            ($_ -notmatch '(?i)NotifyIcon') -and
+            ($_ -notmatch '(?i)BurntToast') -and
+            ($_ -notmatch '(?i)Cannot overwrite variable Host') -and
+            ($_ -notmatch '(?i)Email send failed') -and
+            ($_ -notmatch '(?i)Email (error|failed)') -and
+            ($_ -notmatch '(?i)remote certificate is invalid') -and
+            ($_ -notmatch '(?i)Authentication or Security error') -and
+            ($_ -notmatch '(?i)The remote certificate is invalid')
         })
     }
     if ($reportErrors.Count -gt 0) {

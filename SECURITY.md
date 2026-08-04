@@ -109,6 +109,10 @@ Operational rules that matter for security:
 2. Credential Manager protects secrets at rest under the Windows user / DPAPI model. It does **not** replace an offline password vault. If the Backup PC is destroyed, stolen, or the profile is lost, Credential Manager alone cannot recover the restic password for you.
 3. Anyone with sufficient rights on that Windows account (or SYSTEM/admin abuse of that account) can typically read those secrets. Harden the Backup PC accordingly.
 
+### SMTP email TLS
+
+Optional email uses .NET `SmtpClient` with **TLS 1.2** enabled and **full certificate validation**. SyncMe does **not** provide a switch to ignore invalid remote certificates. If you see `remote certificate is invalid`, fix the SMTP hostname / CA trust on the Backup PC, or disable email notifications until SMTP is correct. Email failures are non-fatal: they must not fail a backup that already wrote a snapshot. Host-automatic-variable clashes (`Cannot overwrite variable Host`) and SMTP/cert noise are scrubbed from report Errors when they appear.
+
 ### Restic repository password
 
 The restic password **encrypts the repository**. Without it there is no restore and no forensic recovery of file contents from the repo. SyncMe cannot invent a forgotten password.
