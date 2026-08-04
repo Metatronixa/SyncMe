@@ -298,7 +298,9 @@ function Invoke-SyncMeRestore {
 
     $args = @('restore', $Snapshot, '--target', $safe.FullPath)
     if (-not [string]::IsNullOrWhiteSpace($Include)) {
-        $args += @('--include', $Include.Trim())
+        $includeRestic = ConvertTo-SyncMeResticAbsPath -Path $Include.Trim()
+        if ([string]::IsNullOrWhiteSpace($includeRestic)) { $includeRestic = $Include.Trim() }
+        $args += @('--include', $includeRestic)
     }
 
     $env:RESTIC_PASSWORD = $plain
@@ -352,13 +354,67 @@ function Get-SyncMeDefaultRestoreTarget {
 }
 
 function Get-SyncMeNormalizedSnapshotPath {
+    <#
+      Canonical Windows-style path for UI / parent matching.
+      Maps restic abs forms (/C/Foo or \C\Foo) to C:\Foo. Leaves UNC as \\server\share\...
+    #>
     param([AllowNull()][string]$Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
-    $p = $Path.Trim() -replace '/', '\'
+    $p = $Path.Trim()
+    # UNC (\\server\share or //server/share)
+    if ($p -match '^(\\\\|//)[^\\/]') {
+        $p = $p -replace '/', '\'
+        return $p.TrimEnd('\')
+    }
+    $p = $p -replace '/', '\'
     while ($p.Contains('\\') -and $p -notmatch '^\\\\') {
         $p = $p.Replace('\\', '\')
     }
-    return $p.TrimEnd('\')
+    $p = $p.TrimEnd('\')
+    # restic-style \C\Foo → C:\Foo
+    if ($p -match '^\\([A-Za-z])\\(.+)$') {
+        return ($Matches[1].ToUpperInvariant() + ':\' + $Matches[2])
+    }
+    if ($p -match '^\\([A-Za-z])$') {
+        return ($Matches[1].ToUpperInvariant() + ':')
+    }
+    if ($p -match '^([A-Za-z]):\\?$') {
+        return ($Matches[1].ToUpperInvariant() + ':')
+    }
+    if ($p -match '^([A-Za-z]):\\(.+)$') {
+        return ($Matches[1].ToUpperInvariant() + ':\' + $Matches[2])
+    }
+    return $p
+}
+
+function ConvertTo-SyncMeResticAbsPath {
+    <#
+      Convert UI/Windows path to restic directory filter form (must start with /).
+      C:\Foo\Bar → /C/Foo/Bar ; /C/Foo stays /C/Foo.
+    #>
+    param([AllowNull()][string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return '' }
+    $raw = $Path.Trim()
+    if ($raw.StartsWith('/')) {
+        $parts = @($raw.Split(@('/'), [System.StringSplitOptions]::RemoveEmptyEntries))
+        if ($parts.Count -lt 1) { return '/' }
+        return '/' + ($parts -join '/')
+    }
+    $win = Get-SyncMeNormalizedSnapshotPath -Path $raw
+    if ([string]::IsNullOrWhiteSpace($win)) { return '' }
+    if ($win -match '^[A-Za-z]:') {
+        $letter = $win.Substring(0, 1).ToUpperInvariant()
+        $rest = ''
+        if ($win.Length -gt 2) {
+            $rest = $win.Substring(2).TrimStart('\').Replace('\', '/')
+        }
+        if ([string]::IsNullOrWhiteSpace($rest)) { return "/$letter" }
+        return "/$letter/$rest"
+    }
+    # Non-drive path: force leading /
+    $fwd = $win.TrimStart('\').Replace('\', '/')
+    if ([string]::IsNullOrWhiteSpace($fwd)) { return '/' }
+    return "/$fwd"
 }
 
 function Get-SyncMeSnapshotPathParent {
@@ -479,8 +535,9 @@ function Get-SyncMeSnapshotListing {
         $parentNorm = $normPath
 
         try {
-            # Same proven invoke style as Get-SyncMeSnapshots (no ProcessStartInfo / ReadToEndAsync).
-            $raw = & $resticExe ls $snapId $normPath --json 2>&1
+            # restic requires directory filters absolute with leading '/' (e.g. /C/Users/...).
+            $resticPath = ConvertTo-SyncMeResticAbsPath -Path $normPath
+            $raw = & $resticExe ls $snapId $resticPath --json 2>&1
             $lec = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
             $code = if ($null -ne $lec -and $null -ne $lec.Value) { [int]$lec.Value } else { 1 }
 
@@ -503,8 +560,19 @@ function Get-SyncMeSnapshotListing {
 
             if ($code -ne 0) {
                 $msg = if ($errBits.Count -gt 0) { ($errBits -join ' ').Trim() } else { "restic ls failed (exit $code)." }
+                foreach ($line in $lineTexts) {
+                    try {
+                        $eo = $line | ConvertFrom-Json
+                        if ($eo -and ($eo.PSObject.Properties.Name -contains 'message_type') -and [string]$eo.message_type -eq 'exit_error' -and $eo.message) {
+                            $msg = [string]$eo.message
+                            break
+                        }
+                    } catch { }
+                }
                 if ($msg -match '(?i)invalid child node name') {
                     $msg = 'Windows restic rejected UNC path nodes in this snapshot. Run a new backup, then browse that snapshot.'
+                } elseif ($msg -match '(?i)path filters must be absolute|starting with a forward slash') {
+                    $msg = "Folder path must use restic absolute form (e.g. $resticPath). SyncMe should convert automatically — update to the latest SyncMe build if this persists."
                 }
                 return ,@{
                     Ok         = $false
@@ -583,6 +651,12 @@ function Get-SyncMeSnapshotListing {
     } catch {
         $exType = $_.Exception.GetType().FullName
         $exMsg = [string]$_.Exception.Message
+        if ($exMsg -match '(?i)path filters must be absolute|starting with a forward slash') {
+            $hintPath = ''
+            try { $hintPath = ConvertTo-SyncMeResticAbsPath -Path $Path } catch { }
+            $exMsg = "Folder path must be restic-absolute (starting with '/')" + $(if ($hintPath) { ", e.g. $hintPath" } else { '' }) + '. Update SyncMe if browse still fails after this version.'
+            $exType = 'path-format'
+        }
         return ,@{
             Ok         = $false
             Message    = "Snapshot browse failed ($exType): $exMsg"

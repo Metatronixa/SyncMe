@@ -129,7 +129,9 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-Current release: **1.3.2**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+Current release: **1.3.3**. `VERSION.txt` uses semantic versioning. Setup packages are built as `dist\SyncMe-Setup-<version>\`.
+
+**1.3.3** fixes snapshot folder browse: converts Windows paths to restic-absolute `/C/...` form before `restic ls` (and restore `--include`), so double-clicking a browsed folder no longer fails with “path filters must be absolute”.
 
 **1.3.2** enables TLS 1.2 for SMTP email, keeps full certificate validation (no bypass), clears Host/SMTP notify noise from failing backup reports, and improves email failure logging.
 

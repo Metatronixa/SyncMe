@@ -517,6 +517,7 @@ Backup PC  —  SyncMe console + Task Scheduler
             <tr><td>Cannot overwrite variable Host</td><td>Notify noise on older builds; upgrade to <strong>1.3.2+</strong>. Does not stop restic; scrubbed from report Errors</td></tr>
             <tr><td>Cloud / OAuth fails</td><td>Install rclone; re-run OAuth; check bandwidth/throttling</td></tr>
             <tr><td>Task does not run unattended</td><td>Same Windows account as Credential Manager; “run whether logged on”</td></tr>
+            <tr><td>Browse fails: path filters must be absolute / forward slash</td><td>Upgrade to SyncMe <strong>1.3.3+</strong> (converts <code>C:\...</code> to restic <code>/C/...</code> for <code>ls</code>)</td></tr>
             <tr><td>Browse / restore fails on UNC snapshot</td><td>Old snapshots stored UNC roots; take a new backup (drive-letter paths), then browse/restore that snapshot</td></tr>
             <tr><td>Browse fails with “Argument types do not match”</td><td>Upgrade to SyncMe <strong>1.2.0+</strong> (Windows PowerShell 5.1 browse fix)</td></tr>
             <tr><td>Browse while backup runs</td><td>Wait for backup to finish (restic repo lock)</td></tr>

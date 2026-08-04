@@ -1,6 +1,6 @@
 # SyncMe — Technical Breakdown
 
-**Version:** 1.3.2 (see [`VERSION.txt`](VERSION.txt))  
+**Version:** 1.3.3 (see [`VERSION.txt`](VERSION.txt))  
 **Website:** [www.syncme.co.za](https://www.syncme.co.za)  
 **Copyright © 2026 Bradford Lotriet** (`brad@web-zilla.co.za`)
 
@@ -354,7 +354,7 @@ All APIs are served by [`SyncMe-Host.ps1`](SyncMe-Host.ps1) on `http://127.0.0.1
 | `Build-SyncMeSetup.ps1` | `dist\SyncMe-Setup-<VERSION>\` with `SyncMe-Setup.cmd` + `SyncMe-Payload.zip` (+ START-HERE). Unpacks to `C:\SyncMe`, keeps existing `Config.ps1`. Does **not** ship `website/`. |
 | `Build-SyncMePackage.ps1` | Full zip `dist\SyncMe-<VERSION>.zip` (same product include list). |
 | `Deploy-SyncMe.ps1` | Copy project → target (default `C:\SyncMe`); preserve Config and set JSON under Logs; stop running host; copy `tools\` binaries. |
-| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.3.2`). |
+| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.3.3`). |
 
 **Typical shipped include list:** bats, host/backup/restore/watchdog, Register/Deploy, Config template, docs (including this file), Modules, ui, OfficeAgent, tools — not `website/`, not customer log/report contents beyond placeholders.
 
