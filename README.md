@@ -17,6 +17,7 @@ Simple **file-level** backup from source PCs to a Backup PC using **restic**, ma
 | [`START-HERE.txt`](START-HERE.txt) | First steps after install / unzip |
 | [`UserGuide.html`](UserGuide.html) | Full how-to: wizard, sets, restore, verify, Tailscale, troubleshooting |
 | [`TECHNICAL.md`](TECHNICAL.md) | Complete technical architecture, pipelines, and API map |
+| [`V2.md`](V2.md) | Future architecture direction (discussion draft — not scheduled) |
 | [`RecoveryChecklist.txt`](RecoveryChecklist.txt) | Disaster recovery + password vault checklist |
 | [`LICENSE.txt`](LICENSE.txt) | Free-to-use terms and liability |
 | [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) | restic / rclone licenses |
@@ -193,5 +194,6 @@ Current release: **1.4.2**. `VERSION.txt` uses semantic versioning. Customer pac
 ## Links
 
 - Product site: [www.syncme.co.za](https://www.syncme.co.za)
+- Roadmap: [www.syncme.co.za/roadmap.html](https://www.syncme.co.za/roadmap.html) · [`V2.md`](V2.md)
 - In-app update feed: [www.syncme.co.za/updates/latest.json](https://www.syncme.co.za/updates/latest.json)
 - Contact: brad@web-zilla.co.za

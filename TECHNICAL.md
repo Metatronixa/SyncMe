@@ -422,6 +422,7 @@ Static assets: [`ui/index.html`](ui/index.html), [`ui/css/app.css`](ui/css/app.c
 | Doc | Audience |
 |---|---|
 | [`README.md`](README.md) | Product intro, quick start, feature table |
+| [`V2.md`](V2.md) | Future architecture direction (discussion draft) |
 | [`UserGuide.html`](UserGuide.html) | Operator how-to and troubleshooting |
 | [`START-HERE.txt`](START-HERE.txt) | First steps after install |
 | [`RecoveryChecklist.txt`](RecoveryChecklist.txt) | DR + password vault checklist |
