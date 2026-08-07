@@ -193,7 +193,7 @@ if (-not (Test-Path -LiteralPath $updatesDir)) {
 Copy-Item -LiteralPath $setupZipPath -Destination (Join-Path $updatesDir $setupZipName) -Force
 
 $notes = @"
-SyncMe $pkgVer - HTTPS in-app updates, Monitor add-on test heartbeat on Save, install merge fixes, ASCII setup scripts (no BOM). Optional SyncMe Monitor package is separate (same version).
+SyncMe $pkgVer - dark slate+cyan ops theme, LocalOps Console SyncMe-tab registration (loopback), Monitor XSS-safe rendering, Fleet dashboards UI. Optional Monitor package remains separate.
 "@
 $latest = [ordered]@{
     version = $pkgVer
