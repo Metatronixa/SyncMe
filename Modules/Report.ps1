@@ -138,22 +138,22 @@ function New-BackupHtmlReport {
   <title>SyncMe backup report - $(ConvertTo-HtmlEncoded $RunInfo.RunId)</title>
   <style>
     :root {
-      --ink: #1c2430;
-      --muted: #667484;
-      --line: #d3dae3;
-      --bg: #eef1f5;
-      --card: #ffffff;
-      --accent: #6ea8d9;
-      --rail: #2c3644;
-      --ok: #2d7a4a;
-      --ok-bg: #e8f6ee;
-      --fail: #b42318;
-      --fail-bg: #fef3f2;
+      --ink: #e2e8f0;
+      --muted: #94a3b8;
+      --line: #334155;
+      --bg: #020617;
+      --card: rgba(15, 23, 42, 0.72);
+      --accent: #22d3ee;
+      --rail: #0f172a;
+      --ok: #34d399;
+      --ok-bg: rgba(52, 211, 153, 0.14);
+      --fail: #fb7185;
+      --fail-bg: rgba(251, 113, 133, 0.14);
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
       color: var(--ink);
       background: var(--bg);
       line-height: 1.5;

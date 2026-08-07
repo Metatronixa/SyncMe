@@ -1,0 +1,21 @@
+---
+description: Sibling products and local website layout for SyncMe
+alwaysApply: true
+---
+
+# SyncMe sibling layout
+
+Remember these paths when working on SyncMe:
+
+| Path | Role |
+|---|---|
+| `d:\Projects\Personal Projects\SyncMe` | This product (SyncMe) |
+| `d:\Projects\Personal Projects\LocalOpsConsole` | Sibling product — LocalOps Console (SyncMe tab, port 8787) |
+| `d:\Projects\Personal Projects\SyncMe\website\` | Marketing site for www.syncme.co.za — **gitignored**, deploy separately; not shipped in customer zips |
+
+## Integration notes
+
+- SyncMe can **register** with LocalOps via `POST /api/v1/syncme/register` (loopback) so the LocalOps **SyncMe** tab finds `C:\SyncMe` without manual `syncMePath`.
+- SyncMe **Monitor** remains a separate optional fleet dashboard (`POST …/api/heartbeat` on port 17846).
+- Shared visual language: dark slate + cyan ops theme (`--bg #020617`, `--accent #22d3ee`, Segoe UI + Consolas).
+- When changing LocalOps SyncMe module APIs, keep SyncMe `Modules/LocalOpsClient.ps1` in sync.

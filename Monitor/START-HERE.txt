@@ -1,4 +1,4 @@
-SyncMe Monitor (add-on) 1.4.2
+SyncMe Monitor (add-on) 1.4.3
 =============================
 
 Self-hosted HTML dashboard for SyncMe Backup PCs. Not for a public webserver —

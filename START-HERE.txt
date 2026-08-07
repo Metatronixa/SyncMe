@@ -32,15 +32,18 @@ UPDATES (1.4.0+)
   The console can check https://www.syncme.co.za/updates/latest.json and offer Install.
   Config.ps1 is backed up and preserved. Or re-run SyncMe-Setup.cmd from a newer zip.
 
-MONITOR ADD-ON (optional)
-  Separate package: SyncMe-Monitor-Setup-<ver>.zip (same version as SyncMe).
+FLEET DASHBOARDS (optional)
+  SyncMe Monitor — separate package SyncMe-Monitor-Setup-<ver>.zip (same version as SyncMe).
   Download from GitHub Releases or https://www.syncme.co.za (Downloads).
   1. Unzip on a LAN/Tailscale Windows PC; edit Config\Monitor.json (shared token, port 17846).
   2. Run SyncMe-Monitor.bat; open http://127.0.0.1:17846/
-  3. On each Backup PC: Operations -> Monitor add-on -> URL, site id, same token -> Save
+  3. On each Backup PC: Operations -> Fleet dashboards -> Monitor URL, site id, same token -> Save
      (Save sends a test heartbeat so the site should appear immediately).
   Heartbeats also arrive after each backup. No restic passwords. Not for public internet.
-  See UserGuide.html section "SyncMe Monitor add-on".
+  LocalOps Console (sibling product): when LocalOps is running on this PC
+  (http://127.0.0.1:8787), enable LocalOps registration under Fleet dashboards so the
+  SyncMe tab finds this install automatically.
+  See UserGuide.html section "Fleet dashboards".
 
 UPDATE FROM THIS PROJECT (technicians)
   On the Backup PC, from THIS SyncMe folder:

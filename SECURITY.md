@@ -81,6 +81,17 @@ Important consequences:
 
 Reports that SyncMe “has no web login” on localhost are generally **out of scope** as vulnerabilities unless you also show a way to reach the API from outside the local machine contrary to the bind address, or a clear privilege escalation beyond the local-user trust model.
 
+### Optional LocalOps Console registration
+
+When LocalOps Console is running on the same Backup PC, SyncMe may POST a lightweight registration to `http://127.0.0.1:8787/api/v1/syncme/register` so the LocalOps **SyncMe** tab can discover the install path and last-run summary.
+
+Security constraints for this path:
+
+1. SyncMe only allows a **loopback** LocalOps URL (`127.0.0.1`, `localhost`, `::1`). Non-loopback URLs are rejected / skipped.
+2. LocalOps accepts register/heartbeat only from **loopback clients** in this release.
+3. The payload contains install path, version, hostname, site id, console URL, and optional last-run summary — **never** restic passwords, SMTP secrets, or rclone OAuth tokens.
+4. SyncMe **Monitor** remains a separate optional product (Bearer token heartbeats to a self-hosted Monitor host). Monitor tokens are not sent to LocalOps.
+
 ## Secrets and credentials
 
 ### What must never go in `Config.ps1`

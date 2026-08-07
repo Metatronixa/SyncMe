@@ -1,18 +1,10 @@
 (function () {
   'use strict';
 
-  function esc(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
   function ageLabel(iso) {
     if (!iso) return '—';
     const t = Date.parse(iso);
-    if (!t) return esc(iso);
+    if (!t) return String(iso);
     const mins = Math.round((Date.now() - t) / 60000);
     if (mins < 1) return 'just now';
     if (mins < 60) return mins + 'm ago';
@@ -43,6 +35,51 @@
     if (el) el.textContent = String(value);
   }
 
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null && text !== '') node.textContent = String(text);
+    return node;
+  }
+
+  function renderSite(s) {
+    const b = classify(s);
+    const article = el('article', 'site-row');
+    const left = el('div');
+
+    left.appendChild(el('h3', null, s.siteId || s.hostname || 'site'));
+
+    const meta1 = el('div', 'site-meta');
+    meta1.appendChild(document.createTextNode(
+      (s.setName || s.setId || '') + (s.version ? (' · SyncMe ' + s.version) : '')
+    ));
+    if (s.hostname) {
+      meta1.appendChild(document.createTextNode(' · '));
+      meta1.appendChild(el('code', null, s.hostname));
+    }
+    left.appendChild(meta1);
+
+    if (s.summary) left.appendChild(el('div', 'site-meta', s.summary));
+
+    if (b.bucket === 'running' && s.percent != null) {
+      const pct = Math.max(0, Math.min(100, Number(s.percent) || 0));
+      const bar = el('div', 'progress');
+      bar.setAttribute('aria-hidden', 'true');
+      const fill = el('span');
+      fill.style.width = pct + '%';
+      bar.appendChild(fill);
+      left.appendChild(bar);
+    }
+
+    const foot = el('div', 'site-foot');
+    foot.appendChild(el('span', null, 'Last report: ' + ageLabel(s.endedUtc || s.receivedUtc)));
+    left.appendChild(foot);
+
+    article.appendChild(left);
+    article.appendChild(el('span', 'badge ' + b.cls, b.text));
+    return article;
+  }
+
   async function loadSites() {
     const list = document.getElementById('siteList');
     const hint = document.getElementById('emptyHint');
@@ -65,40 +102,18 @@
       setText('statFailed', failed);
       setText('statRunning', running);
 
+      while (list.firstChild) list.removeChild(list.firstChild);
+
       if (!sites.length) {
-        list.innerHTML = '';
         if (hint) hint.classList.remove('hidden');
         return;
       }
       if (hint) hint.classList.add('hidden');
 
-      list.innerHTML = sites.map((s) => {
-        const b = classify(s);
-        const title = esc(s.siteId || s.hostname || 'site');
-        const setLine = esc((s.setName || s.setId || '') + (s.version ? (' · SyncMe ' + s.version) : ''));
-        const host = s.hostname ? (' · <code>' + esc(s.hostname) + '</code>') : '';
-        const summary = esc(s.summary || '');
-        const when = ageLabel(s.endedUtc || s.receivedUtc);
-        let progress = '';
-        if (b.bucket === 'running' && s.percent != null) {
-          const pct = Math.max(0, Math.min(100, Number(s.percent) || 0));
-          progress = '<div class="progress" aria-hidden="true"><span style="width:' + pct + '%"></span></div>';
-        }
-        return (
-          '<article class="site-row">' +
-            '<div>' +
-              '<h3>' + title + '</h3>' +
-              '<div class="site-meta">' + setLine + host + '</div>' +
-              '<div class="site-meta">' + summary + '</div>' +
-              progress +
-              '<div class="site-foot"><span>Last report: ' + when + '</span></div>' +
-            '</div>' +
-            '<span class="badge ' + b.cls + '">' + b.text + '</span>' +
-          '</article>'
-        );
-      }).join('');
+      sites.forEach((s) => list.appendChild(renderSite(s)));
     } catch (e) {
-      list.innerHTML = '<p class="sub">Failed to load sites: ' + esc(e.message) + '</p>';
+      while (list.firstChild) list.removeChild(list.firstChild);
+      list.appendChild(el('p', 'sub', 'Failed to load sites: ' + (e && e.message ? e.message : String(e))));
     }
   }
 

@@ -21,7 +21,7 @@ $utf8Bom = New-Object System.Text.UTF8Encoding $true
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
 . (Join-Path $ScriptRoot 'Modules\Report.ps1')
-foreach ($mod in @('Update.ps1', 'MonitorClient.ps1')) {
+foreach ($mod in @('Update.ps1', 'MonitorClient.ps1', 'LocalOpsClient.ps1')) {
     $modPath = Join-Path $ScriptRoot ('Modules\' + $mod)
     if (-not (Test-Path -LiteralPath $modPath)) {
         throw "Missing $modPath. Re-run SyncMe-Setup 1.4.0 (or copy Modules\$mod into the install folder)."
@@ -1809,6 +1809,10 @@ if (-not $NoBrowser) {
 }
 
 try {
+    $null = Send-SyncMeLocalOpsRegister -ScriptRoot $ScriptRoot
+} catch { }
+
+try {
     while ($listener.IsListening) {
         $ctx = $listener.GetContext()
         $req = $ctx.Request
@@ -2003,11 +2007,13 @@ try {
             if ($path -eq '/api/options' -and $req.HttpMethod -eq 'GET') {
                 $opts = Get-SyncMeOptions -ScriptRoot $ScriptRoot
                 Write-SyncMeJson @{
-                    ok            = $true
-                    updateFeedUrl = [string]$opts.UpdateFeedUrl
-                    monitorUrl    = [string]$opts.MonitorUrl
-                    monitorSiteId = [string]$opts.MonitorSiteId
-                    monitorToken  = [string]$opts.MonitorToken
+                    ok              = $true
+                    updateFeedUrl   = [string]$opts.UpdateFeedUrl
+                    monitorUrl      = [string]$opts.MonitorUrl
+                    monitorSiteId   = [string]$opts.MonitorSiteId
+                    monitorToken    = [string]$opts.MonitorToken
+                    localOpsUrl     = [string]$opts.LocalOpsUrl
+                    localOpsEnabled = [bool]$opts.LocalOpsEnabled
                 } -Response $res
                 continue
             }
@@ -2016,7 +2022,7 @@ try {
                 try {
                     $body = Read-SyncMeBody $req
                     if ($null -eq $body) {
-                        throw 'Request body is required (JSON with monitorUrl / monitorSiteId / monitorToken).'
+                        throw 'Request body is required (JSON with monitor / LocalOps fields).'
                     }
                     $propNames = @($body.PSObject.Properties | ForEach-Object { $_.Name })
                     $saveArgs = @{ ScriptRoot = $ScriptRoot }
@@ -2024,16 +2030,21 @@ try {
                     if ($propNames -contains 'monitorUrl') { $saveArgs.MonitorUrl = [string]$body.monitorUrl }
                     if ($propNames -contains 'monitorSiteId') { $saveArgs.MonitorSiteId = [string]$body.monitorSiteId }
                     if ($propNames -contains 'monitorToken') { $saveArgs.MonitorToken = [string]$body.monitorToken }
+                    if ($propNames -contains 'localOpsUrl') { $saveArgs.LocalOpsUrl = [string]$body.localOpsUrl }
+                    if ($propNames -contains 'localOpsEnabled') { $saveArgs.LocalOpsEnabled = $body.localOpsEnabled }
                     if (
                         -not $saveArgs.ContainsKey('UpdateFeedUrl') -and
                         -not $saveArgs.ContainsKey('MonitorUrl') -and
                         -not $saveArgs.ContainsKey('MonitorSiteId') -and
-                        -not $saveArgs.ContainsKey('MonitorToken')
+                        -not $saveArgs.ContainsKey('MonitorToken') -and
+                        -not $saveArgs.ContainsKey('LocalOpsUrl') -and
+                        -not $saveArgs.ContainsKey('LocalOpsEnabled')
                     ) {
                         throw 'No options fields provided to save.'
                     }
                     $saved = Save-SyncMeOptions @saveArgs
                     $hb = $null
+                    $loc = $null
                     if (-not [string]::IsNullOrWhiteSpace([string]$saved.MonitorUrl)) {
                         try {
                             $hb = Send-SyncMeMonitorTestHeartbeat -ScriptRoot $ScriptRoot
@@ -2041,20 +2052,38 @@ try {
                             $hb = @{ Ok = $false; Message = $_.Exception.Message }
                         }
                     }
-                    $msg = 'Options saved.'
-                    if ($hb) {
-                        if ($hb.Ok) { $msg = 'Options saved. Test heartbeat OK.' }
-                        else { $msg = 'Options saved, but test heartbeat failed: ' + [string]$hb.Message }
+                    if ([bool]$saved.LocalOpsEnabled) {
+                        try {
+                            $loc = Send-SyncMeLocalOpsTestRegister -ScriptRoot $ScriptRoot
+                        } catch {
+                            $loc = @{ Ok = $false; Message = $_.Exception.Message }
+                        }
                     }
+                    $msg = 'Options saved.'
+                    $parts = @()
+                    if ($hb) {
+                        if ($hb.Ok) { $parts += 'Monitor test heartbeat OK.' }
+                        else { $parts += ('Monitor test failed: ' + [string]$hb.Message) }
+                    }
+                    if ($loc) {
+                        if ($loc.Ok) { $parts += 'LocalOps register OK.' }
+                        elseif ($loc.Skipped) { $parts += ('LocalOps skipped: ' + [string]$loc.Message) }
+                        else { $parts += ('LocalOps register failed: ' + [string]$loc.Message) }
+                    }
+                    if ($parts.Count -gt 0) { $msg = 'Options saved. ' + ($parts -join ' ') }
                     Write-SyncMeJson @{
-                        ok            = $true
-                        message       = $msg
-                        updateFeedUrl = [string]$saved.UpdateFeedUrl
-                        monitorUrl    = [string]$saved.MonitorUrl
-                        monitorSiteId = [string]$saved.MonitorSiteId
-                        monitorToken  = [string]$saved.MonitorToken
-                        heartbeatOk   = $(if ($hb) { [bool]$hb.Ok } else { $null })
-                        heartbeatMsg  = $(if ($hb) { [string]$hb.Message } else { '' })
+                        ok              = $true
+                        message         = $msg
+                        updateFeedUrl   = [string]$saved.UpdateFeedUrl
+                        monitorUrl      = [string]$saved.MonitorUrl
+                        monitorSiteId   = [string]$saved.MonitorSiteId
+                        monitorToken    = [string]$saved.MonitorToken
+                        localOpsUrl     = [string]$saved.LocalOpsUrl
+                        localOpsEnabled = [bool]$saved.LocalOpsEnabled
+                        heartbeatOk     = $(if ($hb) { [bool]$hb.Ok } else { $null })
+                        heartbeatMsg    = $(if ($hb) { [string]$hb.Message } else { '' })
+                        localOpsOk      = $(if ($loc) { [bool]$loc.Ok } else { $null })
+                        localOpsMsg     = $(if ($loc) { [string]$loc.Message } else { '' })
                     } -Response $res
                 } catch {
                     Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res

@@ -17,7 +17,6 @@ Simple **file-level** backup from source PCs to a Backup PC using **restic**, ma
 | [`START-HERE.txt`](START-HERE.txt) | First steps after install / unzip |
 | [`UserGuide.html`](UserGuide.html) | Full how-to: wizard, sets, restore, verify, Tailscale, troubleshooting |
 | [`TECHNICAL.md`](TECHNICAL.md) | Complete technical architecture, pipelines, and API map |
-| [`V2.md`](V2.md) | Future architecture direction (discussion draft — not scheduled) |
 | [`RecoveryChecklist.txt`](RecoveryChecklist.txt) | Disaster recovery + password vault checklist |
 | [`LICENSE.txt`](LICENSE.txt) | Free-to-use terms and liability |
 | [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt) | restic / rclone licenses |
@@ -54,9 +53,9 @@ Both zips (plus a short `START-HERE.txt`) are produced under `dist\SyncMe-Releas
 | Backup engine | [restic](https://restic.net/) (encrypted, deduplicated snapshots) via `SyncMe-Backup.ps1` |
 | Cloud backend | [rclone](https://rclone.org/) as restic remote only (OAuth for OneDrive / Google Drive) |
 | Schedule | Windows Task Scheduler (+ SyncMe-Watchdog) |
-| UI | Static HTML5 + CSS + vanilla JavaScript (`ui/`), Source Sans 3 |
+| UI | Static HTML5 + CSS + vanilla JavaScript (`ui/`), dark slate + cyan ops theme (Segoe UI + Consolas) |
 | Config / secrets | `Config.ps1` (no database); Windows Credential Manager; `Config\rclone.conf` |
-| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source), SyncMe Monitor (fleet heartbeats) |
+| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source), SyncMe Monitor (fleet heartbeats), LocalOps Console (SyncMe tab registration) |
 | Platform | Windows 10/11 or Windows Server (Backup PC) |
 
 SyncMe is an **orchestration frontend** — not a replacement for restic or rclone. Third-party notices: [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
@@ -84,6 +83,7 @@ SyncMe is an **orchestration frontend** — not a replacement for restic or rclo
 | Detached Run now | Manual backup survives closing SyncMe |
 | In-app updates | HTTPS feed (`latest.json`), SHA-256 verify, keeps existing `Config.ps1` |
 | SyncMe Monitor | Optional self-hosted fleet dashboard via post-backup (and Save) heartbeats |
+| LocalOps Console | Optional: when LocalOps runs on the same PC, SyncMe registers so the SyncMe tab finds the install + last run |
 
 ## SyncMe Monitor (optional add-on)
 
@@ -95,14 +95,36 @@ SyncMe is an **orchestration frontend** — not a replacement for restic or rclo
 
 1. Unzip **`SyncMe-Monitor-Setup-<ver>.zip`** on the Monitor PC. Edit `Config\Monitor.json` — set a shared `Token` (not `change-me`) and `Port` (default **17846**).
 2. Run **`SyncMe-Monitor.bat`** (Run as Administrator once if binding to `http://+:port` fails). Open `http://127.0.0.1:17846/` (or `http://THIS-PC:17846/` from another machine).
-3. On each **Backup PC**, SyncMe console → **Operations** → **Monitor add-on**:
+3. On each **Backup PC**, SyncMe console → **Operations** → **Fleet dashboards** → SyncMe Monitor:
    - **Monitor URL** — e.g. `http://MONITOR-PC:17846` (same PC: `http://127.0.0.1:17846`)
    - **Site id** — friendly name for that Backup PC
    - **Shared token** — same value as `Monitor.json`
-   - Click **Save** — SyncMe sends a **test heartbeat** immediately so the site should appear on the dashboard.
+   - Click **Save fleet settings** — SyncMe sends a **test heartbeat** immediately so the site should appear on the dashboard.
 4. After each backup finishes, SyncMe also POSTs a heartbeat (Bearer token). The Monitor UI refreshes on a short interval.
 
 Keep Monitor off the public internet. Heartbeat ingest requires the shared token.
+
+## LocalOps Console (optional sibling)
+
+**LocalOps Console** is a separate ops tool (sibling folder `LocalOpsConsole`). When both run on the Backup PC:
+
+1. Start LocalOps (`http://127.0.0.1:8787`).
+2. In SyncMe → **Operations** → **Fleet dashboards** → LocalOps Console: leave URL blank (defaults to localhost:8787) and keep registration enabled, then **Save**.
+3. SyncMe POSTs `/api/v1/syncme/register` (loopback) with install path + optional last-run summary so the LocalOps **SyncMe** tab can open the console / start backup without manually setting `syncMePath`.
+
+Registration is non-fatal: if LocalOps is not running, backups still succeed. Monitor and LocalOps can both be enabled.
+
+## Screenshots
+
+Screenshots for GitHub / the marketing site live under [`docs/screenshots/`](docs/screenshots/) (add PNGs after a theme pass: splash, dashboard, operations, Monitor, LocalOps SyncMe tab).
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+![Operations](docs/screenshots/operations.png)
+
+![Setup wizard](docs/screenshots/wizard.png)
+
+![Splash](docs/screenshots/splash.png)
 
 ## Secrets
 
@@ -158,7 +180,9 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-Current release: **1.4.2**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (SyncMe setup + Monitor zips).
+Current release: **1.4.3**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (SyncMe setup + Monitor zips).
+
+**1.4.3** dark slate + cyan ops theme (console, Monitor, reports, user guide), LocalOps Console SyncMe-tab registration (loopback-only), Fleet dashboards UI (LocalOps + Monitor), Monitor DOM-safe rendering, SECURITY.md LocalOps notes.
 
 **1.4.2** solidifies the 1.4 line: ASCII-safe scripts/batch (no UTF-8 BOM on `.bat`/`.cmd`), Monitor test heartbeat on Save, Monitor UI refresh, combined `SyncMe-Release-1.4.2` hand-off, and PowerShell 5.1-safe source (no UTF-8 arrows misread as ANSI).
 
@@ -180,7 +204,7 @@ Current release: **1.4.2**. `VERSION.txt` uses semantic versioning. Customer pac
 
 - **Setup wizard** — configure sets (including schedule and optional dry run at the end).
 - **Dashboard** — status cards (restic/rclone/disk), live activity, last-run details, Cloud & Retention modals; update popup when a newer package is published.
-- **Operations** — backup actions, set list (edit/delete), snapshot browse and restore, Check for updates, optional Monitor add-on settings.
+- **Operations** — backup actions, set list (edit/delete), snapshot browse and restore, Check for updates, Fleet dashboards (LocalOps Console + SyncMe Monitor).
 
 ## Prerequisites
 
@@ -194,6 +218,6 @@ Current release: **1.4.2**. `VERSION.txt` uses semantic versioning. Customer pac
 ## Links
 
 - Product site: [www.syncme.co.za](https://www.syncme.co.za)
-- Roadmap: [www.syncme.co.za/roadmap.html](https://www.syncme.co.za/roadmap.html) · [`V2.md`](V2.md)
+- Roadmap: [www.syncme.co.za/roadmap.html](https://www.syncme.co.za/roadmap.html)
 - In-app update feed: [www.syncme.co.za/updates/latest.json](https://www.syncme.co.za/updates/latest.json)
 - Contact: brad@web-zilla.co.za

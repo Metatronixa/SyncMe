@@ -1,32 +1,35 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SyncMe â€” User Guide</title>
   <link rel="icon" type="image/svg+xml" href="ui/assets/syncme-logo.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     :root {
-      --rail: #2c3644;
-      --rail-2: #323c4a;
-      --rail-text: #c5d0dc;
-      --accent: #6ea8d9;
-      --bg: #eef1f5;
-      --card: #ffffff;
-      --ink: #1c2430;
-      --muted: #667484;
-      --line: #d3dae3;
-      --ok: #2d7a4a;
-      --ok-soft: #e8f6ee;
-      --warn: #9a6700;
-      --warn-soft: #fff6e8;
-      --danger: #b42318;
-      --danger-soft: #fef3f2;
-      --font: "Source Sans 3", "Segoe UI", sans-serif;
-      --radius: 14px;
+      --bg: #020617;
+      --surface: #0f172a;
+      --surface-2: #111827;
+      --ink: #e2e8f0;
+      --muted: #94a3b8;
+      --line: #334155;
+      --line-strong: #1e293b;
+      --accent: #22d3ee;
+      --accent-bright: #67e8f9;
+      --accent-soft: rgba(34, 211, 238, 0.14);
+      --rail: rgba(15, 23, 42, 0.6);
+      --rail-2: #111827;
+      --rail-text: #94a3b8;
+      --card: rgba(15, 23, 42, 0.72);
+      --ok: #34d399;
+      --ok-soft: rgba(52, 211, 153, 0.14);
+      --warn: #fbbf24;
+      --warn-soft: rgba(251, 191, 36, 0.14);
+      --danger: #fb7185;
+      --danger-soft: rgba(251, 113, 133, 0.14);
+      --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+      --mono: Consolas, ui-monospace, monospace;
+      --radius: 0.85rem;
     }
     * { box-sizing: border-box; }
     html { scroll-behavior: smooth; }
@@ -35,9 +38,11 @@
       min-height: 100%;
       font-family: var(--font);
       color: var(--ink);
+      color-scheme: dark;
       background:
-        radial-gradient(ellipse 80% 50% at 10% -10%, rgba(110, 168, 217, 0.18), transparent 55%),
-        linear-gradient(180deg, #f4f6f9 0%, var(--bg) 40%, #e8edf3 100%);
+        radial-gradient(ellipse 70% 45% at 12% -8%, rgba(34, 211, 238, 0.10), transparent 55%),
+        radial-gradient(ellipse 55% 40% at 88% 8%, rgba(8, 145, 178, 0.08), transparent 50%),
+        var(--bg);
       line-height: 1.55;
       font-size: 17px;
     }
@@ -52,9 +57,11 @@
       align-self: start;
       max-height: 100vh;
       overflow-y: auto;
-      background: linear-gradient(180deg, var(--rail-2) 0%, var(--rail) 100%);
+      background: var(--rail);
+      backdrop-filter: blur(12px);
       color: var(--rail-text);
       padding: 28px 18px 40px;
+      border-right: 1px solid var(--line-strong);
     }
     .rail-brand {
       display: flex;
@@ -65,11 +72,12 @@
     .rail-brand img { width: 40px; height: 40px; flex-shrink: 0; }
     .rail-brand h1 {
       margin: 0;
-      color: #fff;
+      color: var(--ink);
       font-size: 1.35rem;
       letter-spacing: -0.02em;
     }
-    .rail-brand .by { font-size: 0.72rem; margin-top: 2px; opacity: 0.85; }
+    .rail-brand h1 .brand-accent { color: var(--accent); }
+    .rail-brand .by { font-size: 0.72rem; margin-top: 2px; font-family: var(--mono); color: var(--muted); }
     .rail .nav-group {
       margin: 16px 0 6px;
       padding: 0 12px;
@@ -77,28 +85,31 @@
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      opacity: 0.55;
+      opacity: 0.75;
+      font-family: var(--mono);
     }
     .rail nav a {
       display: block;
       color: inherit;
       text-decoration: none;
       padding: 9px 12px;
-      border-radius: 10px;
+      border-radius: 0.5rem;
       margin-bottom: 3px;
       font-weight: 600;
       font-size: 0.9rem;
+      border: 1px solid transparent;
     }
-    .rail nav a:hover { background: rgba(255,255,255,0.06); color: #fff; }
+    .rail nav a:hover { background: rgba(148,163,184,0.08); color: var(--ink); }
     .rail nav a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .main { padding: 28px 32px 56px; max-width: 860px; }
     .hero-card, .card {
       background: var(--card);
-      border: 1px solid var(--line);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(71, 85, 105, 0.9);
       border-radius: var(--radius);
       padding: 1.4rem 1.5rem 1.55rem;
       margin-bottom: 1.15rem;
-      box-shadow: 0 1px 2px rgba(28, 36, 48, 0.04);
+      box-shadow: 0 12px 32px rgba(2, 6, 23, 0.35);
     }
     .hero-card h1 {
       margin: 0 0 0.45rem;
@@ -119,28 +130,30 @@
     li { margin: 0.28rem 0; }
     a { color: var(--accent); }
     .callout {
-      border-radius: 10px;
+      border-radius: 0.5rem;
       padding: 0.85rem 1rem;
       margin: 1rem 0;
       font-size: 0.95rem;
-      background: #eef5fb;
-      border: 1px solid #c9ddf0;
+      background: var(--accent-soft);
+      border: 1px solid rgba(34, 211, 238, 0.35);
     }
-    .callout.warn { background: var(--warn-soft); border-color: #f0d9b0; }
-    .callout.danger { background: var(--danger-soft); border-color: #f5c2c0; }
+    .callout.warn { background: var(--warn-soft); border-color: rgba(251, 191, 36, 0.35); }
+    .callout.danger { background: var(--danger-soft); border-color: rgba(251, 113, 133, 0.35); }
     .callout strong { display: block; margin-bottom: 0.25rem; color: var(--ink); }
     code {
-      font-family: Consolas, "Cascadia Mono", monospace;
-      background: #e8edf3;
+      font-family: var(--mono);
+      background: var(--surface-2);
       padding: 0.1rem 0.35rem;
       border-radius: 4px;
       font-size: 0.9em;
+      color: var(--accent-bright);
     }
     pre {
-      background: var(--rail);
-      color: #e8eef5;
+      background: var(--bg);
+      color: var(--ink);
+      border: 1px solid var(--line-strong);
       padding: 1rem 1.1rem;
-      border-radius: 10px;
+      border-radius: 0.5rem;
       overflow-x: auto;
       font-size: 0.86rem;
       line-height: 1.45;
@@ -215,7 +228,7 @@
       <div class="rail-brand">
         <img src="ui/assets/syncme-logo.svg" alt="" />
         <div>
-          <h1>SyncMe</h1>
+          <h1>Sync<span class="brand-accent">Me</span></h1>
           <div class="by">Â© 2026 Bradford Lotriet</div>
         </div>
       </div>
@@ -257,7 +270,7 @@
           (local disk, NAS, or cloud via <strong>rclone</strong> / OneDrive).
         </p>
         <p class="meta">
-          SyncMe <strong>1.4.2</strong> ·
+          SyncMe <strong>1.4.3</strong> ·
           Free to use â€” keep author credit.
           See <code>LICENSE.txt</code> ·
           Website <a href="https://www.syncme.co.za">www.syncme.co.za</a> ·
@@ -320,8 +333,8 @@ Backup PC  â€”  SyncMe console + Task Scheduler
           <li>File/folder backup into versioned restic repositories (one per set).</li>
           <li>HTML console for setup, schedule, restore, and cloud OAuth.</li>
           <li>Email/toast notifications and repository integrity checks.</li>
-          <li>In-app updates from the SyncMe website feed (1.4.2+), preserving Config.</li>
-          <li>Optional SyncMe Monitor add-on heartbeats for a self-hosted fleet view.</li>
+          <li>In-app updates from the SyncMe website feed (1.4.3+), preserving Config.</li>
+          <li>Optional SyncMe Monitor heartbeats and LocalOps Console SyncMe-tab registration.</li>
         </ul>
         <h3>What SyncMe does <em>not</em> do</h3>
         <ul>
@@ -482,7 +495,7 @@ Backup PC  â€”  SyncMe console + Task Scheduler
       </section>
 
       <section class="card" id="updates">
-        <h2>In-app updates (1.4.2+)</h2>
+        <h2>In-app updates (1.4.3+)</h2>
         <p>
           When the console opens, SyncMe checks <code>https://www.syncme.co.za/updates/latest.json</code> over HTTPS
           (also Operations â†’ <strong>Check for updates</strong>).
@@ -498,18 +511,27 @@ Backup PC  â€”  SyncMe console + Task Scheduler
       </section>
 
       <section class="card" id="monitor">
-        <h2>SyncMe Monitor add-on (optional)</h2>
+        <h2>Fleet dashboards (optional)</h2>
+        <h3>LocalOps Console</h3>
+        <p>
+          When <strong>LocalOps Console</strong> is running on the same Backup PC (<code>http://127.0.0.1:8787</code>),
+          SyncMe can register its install path so the LocalOps <strong>SyncMe</strong> tab works without editing
+          <code>settings.json</code>. Operations &rarr; <strong>Fleet dashboards</strong> &rarr; leave LocalOps URL blank
+          (defaults to localhost), keep registration enabled, click <strong>Save fleet settings</strong>.
+          Registration is non-fatal if LocalOps is offline.
+        </p>
+        <h3>SyncMe Monitor add-on</h3>
         <p>
           Separate self-hosted package for a <strong>fleet status dashboard</strong> (HTML + local host on Windows).
           Not part of the main SyncMe zip and not meant for public web hosting.
-          Download <strong>SyncMe-Monitor-Setup-1.4.2.zip</strong> from
+          Download <strong>SyncMe-Monitor-Setup-1.4.3.zip</strong> from
           <a href="https://github.com/Metatronixa/SyncMe/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>
           or <a href="https://www.syncme.co.za" target="_blank" rel="noopener noreferrer">www.syncme.co.za</a> Downloads.
         </p>
         <ol>
           <li>Unzip on a LAN/Tailscale Windows PC; edit <code>Config\Monitor.json</code> (shared token + port, default <strong>17846</strong>).</li>
           <li>Run <code>SyncMe-Monitor.bat</code>; open <code>http://127.0.0.1:17846/</code> (or that PC&rsquo;s hostname on port 17846).</li>
-          <li>On each Backup PC: Operations &rarr; <strong>Monitor add-on</strong> &mdash; Monitor URL, site id, same shared token &mdash; click <strong>Save</strong>
+          <li>On each Backup PC: Operations &rarr; <strong>Fleet dashboards</strong> &mdash; Monitor URL, site id, same shared token &mdash; click <strong>Save fleet settings</strong>
               (SyncMe sends a <strong>test heartbeat</strong> immediately so the site should appear on the dashboard).</li>
           <li>After each backup, SyncMe also posts a compact heartbeat (no restic passwords). Failures to reach Monitor never fail the backup.</li>
         </ol>
@@ -563,8 +585,8 @@ Backup PC  â€”  SyncMe console + Task Scheduler
             <tr><td>Prune / delete blocked</td><td>Append-Only Mode is on for the set â€” turn it off in Retention &amp; integrity if you intend to prune</td></tr>
             <tr><td>Pre-backup script hung the job</td><td>Scripts must be non-interactive; SyncMe kills hooks after 15 minutes</td></tr>
             <tr><td>Update check fails / feed unreachable</td><td>Confirm <code>https://www.syncme.co.za/updates/latest.json</code> opens in a browser; firewall must allow HTTPS</td></tr>
-            <tr><td>Missing Modules\Update.ps1 after upgrade</td><td>Re-run SyncMe-Setup <strong>1.4.2+</strong> (fixed merge install); do not use an older setup zip</td></tr>
-            <tr><td>Monitor heartbeats not appearing</td><td>Token match, Monitor URL reachable from Backup PC, Monitor host running</td></tr>
+            <tr><td>Missing Modules\Update.ps1 after upgrade</td><td>Re-run SyncMe-Setup <strong>1.4.3+</strong> (fixed merge install); do not use an older setup zip</td></tr>
+            <tr><td>Monitor / LocalOps not updating</td><td>Monitor: token + URL reachable. LocalOps: console running on :8787; registration enabled; loopback only</td></tr>
             <tr><td>Need offline recovery sheet</td><td>Operations â†’ More â†’ Export Rescue Kit; keep password in your vault</td></tr>
           </tbody>
         </table>

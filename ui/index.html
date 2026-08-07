@@ -5,16 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SyncMe — © 2026 Bradford Lotriet</title>
   <link rel="icon" type="image/svg+xml" href="/ui/assets/syncme-logo.svg" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/ui/css/app.css" />
 </head>
 <body>
   <div id="splash" class="splash" aria-hidden="false">
     <div class="splash-inner">
       <img class="splash-logo" src="/ui/assets/syncme-logo.svg" alt="" />
-      <h1 class="splash-title">SyncMe</h1>
+      <h1 class="splash-title">Sync<span class="brand-accent">Me</span></h1>
       <div class="splash-by">© 2026 Bradford Lotriet · brad@web-zilla.co.za</div>
     </div>
   </div>
@@ -24,7 +21,7 @@
       <div class="rail-brand">
         <img src="/ui/assets/syncme-logo.svg" alt="" />
         <div>
-          <h1>SyncMe</h1>
+          <h1>Sync<span class="brand-accent">Me</span></h1>
           <div class="by">© 2026 Bradford Lotriet</div>
         </div>
       </div>
@@ -150,8 +147,21 @@
         </div>
 
         <div class="card">
-          <h2>Monitor add-on</h2>
-          <p class="sub">Optional. Point this Backup PC at a self-hosted SyncMe Monitor host so heartbeats appear on the fleet dashboard. Leave blank to disable.</p>
+          <h2>Fleet dashboards</h2>
+          <p class="sub">Optional. Register this Backup PC with <strong>LocalOps Console</strong> (SyncMe tab) and/or send heartbeats to <strong>SyncMe Monitor</strong>. Leave blank to disable each target.</p>
+
+          <h3 class="ops-sets-label" style="margin:12px 0 8px">LocalOps Console</h3>
+          <p class="sub" style="margin-bottom:10px">When LocalOps is running on this PC (default <code>http://127.0.0.1:8787</code>), SyncMe registers its install path so the SyncMe tab lights up without editing <code>settings.json</code>.</p>
+          <div class="grid two">
+            <label class="field">LocalOps URL
+              <input type="text" id="localOpsUrl" placeholder="http://127.0.0.1:8787" />
+              <span class="hint">Blank = try localhost:8787</span>
+            </label>
+            <label class="check" style="align-self:end"><input id="localOpsEnabled" type="checkbox" checked /> Enable LocalOps registration</label>
+          </div>
+
+          <h3 class="ops-sets-label" style="margin:18px 0 8px">SyncMe Monitor</h3>
+          <p class="sub" style="margin-bottom:10px">Self-hosted fleet dashboard (separate package). Leave URL blank to disable.</p>
           <div class="grid two">
             <label class="field">Monitor URL
               <input type="text" id="monitorUrl" placeholder="http://monitor-pc:17846" />
@@ -164,7 +174,7 @@
             </label>
           </div>
           <div class="actions" style="margin-top:10px">
-            <button type="button" class="btn soft" id="btnSaveMonitor">Save Monitor settings</button>
+            <button type="button" class="btn soft" id="btnSaveMonitor">Save fleet settings</button>
           </div>
           <div class="status-line" id="monitorStatus" style="margin-top:10px"></div>
         </div>

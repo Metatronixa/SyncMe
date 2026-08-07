@@ -1,6 +1,6 @@
 # SyncMe — Technical Breakdown
 
-**Version:** 1.4.2 (see [`VERSION.txt`](VERSION.txt))  
+**Version:** 1.4.3 (see [`VERSION.txt`](VERSION.txt))  
 **Website:** [www.syncme.co.za](https://www.syncme.co.za)  
 **Copyright © 2026 Bradford Lotriet** (`brad@web-zilla.co.za`)
 
@@ -70,6 +70,16 @@ SyncMe is a **Windows Backup PC orchestration layer** around [restic](https://re
 | `TECHNICAL.md` | This document |
 | `README.md`, `UserGuide.html`, `START-HERE.txt`, `RecoveryChecklist.txt` | Product / ops docs |
 | `LICENSE.txt`, `THIRD-PARTY-NOTICES.txt` | License and restic/rclone notices |
+
+### Sibling products & local layout
+
+| Path | Role |
+|---|---|
+| `…\Personal Projects\SyncMe` | This repository |
+| `…\Personal Projects\LocalOpsConsole` | LocalOps Console (sibling). SyncMe tab + optional self-registration target (`http://127.0.0.1:8787`) |
+| `SyncMe\website\` | Local marketing site source (gitignored) |
+
+When both SyncMe and LocalOps Console run on the same Backup PC, SyncMe POSTs ` /api/v1/syncme/register` so LocalOps can set `syncMePath` and show last-run status on the SyncMe tab. SyncMe Monitor remains a separate optional package.
 
 ---
 
@@ -343,7 +353,7 @@ All APIs are served by [`SyncMe-Host.ps1`](SyncMe-Host.ps1) on `http://127.0.0.1
 |---|---|---|
 | GET | `/api/update/check` | Compare local version to HTTPS `latest.json` feed |
 | POST | `/api/update/install` | Download, SHA-256 verify, apply update (preserves Config) |
-| GET/POST | `/api/options` | Update feed URL + Monitor heartbeat settings (`Config\SyncMeOptions.json`) |
+| GET/POST | `/api/options` | Update feed URL + Monitor + LocalOps registration settings (`Config\SyncMeOptions.json`) |
 | POST | `/api/open` | Open Explorer / editor for logs or reports |
 | POST | `/api/shutdown` | Stop the host |
 | GET | `/`, `/ui/*` | Static UI |
@@ -358,7 +368,7 @@ All APIs are served by [`SyncMe-Host.ps1`](SyncMe-Host.ps1) on `http://127.0.0.1
 | `Build-SyncMeMonitorSetup.ps1` | Optional add-on: `dist\SyncMe-Monitor-Setup-<ver>\` (+ zip). Self-hosted fleet dashboard (HttpListener, default port 17846). |
 | `Build-SyncMePackage.ps1` | Full zip `dist\SyncMe-<VERSION>.zip` (same product include list). |
 | `Deploy-SyncMe.ps1` | Copy project → target (default `C:\SyncMe`); preserve Config and set JSON under Logs; stop running host; copy `tools\` binaries. |
-| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.4.2`). Monitor uses `Monitor\VERSION.txt` (aligned to the same line). |
+| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.4.3`). Monitor uses `Monitor\VERSION.txt` (aligned to the same line). |
 
 **Typical shipped include list:** bats, host/backup/restore/watchdog, Register/Deploy, Config template, docs (including this file), Modules, ui, OfficeAgent, tools — not `website/`, not customer log/report contents beyond placeholders.
 
@@ -376,7 +386,7 @@ Scripts under [`OfficeAgent/`](OfficeAgent/) run on the **source** machine to en
 
 - **Setup wizard** — network mode, sources, destination (local / NAS / cloud), schedule, apply.
 - **Dashboard** — status cards, live activity, last-run details, Cloud & Retention modals, set switcher.
-- **Operations** — Run now / dry run / check / prune, snapshot list, browse, restore, store password, Check for updates, optional Monitor add-on settings.
+- **Operations** — Run now / dry run / check / prune, snapshot list, browse, restore, store password, Check for updates, Fleet dashboards (LocalOps Console + SyncMe Monitor).
 
 Static assets: [`ui/index.html`](ui/index.html), [`ui/css/app.css`](ui/css/app.css).
 
@@ -422,7 +432,6 @@ Static assets: [`ui/index.html`](ui/index.html), [`ui/css/app.css`](ui/css/app.c
 | Doc | Audience |
 |---|---|
 | [`README.md`](README.md) | Product intro, quick start, feature table |
-| [`V2.md`](V2.md) | Future architecture direction (discussion draft) |
 | [`UserGuide.html`](UserGuide.html) | Operator how-to and troubleshooting |
 | [`START-HERE.txt`](START-HERE.txt) | First steps after install |
 | [`RecoveryChecklist.txt`](RecoveryChecklist.txt) | DR + password vault checklist |

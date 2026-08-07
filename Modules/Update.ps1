@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  SyncMe options (update feed + Monitor) and in-app update helpers.
+  SyncMe options (update feed + Monitor + LocalOps) and in-app update helpers.
 #>
 
 function Get-SyncMeDefaultUpdateFeedUrl {
@@ -13,14 +13,26 @@ function Get-SyncMeOptionsPath {
     return (Join-Path $ScriptRoot 'Config\SyncMeOptions.json')
 }
 
+function ConvertTo-SyncMeOptionBool {
+    param($Value, [bool]$Default = $true)
+    if ($null -eq $Value) { return $Default }
+    if ($Value -is [bool]) { return [bool]$Value }
+    $s = ([string]$Value).Trim().ToLowerInvariant()
+    if ($s -in @('1', 'true', 'yes', 'on')) { return $true }
+    if ($s -in @('0', 'false', 'no', 'off')) { return $false }
+    return $Default
+}
+
 function Get-SyncMeOptions {
     param([string]$ScriptRoot)
 
     $defaults = [ordered]@{
-        UpdateFeedUrl = (Get-SyncMeDefaultUpdateFeedUrl)
-        MonitorUrl    = ''
-        MonitorSiteId = ''
-        MonitorToken  = ''
+        UpdateFeedUrl    = (Get-SyncMeDefaultUpdateFeedUrl)
+        MonitorUrl       = ''
+        MonitorSiteId    = ''
+        MonitorToken     = ''
+        LocalOpsUrl      = ''
+        LocalOpsEnabled  = $true
     }
 
     $path = Get-SyncMeOptionsPath -ScriptRoot $ScriptRoot
@@ -31,12 +43,13 @@ function Get-SyncMeOptions {
     try {
         $raw = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
         $obj = $raw | ConvertFrom-Json
-        foreach ($k in @($defaults.Keys)) {
-            if ($null -ne $obj.PSObject.Properties[$k] -and -not [string]::IsNullOrWhiteSpace([string]$obj.$k)) {
-                $defaults[$k] = [string]$obj.$k
-            } elseif ($null -ne $obj.PSObject.Properties[$k]) {
+        foreach ($k in @('UpdateFeedUrl', 'MonitorUrl', 'MonitorSiteId', 'MonitorToken', 'LocalOpsUrl')) {
+            if ($null -ne $obj.PSObject.Properties[$k]) {
                 $defaults[$k] = [string]$obj.$k
             }
+        }
+        if ($null -ne $obj.PSObject.Properties['LocalOpsEnabled']) {
+            $defaults['LocalOpsEnabled'] = (ConvertTo-SyncMeOptionBool -Value $obj.LocalOpsEnabled -Default $true)
         }
     } catch { }
 
@@ -49,7 +62,9 @@ function Save-SyncMeOptions {
         [string]$UpdateFeedUrl,
         [string]$MonitorUrl,
         [string]$MonitorSiteId,
-        [string]$MonitorToken
+        [string]$MonitorToken,
+        [string]$LocalOpsUrl,
+        [object]$LocalOpsEnabled
     )
 
     $dir = Join-Path $ScriptRoot 'Config'
@@ -64,11 +79,30 @@ function Save-SyncMeOptions {
     }
     if ([string]::IsNullOrWhiteSpace($feed)) { $feed = Get-SyncMeDefaultUpdateFeedUrl }
 
+    $locEnabled = [bool]$current.LocalOpsEnabled
+    if ($PSBoundParameters.ContainsKey('LocalOpsEnabled')) {
+        $locEnabled = (ConvertTo-SyncMeOptionBool -Value $LocalOpsEnabled -Default $true)
+    }
+
+    $locUrl = $(if ($PSBoundParameters.ContainsKey('LocalOpsUrl')) { [string]$LocalOpsUrl.Trim() } else { [string]$current.LocalOpsUrl })
+    if (-not [string]::IsNullOrWhiteSpace($locUrl)) {
+        if (-not (Get-Command Test-SyncMeLocalOpsLoopbackUrl -ErrorAction SilentlyContinue)) {
+            $locClient = Join-Path $ScriptRoot 'Modules\LocalOpsClient.ps1'
+            if (Test-Path -LiteralPath $locClient) { . $locClient }
+        }
+        if ((Get-Command Test-SyncMeLocalOpsLoopbackUrl -ErrorAction SilentlyContinue) -and
+            -not (Test-SyncMeLocalOpsLoopbackUrl -Url $locUrl)) {
+            throw 'LocalOpsUrl must be a loopback URL (127.0.0.1, localhost, or ::1).'
+        }
+    }
+
     $payload = [ordered]@{
-        UpdateFeedUrl = $feed
-        MonitorUrl    = $(if ($PSBoundParameters.ContainsKey('MonitorUrl')) { [string]$MonitorUrl.Trim() } else { [string]$current.MonitorUrl })
-        MonitorSiteId = $(if ($PSBoundParameters.ContainsKey('MonitorSiteId')) { [string]$MonitorSiteId.Trim() } else { [string]$current.MonitorSiteId })
-        MonitorToken  = $(if ($PSBoundParameters.ContainsKey('MonitorToken')) { [string]$MonitorToken.Trim() } else { [string]$current.MonitorToken })
+        UpdateFeedUrl   = $feed
+        MonitorUrl      = $(if ($PSBoundParameters.ContainsKey('MonitorUrl')) { [string]$MonitorUrl.Trim() } else { [string]$current.MonitorUrl })
+        MonitorSiteId   = $(if ($PSBoundParameters.ContainsKey('MonitorSiteId')) { [string]$MonitorSiteId.Trim() } else { [string]$current.MonitorSiteId })
+        MonitorToken    = $(if ($PSBoundParameters.ContainsKey('MonitorToken')) { [string]$MonitorToken.Trim() } else { [string]$current.MonitorToken })
+        LocalOpsUrl     = $locUrl
+        LocalOpsEnabled = $locEnabled
     }
 
     $path = Get-SyncMeOptionsPath -ScriptRoot $ScriptRoot

@@ -2128,20 +2128,24 @@
       if ($('monitorUrl')) $('monitorUrl').value = d.monitorUrl || '';
       if ($('monitorSiteId')) $('monitorSiteId').value = d.monitorSiteId || '';
       if ($('monitorToken')) $('monitorToken').value = d.monitorToken || '';
+      if ($('localOpsUrl')) $('localOpsUrl').value = d.localOpsUrl || '';
+      if ($('localOpsEnabled')) $('localOpsEnabled').checked = d.localOpsEnabled !== false;
     } catch (e) { /* ignore */ }
   }
 
   async function saveMonitorOptions() {
     const statusEl = $('monitorStatus');
     try {
-      if (statusEl) setStatus(statusEl, 'Saving and sending test heartbeat…', '');
+      if (statusEl) setStatus(statusEl, 'Saving fleet settings…', '');
       const body = {
         monitorUrl: $('monitorUrl') ? $('monitorUrl').value.trim() : '',
         monitorSiteId: $('monitorSiteId') ? $('monitorSiteId').value.trim() : '',
-        monitorToken: $('monitorToken') ? $('monitorToken').value.trim() : ''
+        monitorToken: $('monitorToken') ? $('monitorToken').value.trim() : '',
+        localOpsUrl: $('localOpsUrl') ? $('localOpsUrl').value.trim() : '',
+        localOpsEnabled: $('localOpsEnabled') ? !!$('localOpsEnabled').checked : true
       };
       const d = await api('/api/options', { method: 'POST', body: JSON.stringify(body) });
-      const kind = (d.heartbeatOk === false) ? 'warn' : 'ok';
+      const kind = (d.heartbeatOk === false || d.localOpsOk === false) ? 'warn' : 'ok';
       if (statusEl) setStatus(statusEl, d.message || 'Saved.', kind);
     } catch (e) {
       if (statusEl) setStatus(statusEl, e.message, 'danger');

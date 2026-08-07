@@ -39,7 +39,7 @@ $ScriptRoot = $PSScriptRoot
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Report.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
-foreach ($mod in @('Update.ps1', 'MonitorClient.ps1')) {
+foreach ($mod in @('Update.ps1', 'MonitorClient.ps1', 'LocalOpsClient.ps1')) {
     $modPath = Join-Path $ScriptRoot ('Modules\' + $mod)
     if (-not (Test-Path -LiteralPath $modPath)) {
         throw "Missing $modPath. Re-run SyncMe-Setup 1.4.0 (or copy Modules\$mod into the install folder)."
@@ -2148,9 +2148,10 @@ try {
             if ($Config.DisplayName) { [string]$Config.DisplayName } else { $ActiveSetId }
         ) -Force
         Send-SyncMeMonitorHeartbeat -ScriptRoot $ScriptRoot -SetId $ActiveSetId -RunInfo $hbRun -LogPath $logPath
+        Send-SyncMeLocalOpsRegister -ScriptRoot $ScriptRoot -SetId $ActiveSetId -RunInfo $hbRun -LogPath $logPath
     }
 } catch {
-    Write-Log "Monitor heartbeat failed (non-fatal): $($_.Exception.Message)" $logPath 'WARN'
+    Write-Log "Fleet register/heartbeat failed (non-fatal): $($_.Exception.Message)" $logPath 'WARN'
 }
 
 if (-not $overallSuccess) {
