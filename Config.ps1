@@ -106,4 +106,8 @@ $script:BackupConfig = [pscustomobject]@{
 
     EnableRepoCheck      = $true
     WeeklyDataCheckDay   = 'Sunday'
+
+    # When $true, a failed weekly/manual restore drill fails the backup job (CRITICAL email).
+    # Default $false keeps the drill advisory.
+    FailJobOnRestoreDrillFailure = $false
 }

@@ -28,6 +28,7 @@
     updatePrompted: false,
     setupAppliedSetId: '',
     etaSamples: [],
+    lastRunSnapshot: null,
     form: {
       operatorName: '',
       displayName: 'Backup set 1',
@@ -896,6 +897,7 @@
   function renderLastRun(lr) {
     const body = $('lastRunBody');
     if (!body) return;
+    state.lastRunSnapshot = lr || null;
     if (!lr) {
       body.innerHTML = '<div class="muted">No run details yet.</div>';
       return;
@@ -919,6 +921,31 @@
       html += '<p class="sub" style="margin-top:10px;color:var(--muted)">See Reports / Logs for details.</p>';
     }
     body.innerHTML = html;
+  }
+
+  function updateSkippedFilesBanner(d) {
+    const el = $('skippedFilesBanner');
+    if (!el) return;
+    const show = !!(d && d.skippedFilesBanner);
+    el.classList.toggle('hidden', !show);
+  }
+
+  async function acknowledgeSkippedFiles() {
+    const lr = state.lastRunSnapshot || {};
+    try {
+      await api('/api/options/ack-skipped-files', {
+        method: 'POST',
+        body: JSON.stringify({
+          setId: state.activeSetId || 'set1',
+          updatedUtc: lr.updatedUtc || ''
+        })
+      });
+      const banner = $('skippedFilesBanner');
+      if (banner) banner.classList.add('hidden');
+      flashStatus($('dashStatus'), 'Skipped-files warning acknowledged.', 'ok', 6000);
+    } catch (e) {
+      flashStatus($('dashStatus'), e.message, 'err', 10000);
+    }
   }
 
   function tip(text) {
@@ -1066,6 +1093,7 @@
     if (lowChip) lowChip.classList.toggle('hidden', !(d.lowDisk || d1warn));
 
     renderLastRun(d.lastRun);
+    updateSkippedFilesBanner(d);
 
     const overview = $('setOverviewBody');
     if (overview) {
@@ -1109,6 +1137,7 @@
       if ($('polEnableCheck')) $('polEnableCheck').checked = d.enableRepoCheck !== false;
       if ($('polCheckDay') && d.weeklyDataCheckDay) $('polCheckDay').value = d.weeklyDataCheckDay;
       if ($('polAppendOnly')) $('polAppendOnly').checked = !!d.appendOnly;
+      if ($('polFailDrill')) $('polFailDrill').checked = !!d.failJobOnRestoreDrillFailure;
       if ($('polPreScript')) $('polPreScript').value = d.preBackupScript || '';
       if ($('polPostScript')) $('polPostScript').value = d.postBackupScript || '';
       if ($('btnPolicyPrune')) $('btnPolicyPrune').disabled = !!d.appendOnly;
@@ -1276,6 +1305,7 @@
           enableRepoCheck: $('polEnableCheck').checked,
           weeklyDataCheckDay: $('polCheckDay').value,
           appendOnly: $('polAppendOnly') ? $('polAppendOnly').checked : false,
+          failJobOnRestoreDrillFailure: $('polFailDrill') ? $('polFailDrill').checked : false,
           preBackupScript: $('polPreScript') ? $('polPreScript').value.trim() : '',
           postBackupScript: $('polPostScript') ? $('polPostScript').value.trim() : ''
         })
@@ -1978,6 +2008,86 @@
     };
   }
 
+  let migrateMode = 'export';
+  function openMigrateModal(mode) {
+    migrateMode = mode === 'import' ? 'import' : 'export';
+    if ($('modalMigrateTitle')) {
+      $('modalMigrateTitle').textContent = migrateMode === 'import' ? 'Import migration package' : 'Export migration package';
+    }
+    if ($('migPassword')) $('migPassword').value = '';
+    if ($('migPassword2')) $('migPassword2').value = '';
+    if ($('migPath')) $('migPath').value = '';
+    if ($('migWinPassword')) $('migWinPassword').value = '';
+    if ($('migStatus')) setStatus($('migStatus'), '', '');
+    const pathWrap = $('migPathWrap');
+    const winWrap = $('migWinPassWrap');
+    const secWrap = $('migSecretsWrap');
+    if (pathWrap) pathWrap.classList.toggle('hidden', migrateMode !== 'import');
+    if (winWrap) winWrap.classList.toggle('hidden', migrateMode !== 'import');
+    if (secWrap) secWrap.classList.toggle('hidden', migrateMode !== 'export');
+    if ($('btnMigGo')) $('btnMigGo').textContent = migrateMode === 'import' ? 'Import' : 'Export';
+    openModal('modalMigrate');
+  }
+
+  if ($('btnMigrateExport')) $('btnMigrateExport').onclick = () => openMigrateModal('export');
+  if ($('btnMigrateImport')) $('btnMigrateImport').onclick = () => openMigrateModal('import');
+  if ($('btnMigGo')) {
+    $('btnMigGo').onclick = async () => {
+      const st = $('migStatus');
+      const p1 = ($('migPassword') && $('migPassword').value) || '';
+      const p2 = ($('migPassword2') && $('migPassword2').value) || '';
+      if (p1.length < 8) {
+        setStatus(st, 'Migration password must be at least 8 characters.', 'warn');
+        return;
+      }
+      if (p1 !== p2) {
+        setStatus(st, 'Passwords do not match.', 'warn');
+        return;
+      }
+      try {
+        if (migrateMode === 'export') {
+          setStatus(st, 'Encrypting migration package…', 'busy');
+          const d = await api('/api/migrate/export', {
+            method: 'POST',
+            body: JSON.stringify({
+              password: p1,
+              includeSecrets: $('migIncludeSecrets') ? $('migIncludeSecrets').checked : true
+            })
+          });
+          setStatus(st, d.message || ('Wrote ' + (d.path || '')), 'ok');
+          flashStatus(opsStatusEl(), d.message || 'Migration package exported.', 'ok', 12000);
+          if (d.path) {
+            try {
+              await api('/api/open', { method: 'POST', body: JSON.stringify({ kind: 'file', path: d.path }) });
+            } catch (e2) { /* ignore */ }
+          }
+        } else {
+          const path = ($('migPath') && $('migPath').value.trim()) || '';
+          if (!path) {
+            setStatus(st, 'Enter the full path to the .syncme-migrate file.', 'warn');
+            return;
+          }
+          setStatus(st, 'Decrypting and importing…', 'busy');
+          const d = await api('/api/migrate/import', {
+            method: 'POST',
+            body: JSON.stringify({
+              password: p1,
+              path: path,
+              restoreSecrets: true,
+              windowsPassword: ($('migWinPassword') && $('migWinPassword').value) || ''
+            })
+          });
+          const sched = (d.schedule || []).join(' · ');
+          setStatus(st, (d.message || 'Imported.') + (sched ? (' ' + sched) : ''), 'ok');
+          flashStatus(opsStatusEl(), d.message || 'Migration imported.', 'ok', 14000);
+          await loadDash();
+        }
+      } catch (e) {
+        setStatus(st, e.message, 'err');
+      }
+    };
+  }
+
   if ($('btnAddSet')) {
     $('btnAddSet').onclick = () => {
       state.step = 0;
@@ -2005,6 +2115,11 @@
   if ($('btnRcloneSave')) $('btnRcloneSave').onclick = () => saveRcloneCloud();
   if ($('btnRcloneTest')) $('btnRcloneTest').onclick = () => testRcloneCloud();
   if ($('btnSavePolicy')) $('btnSavePolicy').onclick = () => savePolicy();
+  if ($('btnAckSkippedFiles')) $('btnAckSkippedFiles').onclick = () => acknowledgeSkippedFiles();
+  if ($('btnSkippedFilesLogs')) $('btnSkippedFilesLogs').onclick = () => {
+    show('view-ops');
+    openPath('logs');
+  };
   if ($('btnStoreResticPass')) $('btnStoreResticPass').onclick = () => openStorePasswordModal();
   if ($('btnSaveResticPass')) $('btnSaveResticPass').onclick = () => saveResticPassword();
   if ($('btnOpenOfficeAgent')) $('btnOpenOfficeAgent').onclick = () => openPath('officeagent');

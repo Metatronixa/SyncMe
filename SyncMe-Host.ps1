@@ -21,10 +21,10 @@ $utf8Bom = New-Object System.Text.UTF8Encoding $true
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
 . (Join-Path $ScriptRoot 'Modules\Report.ps1')
-foreach ($mod in @('Update.ps1', 'MonitorClient.ps1', 'LocalOpsClient.ps1')) {
+foreach ($mod in @('Update.ps1', 'MonitorClient.ps1', 'LocalOpsClient.ps1', 'Migrate.ps1')) {
     $modPath = Join-Path $ScriptRoot ('Modules\' + $mod)
     if (-not (Test-Path -LiteralPath $modPath)) {
-        throw "Missing $modPath. Re-run SyncMe-Setup 1.4.0 (or copy Modules\$mod into the install folder)."
+        throw "Missing $modPath. Re-run SyncMe-Setup (or copy Modules\$mod into the install folder)."
     }
     . $modPath
 }
@@ -319,6 +319,10 @@ function Format-SyncMeSetLiteral {
         WakeMacAddress = '$(Escape-Sq $Set.WakeMacAddress)'
         EnableRepoCheck = $(& $tf $enableCheck)
         WeeklyDataCheckDay = '$(Escape-Sq $checkDay)'
+        AppendOnly = $(& $tf $(if ($null -ne $Set.AppendOnly) { $Set.AppendOnly } else { $false }))
+        FailJobOnRestoreDrillFailure = $(& $tf $(if ($null -ne $Set.FailJobOnRestoreDrillFailure) { $Set.FailJobOnRestoreDrillFailure } else { $false }))
+        PreBackupScript = '$(Escape-Sq $(if ($Set.PreBackupScript) { $Set.PreBackupScript } else { '' }))'
+        PostBackupScript = '$(Escape-Sq $(if ($Set.PostBackupScript) { $Set.PostBackupScript } else { '' }))'
         MinFreeRepoGb = 50
         MinFreeArchiveGb = 100
         WatchdogMaxAgeDays = 2
@@ -686,6 +690,9 @@ function Update-SyncMeSetPolicy {
             if ($null -ne $Body.enableRepoCheck) { $s | Add-Member -NotePropertyName EnableRepoCheck -NotePropertyValue ([bool]$Body.enableRepoCheck) -Force }
             if ($Body.weeklyDataCheckDay) { $s | Add-Member -NotePropertyName WeeklyDataCheckDay -NotePropertyValue ([string]$Body.weeklyDataCheckDay) -Force }
             if ($null -ne $Body.appendOnly) { $s | Add-Member -NotePropertyName AppendOnly -NotePropertyValue ([bool]$Body.appendOnly) -Force }
+            if ($null -ne $Body.failJobOnRestoreDrillFailure) {
+                $s | Add-Member -NotePropertyName FailJobOnRestoreDrillFailure -NotePropertyValue ([bool]$Body.failJobOnRestoreDrillFailure) -Force
+            }
             if ($null -ne $Body.preBackupScript) { $s | Add-Member -NotePropertyName PreBackupScript -NotePropertyValue ([string]$Body.preBackupScript) -Force }
             if ($null -ne $Body.postBackupScript) { $s | Add-Member -NotePropertyName PostBackupScript -NotePropertyValue ([string]$Body.postBackupScript) -Force }
             $found = $true
@@ -1888,6 +1895,10 @@ try {
                 if ($disk1Info -and $null -ne $disk1Info.percentFree -and $disk1Info.percentFree -lt 15) { $lowDisk = $true }
                 if ($disk2Info -and $null -ne $disk2Info.percentFree -and $disk2Info.percentFree -lt 15) { $lowDisk = $true }
                 $opts = Get-SyncMeOptions -ScriptRoot $ScriptRoot
+                $showSkippedBanner = $false
+                if ($cfg -and $lastRun) {
+                    $showSkippedBanner = Test-SyncMeSkippedFilesBanner -ScriptRoot $ScriptRoot -SetId $(if ($cfg.Id) { $cfg.Id } else { 'set1' }) -LastRun $lastRun
+                }
                 Write-SyncMeJson @{
                     ok                   = $true
                     packageVersion       = (Get-SyncMePackageVersion)
@@ -1896,6 +1907,7 @@ try {
                     configured           = [bool](Test-SyncMeConfigured)
                     lastSuccess          = $stamp
                     lastRun              = $lastRun
+                    skippedFilesBanner   = [bool]$showSkippedBanner
                     tailscaleOk          = [bool]$ts.Ok
                     tailscaleMessage     = $ts.Message
                     resticOk             = [bool]$restic.Ok
@@ -2085,6 +2097,23 @@ try {
                         localOpsOk      = $(if ($loc) { [bool]$loc.Ok } else { $null })
                         localOpsMsg     = $(if ($loc) { [string]$loc.Message } else { '' })
                     } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                continue
+            }
+
+            if ($path -eq '/api/options/ack-skipped-files' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    $body = Read-SyncMeBody $req
+                    $setId = if ($body -and $body.setId) { [string]$body.setId } else { 'set1' }
+                    $updatedUtc = if ($body -and $body.updatedUtc) { [string]$body.updatedUtc } else { '' }
+                    if ([string]::IsNullOrWhiteSpace($updatedUtc)) {
+                        $lr = Read-SyncMeLastRun -ScriptRoot $ScriptRoot -SetId $setId
+                        if ($lr -and $lr.updatedUtc) { $updatedUtc = [string]$lr.updatedUtc }
+                    }
+                    Set-SyncMeSkippedFilesAck -ScriptRoot $ScriptRoot -SetId $setId -UpdatedUtc $updatedUtc | Out-Null
+                    Write-SyncMeJson @{ ok = $true; message = 'Skipped-files warning acknowledged.' } -Response $res
                 } catch {
                     Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
                 }
@@ -2454,6 +2483,7 @@ try {
                     enableRepoCheck      = $(if ($null -ne $cfg.EnableRepoCheck) { [bool]$cfg.EnableRepoCheck } else { $true })
                     weeklyDataCheckDay   = $(if ($cfg.WeeklyDataCheckDay) { $cfg.WeeklyDataCheckDay } else { 'Sunday' })
                     appendOnly           = $(if ($null -ne $cfg.AppendOnly) { [bool]$cfg.AppendOnly } else { $false })
+                    failJobOnRestoreDrillFailure = $(if ($null -ne $cfg.FailJobOnRestoreDrillFailure) { [bool]$cfg.FailJobOnRestoreDrillFailure } else { $false })
                     preBackupScript      = $(if ($cfg.PreBackupScript) { [string]$cfg.PreBackupScript } else { '' })
                     postBackupScript     = $(if ($cfg.PostBackupScript) { [string]$cfg.PostBackupScript } else { '' })
                     resticLimitUploadKByte = $(if ($null -ne $cfg.ResticLimitUploadKByte) { [int]$cfg.ResticLimitUploadKByte } else { 0 })
@@ -2587,6 +2617,73 @@ try {
                         ok      = $true
                         path    = $outPath
                         message = "Rescue kit written to $outPath"
+                    } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                continue
+            }
+
+            if ($path -eq '/api/migrate/export' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    $body = Read-SyncMeBody $req
+                    $pw = if ($body.password) { [string]$body.password } else { '' }
+                    $includeSecrets = $false
+                    if ($null -ne $body.includeSecrets) { $includeSecrets = [bool]$body.includeSecrets }
+                    $result = Export-SyncMeMigrationPackage -ScriptRoot $ScriptRoot -Password $pw -IncludeSecrets:$includeSecrets
+                    Write-SyncMeJson @{
+                        ok       = $true
+                        path     = [string]$result.Path
+                        setCount = [int]$result.SetCount
+                        secrets  = [int]$result.Secrets
+                        message  = [string]$result.Message
+                    } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                continue
+            }
+
+            if ($path -eq '/api/migrate/import' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    $body = Read-SyncMeBody $req
+                    $pw = if ($body.password) { [string]$body.password } else { '' }
+                    $pkg = if ($body.path) { [string]$body.path } else { '' }
+                    $restoreSecrets = $true
+                    if ($null -ne $body.restoreSecrets) { $restoreSecrets = [bool]$body.restoreSecrets }
+                    $winPass = if ($body.windowsPassword) { [string]$body.windowsPassword } else { '' }
+                    $result = Import-SyncMeMigrationPackage -ScriptRoot $ScriptRoot -Password $pw -PackagePath $pkg -RestoreSecrets:$restoreSecrets
+                    $scheduleNotes = @()
+                    if (-not [string]::IsNullOrEmpty($winPass)) {
+                        foreach ($s in @($result.Sets)) {
+                            try {
+                                $schedBody = [pscustomobject]@{
+                                    setId              = $s.id
+                                    runTime            = $(if ($s.runTime) { $s.runTime } else { '01:00' })
+                                    windowsPassword    = $winPass
+                                    logonType          = 'Password'
+                                }
+                                $full = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $s.id
+                                if ($full) {
+                                    $schedBody | Add-Member -NotePropertyName scheduleStartDate -NotePropertyValue $(if ($full.ScheduleStartDate) { $full.ScheduleStartDate } else { (Get-Date).ToString('yyyy-MM-dd') }) -Force
+                                    $schedBody | Add-Member -NotePropertyName scheduleRecurrence -NotePropertyValue $(if ($full.ScheduleRecurrence) { $full.ScheduleRecurrence } else { 'Daily' }) -Force
+                                    $schedBody | Add-Member -NotePropertyName scheduleEndDate -NotePropertyValue $(if ($full.ScheduleEndDate) { $full.ScheduleEndDate } else { '' }) -Force
+                                    $schedBody | Add-Member -NotePropertyName scheduleDaysOfWeek -NotePropertyValue $(if ($full.ScheduleDaysOfWeek) { @($full.ScheduleDaysOfWeek) } else { @('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday') }) -Force
+                                }
+                                $scheduleNotes += (Invoke-SyncMeScheduleUpdate -Body $schedBody)
+                            } catch {
+                                $scheduleNotes += ("Schedule $($s.id): " + $_.Exception.Message)
+                            }
+                        }
+                    } else {
+                        $scheduleNotes += 'Sets imported. Provide Windows password to re-register Task Scheduler jobs.'
+                    }
+                    Write-SyncMeJson @{
+                        ok              = $true
+                        setCount        = [int]$result.SetCount
+                        secretsRestored = [int]$result.SecretsRestored
+                        message         = [string]$result.Message
+                        schedule        = $scheduleNotes
                     } -Response $res
                 } catch {
                     Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res

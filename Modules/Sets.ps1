@@ -75,6 +75,7 @@ function ConvertTo-SyncMeSetObject {
     if (-not $obj.Contains('RcloneLowLevelRetries')) { $obj['RcloneLowLevelRetries'] = 10 }
     if (-not $obj.Contains('RcloneMultiThreadStreams')) { $obj['RcloneMultiThreadStreams'] = 4 }
     if (-not $obj.Contains('AppendOnly')) { $obj['AppendOnly'] = $false }
+    if (-not $obj.Contains('FailJobOnRestoreDrillFailure')) { $obj['FailJobOnRestoreDrillFailure'] = $false }
     if (-not $obj.Contains('PreBackupScript')) { $obj['PreBackupScript'] = '' }
     if (-not $obj.Contains('PostBackupScript')) { $obj['PostBackupScript'] = '' }
     $obj['ExcludePatterns'] = @(Merge-SyncMeExcludePatterns -Existing $(if ($obj.Contains('ExcludePatterns')) { @($obj['ExcludePatterns']) } else { @() }))

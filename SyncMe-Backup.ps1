@@ -1378,6 +1378,7 @@ $runInfo = @{
     LastRestoreDrillSuccess = $null
     LastRestoreDrillDate    = ''
     LastRestoreDrillDetail  = ''
+    LastRestoreDrillEnforced = $false
     LogPath             = $logPath
     ResticJsonLog       = $jsonLog
     Errors              = @()
@@ -1939,12 +1940,18 @@ try {
                 $runInfo.DataCheckDetail = "Data subset $n/7 OK."
                 Write-Log $runInfo.DataCheckDetail $logPath
 
-                Write-Log 'Running advisory restore drill (restic dump of random file(s))...' $logPath
+                $enforceDrill = $false
+                if ($Config.PSObject.Properties.Name -contains 'FailJobOnRestoreDrillFailure') {
+                    $enforceDrill = [bool]$Config.FailJobOnRestoreDrillFailure
+                }
+                $drillMode = if ($enforceDrill) { 'enforced' } else { 'advisory' }
+                Write-Log ("Running $drillMode restore drill (restic dump of random file(s))...") $logPath
                 $drill = Test-SyncMeRestoreDrill -Config $Config -SetId $ActiveSetId -LogPath $logPath
                 if ($drill -is [System.Array]) {
                     $drill = @($drill) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('Ok') } | Select-Object -Last 1
                 }
                 $runInfo.LastRestoreDrillDate = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+                $runInfo.LastRestoreDrillEnforced = $enforceDrill
                 if ($drill -and $drill.Ok -and $drill.ContainsKey('Skipped') -and $drill.Skipped) {
                     # Soft skip (no snapshots / no files): leave Success null so report shows SKIP
                     $runInfo.LastRestoreDrillSuccess = $null
@@ -1955,10 +1962,16 @@ try {
                     $runInfo.LastRestoreDrillDetail = [string]$drill.Message
                     Write-Log $runInfo.LastRestoreDrillDetail $logPath
                 } else {
-                    # Advisory only: record FAIL but do not fail the overall job or Errors list
                     $runInfo.LastRestoreDrillSuccess = $false
                     $runInfo.LastRestoreDrillDetail = if ($drill) { [string]$drill.Message } else { 'Restore drill returned no result.' }
-                    Write-Log ("Restore drill FAIL (advisory, job not failed): " + $runInfo.LastRestoreDrillDetail) $logPath 'WARN'
+                    if ($enforceDrill) {
+                        $overallSuccess = $false
+                        $failMsg = 'Restore drill FAILED (FailJobOnRestoreDrillFailure=true): ' + $runInfo.LastRestoreDrillDetail
+                        Write-Log $failMsg $logPath 'ERROR'
+                        $errors.Add($failMsg)
+                    } else {
+                        Write-Log ("Restore drill FAIL (advisory, job not failed): " + $runInfo.LastRestoreDrillDetail) $logPath 'WARN'
+                    }
                 }
             } else {
                 $overallSuccess = $false

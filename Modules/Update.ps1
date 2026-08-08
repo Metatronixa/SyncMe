@@ -33,6 +33,7 @@ function Get-SyncMeOptions {
         MonitorToken     = ''
         LocalOpsUrl      = ''
         LocalOpsEnabled  = $true
+        SkippedFilesAck  = [ordered]@{}
     }
 
     $path = Get-SyncMeOptionsPath -ScriptRoot $ScriptRoot
@@ -51,6 +52,13 @@ function Get-SyncMeOptions {
         if ($null -ne $obj.PSObject.Properties['LocalOpsEnabled']) {
             $defaults['LocalOpsEnabled'] = (ConvertTo-SyncMeOptionBool -Value $obj.LocalOpsEnabled -Default $true)
         }
+        if ($null -ne $obj.PSObject.Properties['SkippedFilesAck'] -and $obj.SkippedFilesAck) {
+            $ack = [ordered]@{}
+            foreach ($p in $obj.SkippedFilesAck.PSObject.Properties) {
+                $ack[[string]$p.Name] = [string]$p.Value
+            }
+            $defaults['SkippedFilesAck'] = $ack
+        }
     } catch { }
 
     return [pscustomobject]$defaults
@@ -64,7 +72,8 @@ function Save-SyncMeOptions {
         [string]$MonitorSiteId,
         [string]$MonitorToken,
         [string]$LocalOpsUrl,
-        [object]$LocalOpsEnabled
+        [object]$LocalOpsEnabled,
+        $SkippedFilesAck
     )
 
     $dir = Join-Path $ScriptRoot 'Config'
@@ -96,6 +105,16 @@ function Save-SyncMeOptions {
         }
     }
 
+    $ackMap = [ordered]@{}
+    $srcAck = if ($PSBoundParameters.ContainsKey('SkippedFilesAck')) { $SkippedFilesAck } else { $current.SkippedFilesAck }
+    if ($srcAck) {
+        if ($srcAck -is [hashtable] -or $srcAck -is [System.Collections.IDictionary]) {
+            foreach ($k in $srcAck.Keys) { $ackMap[[string]$k] = [string]$srcAck[$k] }
+        } else {
+            foreach ($p in $srcAck.PSObject.Properties) { $ackMap[[string]$p.Name] = [string]$p.Value }
+        }
+    }
+
     $payload = [ordered]@{
         UpdateFeedUrl   = $feed
         MonitorUrl      = $(if ($PSBoundParameters.ContainsKey('MonitorUrl')) { [string]$MonitorUrl.Trim() } else { [string]$current.MonitorUrl })
@@ -103,12 +122,57 @@ function Save-SyncMeOptions {
         MonitorToken    = $(if ($PSBoundParameters.ContainsKey('MonitorToken')) { [string]$MonitorToken.Trim() } else { [string]$current.MonitorToken })
         LocalOpsUrl     = $locUrl
         LocalOpsEnabled = $locEnabled
+        SkippedFilesAck = $ackMap
     }
 
     $path = Get-SyncMeOptionsPath -ScriptRoot $ScriptRoot
-    $json = ($payload | ConvertTo-Json -Depth 4)
+    $json = ($payload | ConvertTo-Json -Depth 6)
     [IO.File]::WriteAllText($path, $json + "`r`n", (New-Object System.Text.UTF8Encoding $false))
     return [pscustomobject]$payload
+}
+
+function Set-SyncMeSkippedFilesAck {
+    param(
+        [string]$ScriptRoot,
+        [string]$SetId,
+        [string]$UpdatedUtc
+    )
+    if ([string]::IsNullOrWhiteSpace($SetId)) { $SetId = 'set1' }
+    $opts = Get-SyncMeOptions -ScriptRoot $ScriptRoot
+    $ack = [ordered]@{}
+    if ($opts.SkippedFilesAck) {
+        if ($opts.SkippedFilesAck -is [hashtable] -or $opts.SkippedFilesAck -is [System.Collections.IDictionary]) {
+            foreach ($k in $opts.SkippedFilesAck.Keys) { $ack[[string]$k] = [string]$opts.SkippedFilesAck[$k] }
+        } else {
+            foreach ($p in $opts.SkippedFilesAck.PSObject.Properties) { $ack[[string]$p.Name] = [string]$p.Value }
+        }
+    }
+    $ack[$SetId] = if ($UpdatedUtc) { [string]$UpdatedUtc } else { (Get-Date).ToUniversalTime().ToString('o') }
+    return (Save-SyncMeOptions -ScriptRoot $ScriptRoot -SkippedFilesAck $ack)
+}
+
+function Test-SyncMeSkippedFilesBanner {
+    param(
+        [string]$ScriptRoot,
+        [string]$SetId,
+        $LastRun
+    )
+    if (-not $LastRun) { return $false }
+    $exit = [string]$LastRun.backupExitCode
+    if ($exit -ne '3') { return $false }
+    $sid = if ($SetId) { $SetId } else { 'set1' }
+    $opts = Get-SyncMeOptions -ScriptRoot $ScriptRoot
+    $ackUtc = ''
+    if ($opts.SkippedFilesAck) {
+        if ($opts.SkippedFilesAck -is [hashtable] -or $opts.SkippedFilesAck -is [System.Collections.IDictionary]) {
+            if ($opts.SkippedFilesAck.Contains($sid)) { $ackUtc = [string]$opts.SkippedFilesAck[$sid] }
+        } elseif ($opts.SkippedFilesAck.PSObject.Properties[$sid]) {
+            $ackUtc = [string]$opts.SkippedFilesAck.$sid
+        }
+    }
+    $runUtc = [string]$LastRun.updatedUtc
+    if ([string]::IsNullOrWhiteSpace($runUtc)) { return $true }
+    return ($ackUtc -ne $runUtc)
 }
 
 function ConvertTo-SyncMeVersionParts {

@@ -38,6 +38,16 @@
         <span id="lowDiskChip" class="chip danger hidden"><span class="dot"></span><span>Low disk space</span></span>
       </div>
 
+      <div id="skippedFilesBanner" class="banner banner-warn hidden" role="status">
+        <div class="banner-text">
+          Last backup completed with <strong>skipped files</strong> (restic exit 3). Review Reports / Logs, then acknowledge.
+        </div>
+        <div class="banner-actions">
+          <button type="button" class="btn soft" id="btnSkippedFilesLogs">Open logs</button>
+          <button type="button" class="btn ghost" id="btnAckSkippedFiles">Acknowledge</button>
+        </div>
+      </div>
+
       <div id="setSwitcher" class="set-switcher"></div>
 
       <section id="view-setup" class="hidden">
@@ -118,6 +128,8 @@
             <div class="quick-actions">
               <button type="button" class="btn soft" data-backup="dataCheck">Data check</button>
               <button type="button" class="btn soft" id="btnExportRescueKit">Export Rescue Kit</button>
+              <button type="button" class="btn soft" id="btnMigrateExport">Export migration package</button>
+              <button type="button" class="btn soft" id="btnMigrateImport">Import migration package</button>
               <button type="button" class="btn soft hidden" id="btnStoreResticPass">Store password</button>
               <button type="button" class="btn ghost" id="btnOpenOfficeAgent">OfficeAgent folder</button>
               <button type="button" class="btn ghost" id="btnOpenReports">Open reports</button>
@@ -333,6 +345,7 @@
         </label>
         <label class="check" style="align-self:end"><input id="polEnableCheck" type="checkbox" checked /> Enable restic check after backups</label>
         <label class="check" style="grid-column:1/-1"><input id="polAppendOnly" type="checkbox" /> Append-Only Mode (disable prune / prevent snapshot deletion)</label>
+        <label class="check" style="grid-column:1/-1"><input id="polFailDrill" type="checkbox" /> Fail job if restore drill fails (CRITICAL email; default is advisory only)</label>
         <label class="field" style="grid-column:1/-1">Pre-backup script path
           <input type="text" id="polPreScript" placeholder="C:\Scripts\pre-backup.ps1" />
           <span class="hint">Must be non-interactive (Task Scheduler). Timeout 15 minutes.</span>
@@ -346,6 +359,38 @@
         <button type="button" class="btn primary" id="btnSavePolicy">Save policy</button>
         <button type="button" class="btn soft" data-backup="pruneOnly" id="btnPolicyPrune">Prune now</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Migration modal -->
+  <div id="modalMigrate" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalMigrateTitle">
+    <div class="modal-backdrop" data-close-modal="modalMigrate"></div>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <h2 id="modalMigrateTitle">Migration package</h2>
+        <button type="button" class="btn ghost modal-close" data-close-modal="modalMigrate">Close</button>
+      </div>
+      <p class="sub">Move backup sets to a secondary Backup PC. The file is AES-encrypted with your migration password. Default export includes Credential Manager secrets inside the encrypted package.</p>
+      <div class="grid two">
+        <label class="field" style="grid-column:1/-1">Migration password (min 8 chars)
+          <input type="password" id="migPassword" autocomplete="new-password" />
+        </label>
+        <label class="field" style="grid-column:1/-1">Confirm password
+          <input type="password" id="migPassword2" autocomplete="new-password" />
+        </label>
+        <label class="field" style="grid-column:1/-1" id="migPathWrap">Package path (import)
+          <input type="text" id="migPath" placeholder="C:\Path\SyncMe-Migration-….syncme-migrate" />
+        </label>
+        <label class="field" style="grid-column:1/-1" id="migWinPassWrap">Windows account password (re-register tasks on import)
+          <input type="password" id="migWinPassword" autocomplete="current-password" />
+        </label>
+        <label class="check" style="grid-column:1/-1" id="migSecretsWrap"><input id="migIncludeSecrets" type="checkbox" checked /> Include secrets in encrypted export</label>
+      </div>
+      <div class="actions" style="margin-top:12px">
+        <button type="button" class="btn primary" id="btnMigGo">Run</button>
+        <button type="button" class="btn ghost" data-close-modal="modalMigrate">Cancel</button>
+      </div>
+      <div class="status-line" id="migStatus" style="margin-top:10px"></div>
     </div>
   </div>
 

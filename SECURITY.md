@@ -3,7 +3,7 @@
 **Website:** [www.syncme.co.za](https://www.syncme.co.za)  
 **SyncMe** Copyright © 2026 Bradford Lotriet (`brad@web-zilla.co.za`)
 
-Free to use — keep this credit. See [`LICENSE.txt`](LICENSE.txt).
+Free to use - keep this credit. See [`LICENSE.txt`](LICENSE.txt).
 
 This document explains how SyncMe handles security, what trust boundaries exist, how secrets are stored, what the product does and does not protect against, and how to report a vulnerability. It is written for operators, auditors, and researchers reviewing the GitHub Security tab.
 
@@ -38,29 +38,13 @@ Please include as much of the following as you can:
 7. Any suggested mitigation or fix.
 8. Whether you need coordinated disclosure timing or credit.
 
-### What we ask of reporters
+### What we ask of reporters - Act in good faith. Do not access data that is not yours. - Do not destroy backups, wipe repositories, or disrupt production systems beyond what is needed to demonstrate the issue in a lab. - Give a reasonable window to investigate and ship a fix before public disclosure. - Do not demand payment as a condition of disclosure. SyncMe is a free personal project; we appreciate responsible reports and will credit you if you want credit.
 
-- Act in good faith. Do not access data that is not yours.
-- Do not destroy backups, wipe repositories, or disrupt production systems beyond what is needed to demonstrate the issue in a lab.
-- Give a reasonable window to investigate and ship a fix before public disclosure.
-- Do not demand payment as a condition of disclosure. SyncMe is a free personal project; we appreciate responsible reports and will credit you if you want credit.
-
-### What you can expect from us
-
-- Acknowledgement when the report is received (goal: a few business days; this is a single-maintainer project).
-- An assessment of severity and whether the issue is in SyncMe, in operator configuration, or in an upstream tool (restic, rclone, Windows, Tailscale, cloud providers).
-- A fix, mitigation guidance, or a clear explanation if we believe the behaviour is intentional and already documented as a trust-boundary limitation.
-- Public disclosure via release notes and, when appropriate, a GitHub security advisory once a fix or guidance is ready.
+### What you can expect from us - Acknowledgement when the report is received (goal: a few business days; this is a single-maintainer project). - An assessment of severity and whether the issue is in SyncMe, in operator configuration, or in an upstream tool (restic, rclone, Windows, Tailscale, cloud providers). - A fix, mitigation guidance, or a clear explanation if we believe the behaviour is intentional and already documented as a trust-boundary limitation. - Public disclosure via release notes and, when appropriate, a GitHub security advisory once a fix or guidance is ready.
 
 ## Product security model (overview)
 
-SyncMe is a **file-level backup orchestrator** for a Windows Backup PC. It wraps [restic](https://restic.net/) (encrypted, deduplicated repositories) and optionally [rclone](https://rclone.org/) as a restic cloud backend. It is **not**:
-
-- antivirus or endpoint detection
-- ransomware protection or immutable storage by itself
-- bare-metal imaging or full disaster recovery appliance
-- a multi-user, internet-facing web application
-- a replacement for restic’s or rclone’s own security guarantees
+SyncMe is a **file-level backup orchestrator** for a Windows Backup PC. It wraps [restic](https://restic.net/) (encrypted, deduplicated repositories) and optionally [rclone](https://rclone.org/) as a restic cloud backend. It is **not**: - antivirus or endpoint detection - ransomware protection or immutable storage by itself - bare-metal imaging or full disaster recovery appliance - a multi-user, internet-facing web application - a replacement for restic’s or rclone’s own security guarantees
 
 The security posture is **orchestration on a trusted Backup PC**, with strong encryption of backup data provided by **restic repository passwords**, and secret storage in **Windows Credential Manager** (not in `Config.ps1`).
 
@@ -89,19 +73,14 @@ Security constraints for this path:
 
 1. SyncMe only allows a **loopback** LocalOps URL (`127.0.0.1`, `localhost`, `::1`). Non-loopback URLs are rejected / skipped.
 2. LocalOps accepts register/heartbeat only from **loopback clients** in this release.
-3. The payload contains install path, version, hostname, site id, console URL, and optional last-run summary — **never** restic passwords, SMTP secrets, or rclone OAuth tokens.
+3. The payload contains install path, version, hostname, site id, console URL, and optional last-run summary - **never** restic passwords, SMTP secrets, or rclone OAuth tokens.
 4. SyncMe **Monitor** remains a separate optional product (Bearer token heartbeats to a self-hosted Monitor host). Monitor tokens are not sent to LocalOps.
 
 ## Secrets and credentials
 
 ### What must never go in `Config.ps1`
 
-`Config.ps1` holds paths, schedules, retention, and set metadata. It must **not** hold:
-
-- restic repository passwords
-- SMTP passwords
-- SMB share passwords
-- rclone OAuth tokens (those live in `Config\rclone.conf`)
+`Config.ps1` holds paths, schedules, retention, and set metadata. It must **not** hold: - restic repository passwords - SMTP passwords - SMB share passwords - rclone OAuth tokens (those live in `Config\rclone.conf`)
 
 If a change causes SyncMe to write plaintext restic passwords into config, logs that are routinely shared, or the Rescue Kit HTML, treat that as a **high-priority** security bug.
 
@@ -131,6 +110,8 @@ The restic password **encrypts the repository**. Without it there is no restore 
 
 **Required practice:** when the wizard creates or you set a password, save it in a password manager or other safe offline place. Do not rely only on the Backup PC.
 
+**Runtime:** SyncMe loads the password from Credential Manager into process memory only for the duration of a restic/rclone job (for example `RESTIC_PASSWORD`). It must not write that password into `Config.ps1`, HTML reports, Rescue Kit exports, or routine logs. Process exit clears that memory; there is no durable plaintext password file by design.
+
 Wrong password behaviour surfaces as restic exit codes (for example exit 12). Operations → Store password (or Edit set → Passwords) updates Credential Manager; it does not change an already-initialized repository’s password by itself.
 
 ### rclone / cloud OAuth
@@ -147,11 +128,7 @@ If a Rescue Kit export ever embeds a live password or OAuth token, report that i
 
 ### Packaging and distribution
 
-Customer setup packages (`Build-SyncMeSetup.ps1` / `Build-SyncMePackage.ps1`) are intended to ship SyncMe scripts, UI, and docs only. They must **not** bundle:
-
-- `website/` (marketing site source)
-- `ui/mockups/`
-- restic / rclone / WinSCP / WinFsp installers or binaries
+Customer setup packages (`Build-SyncMeSetup.ps1` / `Build-SyncMePackage.ps1`) are intended to ship SyncMe scripts, UI, and docs only. They must **not** bundle: - `website/` (marketing site source) - `ui/mockups/` - restic / rclone / WinSCP / WinFsp installers or binaries
 
 Tools are downloaded or resolved on the host. If a release asset contains unexpected executables or marketing-site trees, report it as a packaging integrity issue.
 
@@ -187,29 +164,11 @@ Encrypted backups that nobody verifies are a false sense of safety. Operators sh
 
 ## What is in scope
 
-We welcome reports such as:
-
-- Secret leakage (passwords, tokens, or private keys written to config, Rescue Kit, HTML reports, world-readable logs, or release packages).
-- Ways to reach the SyncMe API from a remote host despite the `127.0.0.1` bind, without the operator deliberately rebinding or proxying.
-- Path traversal or unintended file write/delete outside documented restore/prune behaviour when using the console as a normal local user.
-- Command injection via set names, paths, or API fields that leads to unexpected process execution.
-- Privilege escalation from a low-privilege local user to another user’s Credential Manager secrets or SYSTEM without already having equivalent Windows rights.
-- Supply-chain issues in SyncMe’s own download/install helpers (for example installing restic/rclone from an unexpected source, skipping integrity checks SyncMe claims to perform, or shipping trojaned binaries in official GitHub Release assets).
-- Misleading security documentation that would cause a reasonable operator to store passwords unsafely.
+We welcome reports such as: - Secret leakage (passwords, tokens, or private keys written to config, Rescue Kit, HTML reports, world-readable logs, or release packages). - Ways to reach the SyncMe API from a remote host despite the `127.0.0.1` bind, without the operator deliberately rebinding or proxying. - Path traversal or unintended file write/delete outside documented restore/prune behaviour when using the console as a normal local user. - Command injection via set names, paths, or API fields that leads to unexpected process execution. - Privilege escalation from a low-privilege local user to another user’s Credential Manager secrets or SYSTEM without already having equivalent Windows rights. - Supply-chain issues in SyncMe’s own download/install helpers (for example installing restic/rclone from an unexpected source, skipping integrity checks SyncMe claims to perform, or shipping trojaned binaries in official GitHub Release assets). - Misleading security documentation that would cause a reasonable operator to store passwords unsafely.
 
 ## What is generally out of scope
 
-Please do not expect these to be treated as SyncMe vulnerabilities by themselves:
-
-- “No login on the localhost UI” (documented trust model).
-- Loss of data because the restic password was not vaulted offline.
-- Ransomware encrypting the Backup PC, source shares, or repository storage SyncMe can still see.
-- Cloud provider throttling, account bans, or token expiry.
-- Weak Windows account passwords, shared admin sessions, or RDP left open to the internet.
-- Issues solely in upstream restic, rclone, WinFsp, Tailscale, or Windows that SyncMe merely invokes, unless SyncMe’s integration uniquely worsens them.
-- Social engineering of operators.
-- Denial of service by filling disk, killing processes, or holding repository locks while already having local admin on the Backup PC.
-- Missing features (immutable cloud object lock, MFA for the UI, centralized SIEM) unless they contradict a specific security claim we make.
+Please do not expect these to be treated as SyncMe vulnerabilities by themselves: - “No login on the localhost UI” (documented trust model). - Loss of data because the restic password was not vaulted offline. - Ransomware encrypting the Backup PC, source shares, or repository storage SyncMe can still see. - Cloud provider throttling, account bans, or token expiry. - Weak Windows account passwords, shared admin sessions, or RDP left open to the internet. - Issues solely in upstream restic, rclone, WinFsp, Tailscale, or Windows that SyncMe merely invokes, unless SyncMe’s integration uniquely worsens them. - Social engineering of operators. - Denial of service by filling disk, killing processes, or holding repository locks while already having local admin on the Backup PC. - Missing features (immutable cloud object lock, MFA for the UI, centralized SIEM) unless they contradict a specific security claim we make.
 
 ## Operator hardening checklist
 
@@ -236,10 +195,6 @@ Security issues in those projects should usually be reported upstream. Tell us a
 
 SyncMe is free to use under [`LICENSE.txt`](LICENSE.txt). It is provided **AS IS**, without warranty. The author is not liable for data loss, ransomware, misconfiguration, failed restores, or unauthorized access affecting systems SyncMe reads or writes. You are responsible for verifying backups, securing credentials and destinations, and maintaining additional recovery plans.
 
-## Contact
-
-- Security and general contact: `brad@web-zilla.co.za`
-- Product site: [www.syncme.co.za](https://www.syncme.co.za)
-- Releases: [GitHub Releases](https://github.com/Metatronixa/SyncMe/releases)
+## Contact - Security and general contact: `brad@web-zilla.co.za` - Product site: [www.syncme.co.za](https://www.syncme.co.za) - Releases: [GitHub Releases](https://github.com/Metatronixa/SyncMe/releases)
 
 Thank you for helping keep SyncMe operators safe.

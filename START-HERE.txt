@@ -1,7 +1,7 @@
-SyncMe — START HERE
+SyncMe - START HERE
 Version: see VERSION.txt (must match the SyncMe-Setup folder name you received)
 Copyright © 2026 Bradford Lotriet (brad@web-zilla.co.za)
-Free to use — keep this credit. See LICENSE.txt
+Free to use - keep this credit. See LICENSE.txt
 Third-party tools: THIRD-PARTY-NOTICES.txt (restic, rclone)
 Website: https://www.syncme.co.za  (FAQ + User Guide)
 ================================
@@ -12,6 +12,7 @@ WHAT THIS IS
   Destinations: local disk, NAS (UNC), or cloud via rclone (OneDrive / Google Drive).
   LAN and/or Tailscale for sources. HTML console in the browser. No database, no PHP.
   Not bare-metal imaging, antivirus, or ransomware protection.
+  Tagline: set and periodically check - verify restores; do not treat SyncMe as set-and-forget.
 
 WHERE TO INSTALL
   Install SyncMe ONLY on the Backup PC (Windows 10/11 or Windows Server).
@@ -33,7 +34,7 @@ UPDATES (1.4.0+)
   Config.ps1 is backed up and preserved. Or re-run SyncMe-Setup.cmd from a newer zip.
 
 FLEET DASHBOARDS (optional)
-  SyncMe Monitor — separate package SyncMe-Monitor-Setup-<ver>.zip (same version as SyncMe).
+  SyncMe Monitor - separate package SyncMe-Monitor-Setup-<ver>.zip (same version as SyncMe).
   Download from GitHub Releases or https://www.syncme.co.za (Downloads).
   1. Unzip on a LAN/Tailscale Windows PC; edit Config\Monitor.json (shared token, port 17846).
   2. Run SyncMe-Monitor.bat; open http://127.0.0.1:17846/
@@ -58,9 +59,9 @@ WINDOWS SERVER (customer / unattended)
   3. In Schedule, keep "Run whether logged on or not" checked and enter that
      account's Windows password (stored in Task Scheduler).
   4. Credential Manager secrets (restic / share / SMTP) must be for the SAME account.
-  5. Console is http://127.0.0.1:17845 only — manage via RDP (not a LAN website).
+  5. Console is http://127.0.0.1:17845 only - manage via RDP (not a LAN website).
   6. Prefer email notifications; toasts are off by default.
-  7. One backup set per user/source is typical — stagger run times; each set needs
+  7. One backup set per user/source is typical - stagger run times; each set needs
      its own restic repository path (dedicated subfolder, never a drive root).
   8. After reboot, confirm overnight jobs still run WITHOUT staying logged on.
 
@@ -88,7 +89,7 @@ FIRST TIME
   passwords, email (optional), schedule → Task Scheduler.
   SAVE THE RESTIC PASSWORD in a password manager or other safe place when
   you create it. Without it you cannot restore. Credential Manager on this
-  PC is not enough if the Backup PC dies — keep your own vault copy.
+  PC is not enough if the Backup PC dies - keep your own vault copy.
   After Apply: Run dry run, then a real backup. Read Reports/Logs. Use
   Operations Check. Restore to an empty test folder and spot-check
   critical files against the source.
@@ -102,7 +103,9 @@ DAY TO DAY
   SyncMe.bat → Dashboard (or SyncMe-Menu.bat)
   Use Restore on Operations when you need files back (restic snapshots).
   Browse selected walks folders inside a snapshot; Use this path fills include for a partial restore.
-  Export Rescue Kit (Operations → More) for a printable recovery sheet — keep the password in your vault.
+  Export Rescue Kit (Operations → More) for a printable recovery sheet - keep the password in your vault.
+  Operations → More → Export / Import migration package to stand up a secondary Backup PC (AES-encrypted).
+  Tagline: set and periodically check - verify restores on a schedule.
   Retention & integrity: optional Append-Only Mode and pre/post backup scripts (non-interactive only).
   Periodically re-verify: Check / Data check (includes advisory restore drill in the report),
   or test restore to an empty folder. A drill FAIL is logged but does not fail the job.
@@ -110,9 +113,9 @@ DAY TO DAY
 DO NOT
   Edit Config.ps1 unless a technician asks you to.
   Put passwords in any text file (except your password manager / vault).
-  Lose or discard the restic password — the repository becomes unrecoverable.
+  Lose or discard the restic password - the repository becomes unrecoverable.
   Restore into the live restic repository folder.
-  Rely on SyncMe alone against ransomware — keep offline copies separately.
+  Rely on SyncMe alone against ransomware - keep offline copies separately.
 
 NEED HELP
   Open UserGuide.html or RecoveryChecklist.txt in this folder.

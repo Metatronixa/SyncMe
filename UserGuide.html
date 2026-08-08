@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>SyncMe â€” User Guide</title>
+  <title>SyncMe - User Guide</title>
   <link rel="icon" type="image/svg+xml" href="ui/assets/syncme-logo.svg" />
   <style>
     :root {
@@ -270,8 +270,8 @@
           (local disk, NAS, or cloud via <strong>rclone</strong> / OneDrive).
         </p>
         <p class="meta">
-          SyncMe <strong>1.4.3</strong> ·
-          Free to use â€” keep author credit.
+          SyncMe <strong>1.5.0</strong> ·
+          Free to use - keep author credit.
           See <code>LICENSE.txt</code> ·
           Website <a href="https://www.syncme.co.za">www.syncme.co.za</a> ·
           Contact <a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a> ·
@@ -284,13 +284,12 @@
         <h2>Overview</h2>
         <p>
           SyncMe runs <strong>only on the Backup PC</strong>. Source PCs only need shared folders
-          (plus Tailscale when offsite). You create one or more <strong>backup sets</strong> â€”
-          each with its own sources, schedule, and restic repository destination.
+          (plus Tailscale when offsite). You create one or more <strong>backup sets</strong> - each with its own sources, schedule, and restic repository destination.
         </p>
         <div class="diagram">Source PCs (UNC shares)
         |  LAN and/or Tailscale SMB
         v
-Backup PC  â€”  SyncMe console + Task Scheduler
+Backup PC - SyncMe console + Task Scheduler
         |
         +-- Backup set A --> restic repo (local / NAS / rclone)
         +-- Backup set B --> restic repo (local / NAS / rclone)
@@ -298,7 +297,7 @@ Backup PC  â€”  SyncMe console + Task Scheduler
         <ul>
           <li>Version history comes from <strong>restic snapshots</strong> (not a second plain-disk mirror).</li>
           <li>LAN-only is fine; Tailscale is optional for offsite sources.</li>
-          <li>Cloud destinations use rclone as resticâ€™s backend (OAuth from the console).</li>
+          <li>Cloud destinations use rclone as restic's backend (OAuth from the console).</li>
         </ul>
       </section>
 
@@ -307,9 +306,9 @@ Backup PC  â€”  SyncMe console + Task Scheduler
         <ul>
           <li>One Windows <strong>Backup PC</strong> (Windows 10/11 or Windows Server) where SyncMe is installed.</li>
           <li>One or more <strong>source PCs</strong> with folders shared so this PC can open them as UNC
-              (e.g. <code>\\pc-name\Data</code> or <code>\\pc-name\C$\Users\â€¦</code>).</li>
-          <li>Network path: <strong>LAN</strong>, <strong>Tailscale</strong>, or both â€” Tailscale only if sources are offsite.</li>
-          <li>Space for each setâ€™s <strong>restic repository</strong> (local disk, NAS UNC, or cloud via rclone).
+              (e.g. <code>\\pc-name\Data</code> or <code>\\pc-name\C$\Users\...</code>).</li>
+          <li>Network path: <strong>LAN</strong>, <strong>Tailscale</strong>, or both - Tailscale only if sources are offsite.</li>
+          <li>Space for each set's <strong>restic repository</strong> (local disk, NAS UNC, or cloud via rclone).
               Leave headroom beyond the size of your data.</li>
           <li><strong>restic</strong> (the wizard can install it). <strong>rclone</strong> if you use OneDrive/Google Drive.</li>
           <li>Administrator rights as needed for shares, Task Scheduler, and optional Shadow Copies on sources.</li>
@@ -319,29 +318,29 @@ Backup PC  â€”  SyncMe console + Task Scheduler
         <div class="callout warn">
           <strong>Password safety</strong>
           The restic password encrypts the repository. If you lose it, you cannot restore or recover.
-          Save it in a password manager or other safe place when you create it â€” Credential Manager on the Backup PC is not enough if that machine dies.
+          Save it in a password manager or other safe place when you create it - Credential Manager on the Backup PC is not enough if that machine dies.
           Do not put passwords in <code>Config.ps1</code>.
         </div>
       </section>
 
       <section class="card" id="limitations">
         <h2>Limitations &amp; liability</h2>
-        <p><strong>SyncMe is meant to be a simple way to back up files</strong> â€” UNC sources into restic,
+        <p><strong>SyncMe is meant to be a simple way to back up files</strong> - UNC sources into restic,
           with optional cloud via rclone OAuth. Use <strong>Add backup set</strong> for each PC or schedule.</p>
         <h3>What SyncMe does</h3>
         <ul>
           <li>File/folder backup into versioned restic repositories (one per set).</li>
           <li>HTML console for setup, schedule, restore, and cloud OAuth.</li>
           <li>Email/toast notifications and repository integrity checks.</li>
-          <li>In-app updates from the SyncMe website feed (1.4.3+), preserving Config.</li>
+          <li>In-app updates from the SyncMe website feed (1.4.0+), preserving Config.</li>
           <li>Optional SyncMe Monitor heartbeats and LocalOps Console SyncMe-tab registration.</li>
         </ul>
         <h3>What SyncMe does <em>not</em> do</h3>
         <ul>
-          <li><strong>Not bare-metal / full-disk imaging</strong> â€” use a separate imaging tool for whole-system restore.</li>
-          <li><strong>Not antivirus or ransomware protection</strong> â€” encrypted or wiped disks/shares are still possible.</li>
-          <li><strong>You must verify backups and restores</strong> â€” locked files (exit 3), network drops, excludes, or cloud throttling can leave gaps. Use dry run, Reports/Logs, Operations Check, and a test restore to an empty folder against your sources.</li>
-          <li><strong>Not a multi-tenant SaaS</strong> â€” console binds to localhost on the Backup PC.</li>
+          <li><strong>Not bare-metal / full-disk imaging</strong> - use a separate imaging tool for whole-system restore.</li>
+          <li><strong>Not antivirus or ransomware protection</strong> - encrypted or wiped disks/shares are still possible.</li>
+          <li><strong>You must verify backups and restores</strong> - locked files (exit 3), network drops, excludes, or cloud throttling can leave gaps. Use dry run, Reports/Logs, Operations Check, and a test restore to an empty folder against your sources.</li>
+          <li><strong>Not a multi-tenant SaaS</strong> - console binds to localhost on the Backup PC.</li>
         </ul>
         <div class="callout warn">
           <strong>Restic password</strong>
@@ -377,10 +376,10 @@ Backup PC  â€”  SyncMe console + Task Scheduler
             <tr><td><code>0</code></td><td>Success</td><td>OK</td></tr>
             <tr><td><code>1</code></td><td>Fatal error</td><td>FAILED</td></tr>
             <tr><td><code>2</code></td><td>Go runtime error</td><td>FAILED</td></tr>
-            <tr><td><code>3</code></td><td>Some source files unread</td><td>WARN / EXIT3 â€” snapshot often usable</td></tr>
-            <tr><td><code>10</code></td><td>Repo does not exist</td><td>FAILED â€” init via wizard</td></tr>
+            <tr><td><code>3</code></td><td>Some source files unread</td><td>WARN / EXIT3 - snapshot often usable</td></tr>
+            <tr><td><code>10</code></td><td>Repo does not exist</td><td>FAILED - init via wizard</td></tr>
             <tr><td><code>11</code></td><td>Repo already exists</td><td>Usually only during init</td></tr>
-            <tr><td><code>12</code></td><td>Wrong password</td><td>FAILED â€” Credential Manager</td></tr>
+            <tr><td><code>12</code></td><td>Wrong password</td><td>FAILED - Credential Manager</td></tr>
             <tr><td><code>130</code></td><td>Interrupted</td><td>No new snapshot; retry later</td></tr>
           </tbody>
         </table>
@@ -399,7 +398,7 @@ Backup PC  â€”  SyncMe console + Task Scheduler
             <tr><td><code>last-success-utc.txt</code></td><td>Watchdog overdue stamp</td></tr>
           </tbody>
         </table>
-        <p>Anomalies (EXIT3, shadow fallback, stale lock) appear as WARN/ERROR text today â€” not a separate SIEM schema.</p>
+        <p>Anomalies (EXIT3, shadow fallback, stale lock) appear as WARN/ERROR text today - not a separate SIEM schema.</p>
       </section>
 
       <section class="card" id="glossary">
@@ -408,7 +407,7 @@ Backup PC  â€”  SyncMe console + Task Scheduler
           <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
           <tbody>
             <tr><td>Backup PC</td><td>Machine where SyncMe is installed and scheduled jobs run</td></tr>
-            <tr><td>Source UNC</td><td>Folder path like <code>\\pc\share</code> or <code>\\pc\C$\Users\â€¦</code></td></tr>
+            <tr><td>Source UNC</td><td>Folder path like <code>\\pc\share</code> or <code>\\pc\C$\Users\...</code></td></tr>
             <tr><td>Backup set</td><td>Named config: sources + destination + schedule + secrets</td></tr>
             <tr><td>restic repo</td><td>Versioned encrypted repository for that set</td></tr>
             <tr><td>Network mode</td><td>LAN, Tailscale, or both</td></tr>
@@ -423,11 +422,11 @@ Backup PC  â€”  SyncMe console + Task Scheduler
         <p>Browser opens <code>http://127.0.0.1:17845/</code>. Complete the wizard once:</p>
         <ol>
           <li>Confirm this is the Backup PC; name the backup set.</li>
-          <li>Prerequisites â€” install restic (and rclone if needed).</li>
+          <li>Prerequisites - install restic (and rclone if needed).</li>
           <li>Network mode + source UNC folders.</li>
-          <li>Destination â€” local folder, NAS UNC, or cloud (rclone OAuth).</li>
+          <li>Destination - local folder, NAS UNC, or cloud (rclone OAuth).</li>
           <li>Passwords (Credential Manager), optional email, schedule.</li>
-          <li>Apply â€” Task Scheduler registers the job.</li>
+          <li>Apply - Task Scheduler registers the job.</li>
         </ol>
         <div class="callout">
           <strong>Recommended path</strong>
@@ -470,24 +469,38 @@ Backup PC  â€”  SyncMe console + Task Scheduler
         <ul>
           <li>Structural <code>restic check</code> (configurable).</li>
           <li>Weekly data subset check rotating by weekday.</li>
-          <li>Failures can mark the run CRITICAL and fail the job.</li>
+          <li>Restore drill dumps up to 3 random files from the latest snapshot and byte-checks them (advisory by default).</li>
+          <li>Optional per-set policy: <strong>Fail job if restore drill fails</strong> (Retention &amp; integrity) - marks the run failed and can send CRITICAL email.</li>
+          <li>Structural / data-subset failures can mark the run CRITICAL and fail the job.</li>
         </ul>
       </section>
 
       <section class="card" id="tailscale">
         <h2>Tailscale (optional)</h2>
-        <p>Only needed when the Backup PC cannot reach source shares on the LAN.</p>
+        <p>Only needed when the Backup PC cannot reach source shares on the LAN. Use Tailscale so offsite PCs appear on a private mesh and UNC paths work without opening SMB to the internet.</p>
+        <h3>Beginner setup</h3>
         <ol>
-          <li>Install Tailscale on source and Backup PC; same account / tailnet.</li>
-          <li>Confirm <code>tailscale status</code> and that UNC paths work (e.g. <code>\\source-pc\Data</code>).</li>
-          <li>In SyncMe, set network mode to Tailscale or Both.</li>
+          <li><strong>Install Tailscale</strong> on every source PC that is offsite <em>and</em> on the Backup PC:
+            <a href="https://tailscale.com/download/windows" target="_blank" rel="noopener">tailscale.com/download/windows</a>.</li>
+          <li>Sign in with the <strong>same Tailscale account / tailnet</strong> on all machines. Approve devices in the admin console if your tailnet requires it.</li>
+          <li>On each machine, confirm connectivity: open a terminal and run <code>tailscale status</code>. You should see the other PCs listed (MagicDNS names and/or Tailscale IPs).</li>
+          <li>On the <strong>source</strong> PC, share the folder (SMB) and grant the backup account read access. Prefer a dedicated share rather than exposing an entire drive when possible.</li>
+          <li>From the <strong>Backup PC</strong>, test the UNC path in File Explorer or PowerShell, for example
+              <code>\\source-pc\Data</code> or <code>\\source-pc.tailnet-name.ts.net\Data</code>.
+              If the path fails, fix Tailscale/DNS/share permissions before configuring SyncMe.</li>
+          <li>In SyncMe Setup (or Edit set), set network mode to <strong>Tailscale</strong> or <strong>Both</strong>, enter the working UNC path(s), and set <strong>Source host</strong> to the Tailscale hostname if SyncMe asks for a preflight host.</li>
+          <li>Run a <strong>dry run</strong>, then a real backup. If restic cannot read open Office files, enable shadow copies on the source (OfficeAgent) - that is separate from Tailscale.</li>
         </ol>
+        <div class="callout">
+          <strong>Common pitfalls</strong>
+          Different Tailscale accounts (machines not on the same tailnet); MagicDNS disabled; source asleep without Wake-on-LAN (WoL is best-effort and often fails across VLANs); SMB blocked by host firewall for Tailscale interface.
+        </div>
       </section>
 
       <section class="card" id="day-to-day">
         <h2>Day to day</h2>
         <ul>
-          <li><code>SyncMe.bat</code> or <code>SyncMe-Menu.bat</code> â€” dashboard / operations.</li>
+          <li><code>SyncMe.bat</code> or <code>SyncMe-Menu.bat</code> - dashboard / operations.</li>
           <li>Scheduled jobs run without leaving the console open.</li>
           <li>Switch sets on the dashboard; Run now / dry run / prune from Operations.</li>
           <li>Keep both ends awake for the backup window on large first seeds.</li>
@@ -495,19 +508,19 @@ Backup PC  â€”  SyncMe console + Task Scheduler
       </section>
 
       <section class="card" id="updates">
-        <h2>In-app updates (1.4.3+)</h2>
+        <h2>In-app updates (1.4.0+)</h2>
         <p>
           When the console opens, SyncMe checks <code>https://www.syncme.co.za/updates/latest.json</code> over HTTPS
-          (also Operations â†’ <strong>Check for updates</strong>).
+          (also Operations -> <strong>Check for updates</strong>).
         </p>
         <ol>
-          <li>If a newer version is listed, a popup shows <strong>Update available</strong> (current â†’ new).</li>
+          <li>If a newer version is listed, a popup shows <strong>Update available</strong> (current -> new).</li>
           <li>Choose <strong>Install</strong> or <strong>Later</strong>.</li>
           <li>Install downloads the setup zip, verifies <strong>SHA-256</strong>, copies <code>Config.ps1</code> to a timestamped
-              <code>Config.ps1.bak-â€¦</code>, then applies files <strong>without overwriting</strong> your live <code>Config.ps1</code>.</li>
+              <code>Config.ps1.bak-...</code>, then applies files <strong>without overwriting</strong> your live <code>Config.ps1</code>.</li>
           <li>SyncMe restarts when finished. Your backup sets stay intact.</li>
         </ol>
-        <p>You can also upgrade manually with <code>SyncMe-Setup.cmd</code> from a release zip â€” existing Config is preserved the same way.</p>
+        <p>You can also upgrade manually with <code>SyncMe-Setup.cmd</code> from a release zip - existing Config is preserved the same way.</p>
       </section>
 
       <section class="card" id="monitor">
@@ -524,14 +537,14 @@ Backup PC  â€”  SyncMe console + Task Scheduler
         <p>
           Separate self-hosted package for a <strong>fleet status dashboard</strong> (HTML + local host on Windows).
           Not part of the main SyncMe zip and not meant for public web hosting.
-          Download <strong>SyncMe-Monitor-Setup-1.4.3.zip</strong> from
+          Download <strong>SyncMe-Monitor-Setup-1.5.0.zip</strong> from
           <a href="https://github.com/Metatronixa/SyncMe/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>
           or <a href="https://www.syncme.co.za" target="_blank" rel="noopener noreferrer">www.syncme.co.za</a> Downloads.
         </p>
         <ol>
           <li>Unzip on a LAN/Tailscale Windows PC; edit <code>Config\Monitor.json</code> (shared token + port, default <strong>17846</strong>).</li>
           <li>Run <code>SyncMe-Monitor.bat</code>; open <code>http://127.0.0.1:17846/</code> (or that PC&rsquo;s hostname on port 17846).</li>
-          <li>On each Backup PC: Operations &rarr; <strong>Fleet dashboards</strong> &mdash; Monitor URL, site id, same shared token &mdash; click <strong>Save fleet settings</strong>
+          <li>On each Backup PC: Operations &rarr; <strong>Fleet dashboards</strong> - Monitor URL, site id, same shared token - click <strong>Save fleet settings</strong>
               (SyncMe sends a <strong>test heartbeat</strong> immediately so the site should appear on the dashboard).</li>
           <li>After each backup, SyncMe also posts a compact heartbeat (no restic passwords). Failures to reach Monitor never fail the backup.</li>
         </ol>
@@ -540,28 +553,29 @@ Backup PC  â€”  SyncMe console + Task Scheduler
       <section class="card" id="restore">
         <h2>Restore</h2>
         <ol>
-          <li>Operations â†’ refresh snapshots.</li>
-          <li>Select a snapshot â†’ <strong>Browse selected</strong> to open folders inside that snapshot (roots such as <code>C:\Pastel19</code>). Double-click folders; <strong>Use this path</strong> fills the optional include field (one file or folder). Leave include blank for a full restore. SyncMe <strong>1.3.3+</strong> converts Windows paths to resticâ€™s <code>/C/...</code> form automatically.</li>
+          <li>Operations -> refresh snapshots.</li>
+          <li>Select a snapshot -> <strong>Browse selected</strong> to open folders inside that snapshot (roots such as <code>C:\Pastel19</code>). Double-click folders; <strong>Use this path</strong> fills the optional include field (one file or folder). Leave include blank for a full restore. SyncMe <strong>1.3.3+</strong> converts Windows paths to restic's <code>/C/...</code> form automatically.</li>
           <li>Restore latest or selected snapshot to an <strong>empty folder outside</strong> the live restic repo (never into the source share). Use Suggest for a safe target.</li>
-          <li>Optional: Operations â†’ <strong>Moreâ€¦</strong> â†’ <strong>Export Rescue Kit</strong> for a printable recovery sheet (repo path + Credential Manager target â€” password stays in your vault).</li>
+          <li>Optional: Operations -> <strong>More...</strong> -> <strong>Export Rescue Kit</strong> for a printable recovery sheet (repo path + Credential Manager target - password stays in your vault).</li>
         </ol>
         <div class="callout">
-          <strong>Retention &amp; integrity (1.3.0+)</strong>
-          Dashboard â†’ <strong>Retention &amp; integrity</strong>: keep policies, optional <strong>Append-Only Mode</strong> (skips prune / blocks snapshot delete), and optional pre/post backup script paths (must be non-interactive for Task Scheduler).
-          Weekly data checks run an <strong>advisory</strong> restore drill (`restic dump` of up to three random files). Results show as PASS / FAIL / SKIP in the HTML report and do <strong>not</strong> fail the overall job. Structural check and data-subset failures still fail the run.
+          <strong>Retention &amp; integrity (1.3.0+ / 1.5.0)</strong>
+          Dashboard -> <strong>Retention &amp; integrity</strong>: keep policies, optional <strong>Append-Only Mode</strong>, optional <strong>Fail job if restore drill fails</strong> (CRITICAL when enabled), and optional pre/post backup script paths (must be non-interactive for Task Scheduler).
+          Weekly data checks run a restore drill (`restic dump` of up to three random files). Default is advisory (PASS / FAIL / SKIP without failing the job). Restic exit&nbsp;3 (skipped files) shows a persistent console banner until Acknowledge.
+          Operations -> More -> <strong>Export / Import migration package</strong> for a secondary Backup PC (AES-encrypted).
         </div>
         <div class="callout">
           <strong>Windows note</strong>
-          Official restic builds on Windows do not include <code>mount</code>. SyncMeâ€™s browse panel lists paths via <code>restic ls</code>; restore still copies files out with <code>restic restore</code>.
+          Official restic builds on Windows do not include <code>mount</code>. SyncMe's browse panel lists paths via <code>restic ls</code>; restore still copies files out with <code>restic restore</code>.
           From <strong>1.3.3</strong>, folder drill-down converts <code>C:\...</code> paths to restic-absolute <code>/C/...</code> filters.
-          UNC-era snapshots (paths starting with <code>\\</code>) cannot be browsed or restored on Windows â€” run a new backup after SyncMeâ€™s drive-letter rewrite, then restore that snapshot.
+          UNC-era snapshots (paths starting with <code>\\</code>) cannot be browsed or restored on Windows - run a new backup after SyncMe's drive-letter rewrite, then restore that snapshot.
         </div>
         <div class="callout">
           <strong>Verify against the source</strong>
           Spot-check restored files (names, sizes, dates) against the live share for critical paths.
           After backups: read Reports/Logs (exit 3 = unread files), run Operations Check, and periodically test-restore.
-          You need the restic password â€” keep a vault copy, not only Credential Manager.
-          Later runs may show tiny â€œData addedâ€ while â€œTotal bytes processedâ€ stays large â€” that is normal deduplication.
+          You need the restic password - keep a vault copy, not only Credential Manager.
+          Later runs may show tiny "Data added" while "Total bytes processed" stays large - that is normal deduplication.
         </div>
         <p>Online: <a href="https://www.syncme.co.za">www.syncme.co.za</a>. See also <code>RecoveryChecklist.txt</code>.</p>
       </section>
@@ -572,22 +586,22 @@ Backup PC  â€”  SyncMe console + Task Scheduler
           <thead><tr><th>Symptom</th><th>What to check</th></tr></thead>
           <tbody>
             <tr><td>Cannot reach share</td><td>UNC path, share permissions, LAN/Tailscale, share credentials</td></tr>
-            <tr><td>Wrong password / exit 12</td><td>Operations â†’ Store password; must match <code>restic init</code></td></tr>
-            <tr><td>Exit code 3</td><td>Locked files â€” Shadow Copies / close Office; read log for paths</td></tr>
-            <tr><td>Email: remote certificate is invalid</td><td>Fix SmtpServer name / Windows trusted roots / TLS; SyncMe 1.3.2+ uses TLS 1.2 and never bypasses certs. Disable email until SMTP is correct â€” backup still succeeds</td></tr>
+            <tr><td>Wrong password / exit 12</td><td>Operations -> Store password; must match <code>restic init</code></td></tr>
+            <tr><td>Exit code 3</td><td>Locked files - Shadow Copies / close Office; read log for paths</td></tr>
+            <tr><td>Email: remote certificate is invalid</td><td>Fix SmtpServer name / Windows trusted roots / TLS; SyncMe 1.3.2+ uses TLS 1.2 and never bypasses certs. Disable email until SMTP is correct - backup still succeeds</td></tr>
             <tr><td>Cannot overwrite variable Host</td><td>Notify noise on older builds; upgrade to <strong>1.3.2+</strong>. Does not stop restic; scrubbed from report Errors</td></tr>
             <tr><td>Cloud / OAuth fails</td><td>Install rclone; re-run OAuth; check bandwidth/throttling</td></tr>
-            <tr><td>Task does not run unattended</td><td>Same Windows account as Credential Manager; â€œrun whether logged onâ€</td></tr>
+            <tr><td>Task does not run unattended</td><td>Same Windows account as Credential Manager; "run whether logged on"</td></tr>
             <tr><td>Browse fails: path filters must be absolute / forward slash</td><td>Upgrade to SyncMe <strong>1.3.3+</strong> (converts <code>C:\...</code> to restic <code>/C/...</code> for <code>ls</code>)</td></tr>
             <tr><td>Browse / restore fails on UNC snapshot</td><td>Old snapshots stored UNC roots; take a new backup (drive-letter paths), then browse/restore that snapshot</td></tr>
-            <tr><td>Browse fails with â€œArgument types do not matchâ€</td><td>Upgrade to SyncMe <strong>1.2.0+</strong> (Windows PowerShell 5.1 browse fix)</td></tr>
+            <tr><td>Browse fails with "Argument types do not match"</td><td>Upgrade to SyncMe <strong>1.2.0+</strong> (Windows PowerShell 5.1 browse fix)</td></tr>
             <tr><td>Browse while backup runs</td><td>Wait for backup to finish (restic repo lock)</td></tr>
-            <tr><td>Prune / delete blocked</td><td>Append-Only Mode is on for the set â€” turn it off in Retention &amp; integrity if you intend to prune</td></tr>
+            <tr><td>Prune / delete blocked</td><td>Append-Only Mode is on for the set - turn it off in Retention &amp; integrity if you intend to prune</td></tr>
             <tr><td>Pre-backup script hung the job</td><td>Scripts must be non-interactive; SyncMe kills hooks after 15 minutes</td></tr>
             <tr><td>Update check fails / feed unreachable</td><td>Confirm <code>https://www.syncme.co.za/updates/latest.json</code> opens in a browser; firewall must allow HTTPS</td></tr>
-            <tr><td>Missing Modules\Update.ps1 after upgrade</td><td>Re-run SyncMe-Setup <strong>1.4.3+</strong> (fixed merge install); do not use an older setup zip</td></tr>
+            <tr><td>Missing Modules\Update.ps1 after upgrade</td><td>Re-run SyncMe-Setup <strong>1.4.1+</strong> (fixed merge install); do not use an older setup zip</td></tr>
             <tr><td>Monitor / LocalOps not updating</td><td>Monitor: token + URL reachable. LocalOps: console running on :8787; registration enabled; loopback only</td></tr>
-            <tr><td>Need offline recovery sheet</td><td>Operations â†’ More â†’ Export Rescue Kit; keep password in your vault</td></tr>
+            <tr><td>Need offline recovery sheet</td><td>Operations -> More -> Export Rescue Kit; keep password in your vault</td></tr>
           </tbody>
         </table>
       </section>
@@ -612,17 +626,17 @@ Backup PC  â€”  SyncMe console + Task Scheduler
           SyncMe orchestrates separate open-source programs. SyncMe is <strong>not affiliated with</strong> or endorsed by their authors.
         </p>
         <ul>
-          <li><strong>restic</strong> â€” BSD-2-Clause â€” <a href="https://restic.net" target="_blank" rel="noopener">restic.net</a></li>
-          <li><strong>rclone</strong> â€” MIT â€” <a href="https://rclone.org" target="_blank" rel="noopener">rclone.org</a></li>
-          <li><strong>Tailscale</strong> â€” optional, for offsite UNC access</li>
+          <li><strong>restic</strong> - BSD-2-Clause - <a href="https://restic.net" target="_blank" rel="noopener">restic.net</a></li>
+          <li><strong>rclone</strong> - MIT - <a href="https://rclone.org" target="_blank" rel="noopener">rclone.org</a></li>
+          <li><strong>Tailscale</strong> - optional, for offsite UNC access</li>
         </ul>
         <p>Full notices: <code>THIRD-PARTY-NOTICES.txt</code> in the SyncMe folder.</p>
       </section>
 
       <footer class="guide-foot">
-        SyncMe â€” Copyright Â© 2026 Bradford Lotriet (<a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a>)<br />
+        SyncMe - Copyright Â© 2026 Bradford Lotriet (<a href="mailto:brad@web-zilla.co.za">brad@web-zilla.co.za</a>)<br />
         Website: <a href="https://www.syncme.co.za">www.syncme.co.za</a> ·
-        Free to use â€” keep this credit. See <code>LICENSE.txt</code>. Uses restic and rclone â€” see <code>THIRD-PARTY-NOTICES.txt</code>.
+        Free to use - keep this credit. See <code>LICENSE.txt</code>. Uses restic and rclone - see <code>THIRD-PARTY-NOTICES.txt</code>.
       </footer>
     </div>
   </div>

@@ -1,13 +1,17 @@
 # SyncMe
 
 **Website:** [www.syncme.co.za](https://www.syncme.co.za)  
-**SyncMe** — Copyright © 2026 Bradford Lotriet (`brad@web-zilla.co.za`)
+**SyncMe** - Copyright © 2026 Bradford Lotriet (`brad@web-zilla.co.za`)
 
-Free to use — keep this credit. See [`LICENSE.txt`](LICENSE.txt).
+Free to use - keep this credit. See [`LICENSE.txt`](LICENSE.txt).
 
 Simple **file-level** backup from source PCs to a Backup PC using **restic**, managed from an **HTML5 console**. Sources over **LAN and/or Tailscale**. Destinations: **local disk**, **NAS (UNC)**, or **cloud via rclone** (OneDrive / Google Drive OAuth). No PHP. No database.
 
-**Not** bare-metal imaging, antivirus, or ransomware protection — **save the restic password in a password manager**, verify backups and restores, and keep separate recovery copies.
+**Tagline:** *Set and periodically check* - SyncMe orchestrates backups; you still verify restores.
+
+**Not** bare-metal imaging, antivirus, or ransomware protection - **save the restic password in a password manager**, verify backups and restores, and keep separate recovery copies.
+
+**Attribution:** Keep the author credit visible in the product, documentation, command banners, and reports (see [`LICENSE.txt`](LICENSE.txt)). You do not need to put “Backup by SyncMe” on customer letterhead.
 
 ## Documentation & how-to
 
@@ -34,8 +38,8 @@ Simple **file-level** backup from source PCs to a Backup PC using **restic**, ma
 
 | Package | What it is |
 |---|---|
-| **`SyncMe-Setup-<ver>.zip`** | Backup PC console — wizard, backups, restore, schedule, HTTPS in-app updates. Unzip and run `SyncMe-Setup.cmd` (admin recommended on Windows Server). |
-| **`SyncMe-Monitor-Setup-<ver>.zip`** | Optional **SyncMe Monitor** add-on — self-hosted fleet dashboard (see below). Separate install; not required for backups. |
+| **`SyncMe-Setup-<ver>.zip`** | Backup PC console - wizard, backups, restore, schedule, HTTPS in-app updates. Unzip and run `SyncMe-Setup.cmd` (admin recommended on Windows Server). |
+| **`SyncMe-Monitor-Setup-<ver>.zip`** | Optional **SyncMe Monitor** add-on - self-hosted fleet dashboard (see below). Separate install; not required for backups. |
 
 Both zips (plus a short `START-HERE.txt`) are produced under `dist\SyncMe-Release-<ver>\`. Build:
 
@@ -55,10 +59,10 @@ Both zips (plus a short `START-HERE.txt`) are produced under `dist\SyncMe-Releas
 | Schedule | Windows Task Scheduler (+ SyncMe-Watchdog) |
 | UI | Static HTML5 + CSS + vanilla JavaScript (`ui/`), dark slate + cyan ops theme (Segoe UI + Consolas) |
 | Config / secrets | `Config.ps1` (no database); Windows Credential Manager; `Config\rclone.conf` |
-| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source), SyncMe Monitor (fleet heartbeats), LocalOps Console (SyncMe tab registration) |
+| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source), SyncMe Monitor (fleet heartbeats; **upcoming:** role moves to LocalOps Console - [docs/LOCALOPS_INTEGRATION.md](docs/LOCALOPS_INTEGRATION.md)), LocalOps Console (SyncMe tab registration) |
 | Platform | Windows 10/11 or Windows Server (Backup PC) |
 
-SyncMe is an **orchestration frontend** — not a replacement for restic or rclone. Third-party notices: [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
+SyncMe is an **orchestration frontend** - not a replacement for restic or rclone. Third-party notices: [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
 
 ## Features
 
@@ -75,31 +79,32 @@ SyncMe is an **orchestration frontend** — not a replacement for restic or rclo
 | Rescue Kit | Export printable HTML recovery sheet (no password) from Operations |
 | Append-only policy | Optional: skip prune and block snapshot delete |
 | Pre/Post hooks | Optional NonInteractive scripts around backup |
-| Restore drill | Advisory: dumps up to 3 random files during weekly data check (PASS/FAIL/SKIP in report; does not fail the job) |
+| Restore drill | Advisory by default (PASS/FAIL/SKIP); optional per-set **Fail job if restore drill fails** |
+| Skipped-files banner | restic exit 3 shows a persistent console notice until Acknowledge |
+| Migration package | Export/import encrypted `.syncme-migrate` for a secondary Backup PC (Operations) |
+| Monitor webhooks | Optional fail/stale HTTP webhook from Monitor (`Config\Monitor.json`) |
 | Live progress + cancel | restic JSON %; cancel from console (with warning) |
 | Schedule | Once / Daily / Weekly with start (and optional end) date → Task Scheduler |
 | Wake-on-LAN | Optional MAC per set before backup / Wake button |
 | Shadow copies | OfficeAgent scripts on source PC |
 | Detached Run now | Manual backup survives closing SyncMe |
 | In-app updates | HTTPS feed (`latest.json`), SHA-256 verify, keeps existing `Config.ps1` |
-| SyncMe Monitor | Optional self-hosted fleet dashboard via post-backup (and Save) heartbeats |
-| LocalOps Console | Optional: when LocalOps runs on the same PC, SyncMe registers so the SyncMe tab finds the install + last run |
+| SyncMe Monitor | Optional self-hosted fleet dashboard via post-backup (and Save) heartbeats. **Upcoming:** absorb this role into LocalOps Console ([docs/LOCALOPS_INTEGRATION.md](docs/LOCALOPS_INTEGRATION.md)); Monitor package remains until dual-write cutover |
+| LocalOps Console | Optional: when LocalOps runs on the same PC, SyncMe registers so the SyncMe tab finds the install + last run. **Upcoming:** also host backup-fleet heartbeats (replacing Monitor) |
 
 ## SyncMe Monitor (optional add-on)
 
-**What it is:** a small, self-hosted Windows package that shows which Backup PCs last reported a backup — success, failure, stale, or running. It is **not** installed on a public web server. Run it on a PC on your **LAN or Tailscale** network. Read-only in this release (no remote start/stop/restore). No restic passwords are sent.
+**Upcoming:** the Monitor fleet-dashboard role is planned to move into **LocalOps Console** (same heartbeat client; LocalOps becomes the ingest/UI). Until that ships, Monitor remains the supported multi-PC dashboard. Design and cutover: [`docs/LOCALOPS_INTEGRATION.md`](docs/LOCALOPS_INTEGRATION.md) (LocalOps: `LocalOpsConsole/docs/SYNCME_INTEGRATION.md`).
+
+**What it is:** a small, self-hosted Windows package that shows which Backup PCs last reported a backup - success, failure, stale, or running. It is **not** installed on a public web server. Run it on a PC on your **LAN or Tailscale** network. Read-only in this release (no remote start/stop/restore). No restic passwords are sent.
 
 **What it is not:** a replacement for SyncMe, restic, or email reports. Backups still run only on each Backup PC. Monitor only receives lightweight status heartbeats.
 
 **How it works**
 
-1. Unzip **`SyncMe-Monitor-Setup-<ver>.zip`** on the Monitor PC. Edit `Config\Monitor.json` — set a shared `Token` (not `change-me`) and `Port` (default **17846**).
+1. Unzip **`SyncMe-Monitor-Setup-<ver>.zip`** on the Monitor PC. Edit `Config\Monitor.json` - set a shared `Token` (not `change-me`) and `Port` (default **17846**).
 2. Run **`SyncMe-Monitor.bat`** (Run as Administrator once if binding to `http://+:port` fails). Open `http://127.0.0.1:17846/` (or `http://THIS-PC:17846/` from another machine).
-3. On each **Backup PC**, SyncMe console → **Operations** → **Fleet dashboards** → SyncMe Monitor:
-   - **Monitor URL** — e.g. `http://MONITOR-PC:17846` (same PC: `http://127.0.0.1:17846`)
-   - **Site id** — friendly name for that Backup PC
-   - **Shared token** — same value as `Monitor.json`
-   - Click **Save fleet settings** — SyncMe sends a **test heartbeat** immediately so the site should appear on the dashboard.
+3. On each **Backup PC**, SyncMe console → **Operations** → **Fleet dashboards** → SyncMe Monitor: - **Monitor URL** - e.g. `http://MONITOR-PC:17846` (same PC: `http://127.0.0.1:17846`) - **Site id** - friendly name for that Backup PC - **Shared token** - same value as `Monitor.json` - Click **Save fleet settings** - SyncMe sends a **test heartbeat** immediately so the site should appear on the dashboard.
 4. After each backup finishes, SyncMe also POSTs a heartbeat (Bearer token). The Monitor UI refreshes on a short interval.
 
 Keep Monitor off the public internet. Heartbeat ingest requires the shared token.
@@ -114,37 +119,50 @@ Keep Monitor off the public internet. Heartbeat ingest requires the shared token
 
 Registration is non-fatal: if LocalOps is not running, backups still succeed. Monitor and LocalOps can both be enabled.
 
+**Upcoming:** LocalOps will also accept Monitor-compatible fleet heartbeats (Bearer token) so one ops console can replace the separate Monitor package after a dual-write release. See [`docs/LOCALOPS_INTEGRATION.md`](docs/LOCALOPS_INTEGRATION.md).
+
 ## Screenshots
 
-Screenshots for GitHub / the marketing site live under [`docs/screenshots/`](docs/screenshots/) (add PNGs after a theme pass: splash, dashboard, operations, Monitor, LocalOps SyncMe tab).
+Console captures (dark slate + cyan ops theme) live under [`docs/screenshots/`](docs/screenshots/). Same assets power the marketing site gallery after FTP deploy of `website/`.
 
-![Dashboard](docs/screenshots/dashboard.png)
+| View | What you see |
+|---|---|
+| Splash | Boot screen while the localhost host starts |
+| Setup wizard | Guided first-time setup (Welcome through Review and Apply) |
+| Dashboard | Status cards, live activity, last-run details |
+| Operations | Run backup, restore browse, updates, Fleet dashboards |
 
-![Operations](docs/screenshots/operations.png)
+### Splash
+
+![Splash](docs/screenshots/splash.png)
+
+### Setup wizard
 
 ![Setup wizard](docs/screenshots/wizard.png)
 
-![Splash](docs/screenshots/splash.png)
+### Dashboard
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Operations
+
+![Operations](docs/screenshots/operations.png)
 
 ## Secrets
 
 Windows Credential Manager: `SyncMeRestic` / `SyncMeRestic-<setId>`, `SyncMeSmtp`, optional `SyncMeShare` / `SyncMeShare-<setId>`.
 rclone OAuth tokens live in `Config\rclone.conf` (not in git).
 
-**Restic password:** encrypts the repository. Without it there is no restore or recovery. Keep a copy in a password manager or other safe place — do not put it in `Config.ps1`.
+**Restic password:** encrypts the repository. Without it there is no restore or recovery. Keep a copy in a password manager or other safe place - do not put it in `Config.ps1`.
 
 ## Verify backups and restores
 
 1. After Apply, **Run dry run**, then a real backup.
-2. Open **Reports** / **Logs** (restic exit **3** = some files unread — often locked Office files).
+2. Open **Reports** / **Logs** (restic exit **3** = some files unread - often locked Office files).
 3. Operations **Check** (structural + weekly data subset) for repository health.
 4. Restore into an **empty test folder** and compare critical paths to the source.
 
-## Destinations
-
-- **restic repository** (required per set): full path on *this* Backup PC, NAS UNC, or `rclone:remote:path`.
-- Use **Add backup set** for another source PC / schedule / destination.
-- Config defaults ship empty so you can run SyncMe on any server without baked-in drive letters.
+## Destinations - **restic repository** (required per set): full path on *this* Backup PC, NAS UNC, or `rclone:remote:path`. - Use **Add backup set** for another source PC / schedule / destination. - Config defaults ship empty so you can run SyncMe on any server without baked-in drive letters.
 
 Sources are UNC (LAN or Tailscale), including admin shares such as `\\pc-name\C$\Users\…`.
 
@@ -164,9 +182,9 @@ SyncMe.bat → SyncMe-Host.ps1 (localhost) → HTML UI
 4. After setup apply, use **Run dry run** to verify before relying on the schedule.
 5. Set bandwidth (e.g. `2M`) and retries to limit OneDrive uploads.
 
-Sync/Bisync folder mirroring is planned later — this release uses rclone only as the restic cloud backend.
+Sync/Bisync folder mirroring is planned later - this release uses rclone only as the restic cloud backend.
 
-Consumer clouds may throttle large backups — prefer local disk or NAS for the primary repository when possible.
+Consumer clouds may throttle large backups - prefer local disk or NAS for the primary repository when possible.
 
 ## Restore
 
@@ -176,11 +194,13 @@ Then **Restore latest** or **Restore selected** into an empty folder outside the
 
 If the repository password is missing, use **Store password** on Operations (or Edit set → Passwords).
 
-Data added on later runs can be tiny (KB) even when Total bytes processed is large — restic deduplicates against existing snapshots.
+Data added on later runs can be tiny (KB) even when Total bytes processed is large - restic deduplicates against existing snapshots.
 
 ### Versioning
 
-Current release: **1.4.3**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (SyncMe setup + Monitor zips).
+Current release: **1.5.0**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (SyncMe setup + Monitor zips).
+
+**1.5.0** trust and recovery: exit-3 skipped-files banner (acknowledge), optional hard-fail restore drill, encrypted config migration package (secondary Backup PC), Monitor webhook alerts on fail/stale, Tailscale beginner guide, "set and periodically check" framing.
 
 **1.4.3** dark slate + cyan ops theme (console, Monitor, reports, user guide), LocalOps Console SyncMe-tab registration (loopback-only), Fleet dashboards UI (LocalOps + Monitor), Monitor DOM-safe rendering, SECURITY.md LocalOps notes.
 
@@ -200,24 +220,8 @@ Current release: **1.4.3**. `VERSION.txt` uses semantic versioning. Customer pac
 
 **1.2.0** fixes snapshot browse on Windows PowerShell 5.1 (`Argument types do not match` when opening a snapshot’s root folders).
 
-### Console layout
+### Console layout - **Setup wizard** - configure sets (including schedule and optional dry run at the end). - **Dashboard** - status cards (restic/rclone/disk), live activity, last-run details, Cloud & Retention modals; update popup when a newer package is published. - **Operations** - backup actions, set list (edit/delete), snapshot browse and restore, Check for updates, Fleet dashboards (LocalOps Console + SyncMe Monitor).
 
-- **Setup wizard** — configure sets (including schedule and optional dry run at the end).
-- **Dashboard** — status cards (restic/rclone/disk), live activity, last-run details, Cloud & Retention modals; update popup when a newer package is published.
-- **Operations** — backup actions, set list (edit/delete), snapshot browse and restore, Check for updates, Fleet dashboards (LocalOps Console + SyncMe Monitor).
+## Prerequisites - Windows 10/11 or Windows Server Backup PC - Source SMB share(s) reachable as UNC (LAN and/or [Tailscale](https://tailscale.com/)) - [restic](https://restic.net/) (wizard can install into `tools\`) - Optional: rclone (console can install) for cloud destinations - Optional: Tailscale for offsite UNC; OfficeAgent for locked files on the source - Optional: SyncMe Monitor package on a LAN/Tailscale PC for a fleet status dashboard
 
-## Prerequisites
-
-- Windows 10/11 or Windows Server Backup PC
-- Source SMB share(s) reachable as UNC (LAN and/or [Tailscale](https://tailscale.com/))
-- [restic](https://restic.net/) (wizard can install into `tools\`)
-- Optional: rclone (console can install) for cloud destinations
-- Optional: Tailscale for offsite UNC; OfficeAgent for locked files on the source
-- Optional: SyncMe Monitor package on a LAN/Tailscale PC for a fleet status dashboard
-
-## Links
-
-- Product site: [www.syncme.co.za](https://www.syncme.co.za)
-- Roadmap: [www.syncme.co.za/roadmap.html](https://www.syncme.co.za/roadmap.html)
-- In-app update feed: [www.syncme.co.za/updates/latest.json](https://www.syncme.co.za/updates/latest.json)
-- Contact: brad@web-zilla.co.za
+## Links - Product site: [www.syncme.co.za](https://www.syncme.co.za) - Roadmap: [www.syncme.co.za/roadmap.html](https://www.syncme.co.za/roadmap.html) - In-app update feed: [www.syncme.co.za/updates/latest.json](https://www.syncme.co.za/updates/latest.json) - Contact: brad@web-zilla.co.za

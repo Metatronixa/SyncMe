@@ -22,14 +22,26 @@ if (-not (Test-Path -LiteralPath $DataRoot)) {
 function Get-MonitorConfig {
     $path = Join-Path $ScriptRoot 'Config\Monitor.json'
     $defaults = [ordered]@{
-        Token = 'change-me'
-        Port  = $Port
+        Token            = 'change-me'
+        Port             = $Port
+        WebhookUrl       = ''
+        WebhookOnFail    = $true
+        WebhookOnStale   = $true
+        StaleHours       = 36
+        WebhookCooldownMinutes = 60
     }
     if (Test-Path -LiteralPath $path) {
         try {
             $obj = (Get-Content -LiteralPath $path -Raw) | ConvertFrom-Json
             if ($obj.Token) { $defaults.Token = [string]$obj.Token }
             if ($obj.Port) { $defaults.Port = [int]$obj.Port }
+            if ($null -ne $obj.PSObject.Properties['WebhookUrl']) { $defaults.WebhookUrl = [string]$obj.WebhookUrl }
+            if ($null -ne $obj.PSObject.Properties['WebhookOnFail']) { $defaults.WebhookOnFail = [bool]$obj.WebhookOnFail }
+            if ($null -ne $obj.PSObject.Properties['WebhookOnStale']) { $defaults.WebhookOnStale = [bool]$obj.WebhookOnStale }
+            if ($null -ne $obj.PSObject.Properties['StaleHours'] -and [int]$obj.StaleHours -gt 0) { $defaults.StaleHours = [int]$obj.StaleHours }
+            if ($null -ne $obj.PSObject.Properties['WebhookCooldownMinutes'] -and [int]$obj.WebhookCooldownMinutes -gt 0) {
+                $defaults.WebhookCooldownMinutes = [int]$obj.WebhookCooldownMinutes
+            }
         } catch { }
     } else {
         $dir = Split-Path $path -Parent
@@ -37,6 +49,107 @@ function Get-MonitorConfig {
         [IO.File]::WriteAllText($path, (($defaults | ConvertTo-Json) + "`r`n"), $utf8)
     }
     return [pscustomobject]$defaults
+}
+
+function Get-MonitorWebhookStatePath {
+    return (Join-Path $ScriptRoot 'Data\webhook-state.json')
+}
+
+function Get-MonitorWebhookState {
+    $path = Get-MonitorWebhookStatePath
+    if (-not (Test-Path -LiteralPath $path)) { return [ordered]@{} }
+    try {
+        $obj = (Get-Content -LiteralPath $path -Raw) | ConvertFrom-Json
+        $map = [ordered]@{}
+        foreach ($p in $obj.PSObject.Properties) { $map[[string]$p.Name] = [string]$p.Value }
+        return $map
+    } catch {
+        return [ordered]@{}
+    }
+}
+
+function Save-MonitorWebhookState {
+    param($Map)
+    $dir = Join-Path $ScriptRoot 'Data'
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $payload = [ordered]@{}
+    if ($Map -is [hashtable] -or $Map -is [System.Collections.IDictionary]) {
+        foreach ($k in $Map.Keys) { $payload[[string]$k] = [string]$Map[$k] }
+    } else {
+        foreach ($p in $Map.PSObject.Properties) { $payload[[string]$p.Name] = [string]$p.Value }
+    }
+    [IO.File]::WriteAllText((Get-MonitorWebhookStatePath), (($payload | ConvertTo-Json -Compress) + "`r`n"), $utf8)
+}
+
+function Send-MonitorWebhook {
+    param(
+        [string]$Url,
+        [string]$Event,
+        $Site,
+        [string]$Detail = ''
+    )
+    if ([string]::IsNullOrWhiteSpace($Url)) { return }
+    $siteId = if ($Site.siteId) { [string]$Site.siteId } else { 'unknown' }
+    $text = "SyncMe Monitor: $Event — $siteId"
+    if ($Detail) { $text += " — $Detail" }
+    $payload = @{
+        text      = $text
+        event     = $Event
+        siteId    = $siteId
+        hostname  = $(if ($Site.hostname) { [string]$Site.hostname } else { '' })
+        summary   = $(if ($Site.summary) { [string]$Site.summary } else { '' })
+        success   = $(if ($null -ne $Site.success) { [bool]$Site.success } else { $false })
+        endedUtc  = $(if ($Site.endedUtc) { [string]$Site.endedUtc } else { '' })
+        exitCode  = $(if ($Site.exitCode) { [string]$Site.exitCode } else { '' })
+        detail    = $Detail
+    } | ConvertTo-Json -Compress
+    try {
+        Invoke-RestMethod -Uri $Url -Method Post -Body $payload -ContentType 'application/json; charset=utf-8' -TimeoutSec 8 | Out-Null
+    } catch {
+        Write-Host ("Webhook failed: " + $_.Exception.Message) -ForegroundColor DarkYellow
+    }
+}
+
+function Test-MonitorWebhookCooldown {
+    param([string]$Key, [int]$CooldownMinutes, $StateMap)
+    if ([string]::IsNullOrWhiteSpace($Key)) { return $false }
+    if (-not $StateMap.Contains($Key)) { return $true }
+    try {
+        $last = [datetime]::Parse([string]$StateMap[$Key], $null, [System.Globalization.DateTimeStyles]::RoundtripKind)
+        return ((Get-Date).ToUniversalTime() - $last.ToUniversalTime()).TotalMinutes -ge $CooldownMinutes
+    } catch {
+        return $true
+    }
+}
+
+function Invoke-MonitorStaleWebhooks {
+    param($Config)
+    if ([string]::IsNullOrWhiteSpace([string]$Config.WebhookUrl)) { return }
+    if (-not [bool]$Config.WebhookOnStale) { return }
+    $staleHours = [int]$Config.StaleHours
+    if ($staleHours -lt 1) { $staleHours = 36 }
+    $cooldown = [int]$Config.WebhookCooldownMinutes
+    if ($cooldown -lt 1) { $cooldown = 60 }
+    $state = Get-MonitorWebhookState
+    $now = (Get-Date).ToUniversalTime()
+    foreach ($site in @(Get-MonitorSites)) {
+        $ended = $null
+        try {
+            if ($site.endedUtc) {
+                $ended = [datetime]::Parse([string]$site.endedUtc, $null, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+            } elseif ($site.receivedUtc) {
+                $ended = [datetime]::Parse([string]$site.receivedUtc, $null, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+            }
+        } catch { continue }
+        if (-not $ended) { continue }
+        $ageH = ($now - $ended).TotalHours
+        if ($ageH -lt $staleHours) { continue }
+        $key = 'stale:' + [string]$site.siteId
+        if (-not (Test-MonitorWebhookCooldown -Key $key -CooldownMinutes $cooldown -StateMap $state)) { continue }
+        Send-MonitorWebhook -Url ([string]$Config.WebhookUrl) -Event 'stale' -Site $site -Detail ("No heartbeat for {0:N0}h (threshold {1}h)" -f $ageH, $staleHours)
+        $state[$key] = $now.ToString('o')
+    }
+    Save-MonitorWebhookState -Map $state
 }
 
 function Write-JsonResponse {
@@ -79,11 +192,16 @@ function Get-MonitorSites {
 }
 
 function Save-MonitorHeartbeat {
-    param($BodyObj)
+    param($BodyObj, $Config)
     $siteId = [string]$BodyObj.siteId
     if ([string]::IsNullOrWhiteSpace($siteId)) { $siteId = [string]$BodyObj.hostname }
     if ([string]::IsNullOrWhiteSpace($siteId)) { throw 'siteId is required' }
     $safe = ($siteId -replace '[^A-Za-z0-9._-]', '_')
+    $path = Join-Path $DataRoot ($safe + '.json')
+    $prev = $null
+    if (Test-Path -LiteralPath $path) {
+        try { $prev = (Get-Content -LiteralPath $path -Raw) | ConvertFrom-Json } catch { }
+    }
     $rec = [ordered]@{
         siteId     = $siteId
         hostname   = $(if ($BodyObj.hostname) { [string]$BodyObj.hostname } else { '' })
@@ -99,8 +217,26 @@ function Save-MonitorHeartbeat {
         endedUtc   = $(if ($BodyObj.endedUtc) { [string]$BodyObj.endedUtc } else { (Get-Date).ToUniversalTime().ToString('o') })
         receivedUtc = (Get-Date).ToUniversalTime().ToString('o')
     }
-    $path = Join-Path $DataRoot ($safe + '.json')
     [IO.File]::WriteAllText($path, (($rec | ConvertTo-Json -Depth 6) + "`r`n"), $utf8)
+
+    if ($Config -and -not [string]::IsNullOrWhiteSpace([string]$Config.WebhookUrl) -and [bool]$Config.WebhookOnFail) {
+        $isFail = -not [bool]$rec.success
+        $wasFail = $false
+        if ($prev -and $null -ne $prev.success) { $wasFail = -not [bool]$prev.success }
+        $isTest = ([string]$rec.setId -eq 'test') -or (([string]$rec.summary).StartsWith('Test heartbeat'))
+        if ($isFail -and -not $wasFail -and -not $isTest) {
+            $state = Get-MonitorWebhookState
+            $key = 'fail:' + $siteId
+            $cooldown = [int]$Config.WebhookCooldownMinutes
+            if ($cooldown -lt 1) { $cooldown = 60 }
+            if (Test-MonitorWebhookCooldown -Key $key -CooldownMinutes $cooldown -StateMap $state) {
+                Send-MonitorWebhook -Url ([string]$Config.WebhookUrl) -Event 'fail' -Site ([pscustomobject]$rec) -Detail ([string]$rec.summary)
+                $state[$key] = (Get-Date).ToUniversalTime().ToString('o')
+                Save-MonitorWebhookState -Map $state
+            }
+        }
+    }
+
     return [pscustomobject]$rec
 }
 
@@ -177,6 +313,7 @@ while ($listener.IsListening) {
         }
         if ($path -eq '/api/sites' -and $req.HttpMethod -eq 'GET') {
             # Read-only dashboard for LAN/Tailscale operators (v1). Heartbeat ingest still requires the token.
+            try { Invoke-MonitorStaleWebhooks -Config $cfg } catch { }
             Write-JsonResponse @{ ok = $true; sites = @(Get-MonitorSites) } -Response $res
             continue
         }
@@ -187,7 +324,7 @@ while ($listener.IsListening) {
             }
             $raw = Read-Body $req
             $body = $raw | ConvertFrom-Json
-            $saved = Save-MonitorHeartbeat -BodyObj $body
+            $saved = Save-MonitorHeartbeat -BodyObj $body -Config $cfg
             Write-JsonResponse @{ ok = $true; site = $saved } -Response $res
             continue
         }

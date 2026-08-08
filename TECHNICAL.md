@@ -1,6 +1,6 @@
-# SyncMe — Technical Breakdown
+# SyncMe - Technical Breakdown
 
-**Version:** 1.4.3 (see [`VERSION.txt`](VERSION.txt))  
+**Version:** 1.5.0 (see [`VERSION.txt`](VERSION.txt))  
 **Website:** [www.syncme.co.za](https://www.syncme.co.za)  
 **Copyright © 2026 Bradford Lotriet** (`brad@web-zilla.co.za`)
 
@@ -12,22 +12,9 @@ This document describes how SyncMe is built, how it runs, and what it offers. Fo
 
 ### What it is
 
-SyncMe is a **Windows Backup PC orchestration layer** around [restic](https://restic.net/):
+SyncMe is a **Windows Backup PC orchestration layer** around [restic](https://restic.net/): - **File-level** backup from source PCs (UNC over LAN and/or [Tailscale](https://tailscale.com/)) into encrypted, deduplicated **restic repositories**. - Managed from a local **HTML5 console** (no PHP, no database). - Destinations: **local disk**, **NAS (UNC)**, or **cloud via rclone** as a restic remote (`rclone:remote:path` - OneDrive / Google Drive OAuth). - **Multi backup-set** model (per source / schedule / destination). - Optional **OfficeAgent** on source PCs for Volume Shadow Copy-based pulls of open files. - Optional email alerts, Task Scheduler registration, and a watchdog for overdue successes.
 
-- **File-level** backup from source PCs (UNC over LAN and/or [Tailscale](https://tailscale.com/)) into encrypted, deduplicated **restic repositories**.
-- Managed from a local **HTML5 console** (no PHP, no database).
-- Destinations: **local disk**, **NAS (UNC)**, or **cloud via rclone** as a restic remote (`rclone:remote:path` — OneDrive / Google Drive OAuth).
-- **Multi backup-set** model (per source / schedule / destination).
-- Optional **OfficeAgent** on source PCs for Volume Shadow Copy–based pulls of open files.
-- Optional email alerts, Task Scheduler registration, and a watchdog for overdue successes.
-
-### What it is not
-
-- Bare-metal imaging, antivirus, or ransomware protection.
-- A replacement for restic or rclone (it shells out to them).
-- A LAN-facing multi-user web server (binds **localhost only**).
-- rclone folder **sync/bisync** mirroring (cloud is restic-backend only; sync is planned later).
-- Windows restic **mount** / FUSE browse-as-drive (browse API + restore instead).
+### What it is not - Bare-metal imaging, antivirus, or ransomware protection. - A replacement for restic or rclone (it shells out to them). - A LAN-facing multi-user web server (binds **localhost only**). - rclone folder **sync/bisync** mirroring (cloud is restic-backend only; sync is planned later). - Windows restic **mount** / FUSE browse-as-drive (browse API + restore instead).
 
 ### Stack
 
@@ -141,7 +128,7 @@ flowchart LR
 | Integrity check | Structural `restic check`; optional weekly data subset + advisory restore drill (`restic dump`, does not fail the job) |
 | Snapshot browse | Lazy one-level listing in Operations (no Windows mount) |
 | Restore | Latest or selected snapshot; optional include path; Suggest target |
-| Rescue Kit | Printable HTML export (repo paths, credential target, recovery steps — no password) |
+| Rescue Kit | Printable HTML export (repo paths, credential target, recovery steps - no password) |
 | Append-only | SyncMe policy: skip prune / block deletes (optional true restic append-only keys separately) |
 | Pre/Post scripts | NonInteractive timed hooks around backup |
 | Dry run | What-if backup without committing |
@@ -170,30 +157,19 @@ flowchart LR
 4. Resolve restic (`tools\restic.exe` / PATH / `ResticPath`); initialize **rclone environment** when the repo is `rclone:…`.
 5. Free-space gate on the repository path (**skipped** for `rclone:`).
 6. Load restic password from Credential Manager (`ResticCredentialName`).
-7. **NetworkMode**:
-   - `lan` or sources that look local (non-UNC) → skip Tailscale hard-fail.
-   - `tailscale` → fail if Tailscale is unhealthy.
-   - `both` → advisory only when Tailscale is down.
+7. **NetworkMode**: - `lan` or sources that look local (non-UNC) → skip Tailscale hard-fail. - `tailscale` → fail if Tailscale is unhealthy. - `both` → advisory only when Tailscale is down.
 8. Optional SMB map (`ShareCredentialName` / temporary drive letter).
 9. Preflight: optional `SourceHost` reachability + configured `SourcePaths` (`RequireSourceReachable`).
-10. **Resolve sources** (`Resolve-BackupSourcePaths`):
-    - Prefer shadow `@GMT-…` via pointer `.syncme-latest-shadow.txt` (legacy `.monarch-latest-shadow.txt`) under the share root (OfficeAgent).
-    - Else live UNC; `ShadowCopyRequired` can force failure if shadow is missing.
+10. **Resolve sources** (`Resolve-BackupSourcePaths`): - Prefer shadow `@GMT-…` via pointer `.syncme-latest-shadow.txt` (legacy `.monarch-latest-shadow.txt`) under the share root (OfficeAgent). - Else live UNC; `ShadowCopyRequired` can force failure if shadow is missing.
 11. **Rewrite UNC → temporary drive letters** so Windows restic stores restorable path nodes (not UNC roots).
 12. Start toast/email “running” notification when enabled.
-13. **`restic backup --json`** (tags, excludes, optional `--limit-upload`, `--host`).
-    - Exit **0** — success.
-    - Exit **3** — some files unread (often locked Office on a live share); treat as **WARN**, continue with usable snapshot when summary exists.
-    - Other non-zero — fail (with summary/exit hardening so blank exit does not falsely report SUCCESS without evidence).
+13. **`restic backup --json`** (tags, excludes, optional `--limit-upload`, `--host`). - Exit **0** - success. - Exit **3** - some files unread (often locked Office on a live share); treat as **WARN**, continue with usable snapshot when summary exists. - Other non-zero - fail (with summary/exit hardening so blank exit does not falsely report SUCCESS without evidence).
 14. **`restic forget --prune`** with Keep* policies when backup succeeded and prune not skipped.
 15. **Optional Disk 2 archive** (legacy): if `ArchivePath` is set and due (`ArchiveEveryDays`), optionally clear target and `restic restore latest` to plain files. Empty `ArchivePath` → skip (normal for cloud / single-disk setups).
 16. **Repo check:** structural `restic check`; on configured weekday (default Sunday) or `-RunDataCheck`, `--read-data-subset=n/7`.
 17. Write HTML report ([`Modules/Report.ps1`](Modules/Report.ps1)), update last-success stamp / last-run JSON, complete notifications, mark live-progress done/error.
 
-### Task Scheduler and watchdog
-
-- [`Register-BackupTask.ps1`](Register-BackupTask.ps1) creates `SyncMe-Backup` or `SyncMe-Backup-<setId>` (Once / Daily / Weekly). Default logon mode supports **run whether user is logged on**; task limit and IgnoreNew for overlaps.
-- Optional **SyncMe-Watchdog** daily task runs [`SyncMe-Watchdog.ps1`](SyncMe-Watchdog.ps1), which checks each set’s `Logs\sets\<id>\last-success-utc.txt` (default max age ~2 days, overridable) and emails CRITICAL via an email-enabled set’s SMTP settings.
+### Task Scheduler and watchdog - [`Register-BackupTask.ps1`](Register-BackupTask.ps1) creates `SyncMe-Backup` or `SyncMe-Backup-<setId>` (Once / Daily / Weekly). Default logon mode supports **run whether user is logged on**; task limit and IgnoreNew for overlaps. - Optional **SyncMe-Watchdog** daily task runs [`SyncMe-Watchdog.ps1`](SyncMe-Watchdog.ps1), which checks each set’s `Logs\sets\<id>\last-success-utc.txt` (default max age ~2 days, overridable) and emails CRITICAL via an email-enabled set’s SMTP settings.
 
 ---
 
@@ -208,12 +184,7 @@ flowchart LR
 | Target safety | Empty-ish folder **outside** the live restic repo; Suggest builds under archive/repo drive → `SyncMe-Restore\…` or project `Restores\` |
 | Include | Optional restic `--include` for one file/folder |
 
-### Constraints
-
-- Official Windows restic has **no mount**; mount APIs throw / are stubs.
-- Snapshots that still store **UNC path nodes** cannot be browsed or restored cleanly on Windows — take a new backup after drive-letter rewrite, then use that snapshot.
-- Browse/restore is blocked while a backup holds the repository lock.
-- Restore **target cannot be** `rclone:`; cloud repos are read by restic, files land on a local path.
+### Constraints - Official Windows restic has **no mount**; mount APIs throw / are stubs. - Snapshots that still store **UNC path nodes** cannot be browsed or restored cleanly on Windows - take a new backup after drive-letter rewrite, then use that snapshot. - Browse/restore is blocked while a backup holds the repository lock. - Restore **target cannot be** `rclone:`; cloud repos are read by restic, files land on a local path.
 
 **Browse implementation note (1.2.0):** entry lists use plain PowerShell arrays. On Windows PowerShell 5.1, wrapping `List[object]` of PSCustomObjects with `@(...)` throws `Argument types do not match`.
 
@@ -221,22 +192,11 @@ flowchart LR
 
 ## 7. Configuration and secrets
 
-### Config.ps1
-
-- Wizard / APIs write multi-set config via `Write-SyncMeSetsConfigFile`: `$script:BackupSets = @(…)`, `$script:BackupConfig = $BackupSets[0]`, helpers `Get-BackupConfig` / `Get-BackupSets`.
-- Legacy single `$BackupConfig` remains readable through set-loading helpers.
-- Defaults and merge live in `ConvertTo-SyncMeSetObject` ([`Modules/Sets.ps1`](Modules/Sets.ps1)): NetworkMode, DestinationType, schedule fields, rclone knobs, Keep*, WoL, shadow flags, etc.
-- Rewrites keep timestamped backups: `Config.ps1.bak-<timestamp>`.
+### Config.ps1 - Wizard / APIs write multi-set config via `Write-SyncMeSetsConfigFile`: `$script:BackupSets = @(…)`, `$script:BackupConfig = $BackupSets[0]`, helpers `Get-BackupConfig` / `Get-BackupSets`. - Legacy single `$BackupConfig` remains readable through set-loading helpers. - Defaults and merge live in `ConvertTo-SyncMeSetObject` ([`Modules/Sets.ps1`](Modules/Sets.ps1)): NetworkMode, DestinationType, schedule fields, rclone knobs, Keep*, WoL, shadow flags, etc. - Rewrites keep timestamped backups: `Config.ps1.bak-<timestamp>`.
 
 ### Per-set runtime files
 
-Under `Logs\sets\<setId>\`:
-
-- `last-success-utc.txt`
-- `backup.lock`
-- `live-progress.json`
-- `last-run.json`
-- `restore-status.json` (when restoring)
+Under `Logs\sets\<setId>\`: - `last-success-utc.txt` - `backup.lock` - `live-progress.json` - `last-run.json` - `restore-status.json` (when restoring)
 
 ### Credential Manager (Generic)
 
@@ -265,18 +225,11 @@ OAuth tokens live in `Config\rclone.conf` (created/updated by console authorize 
 
 ### Push
 
-Scheduled or manual backup runs restic against the cloud-backed repo. SyncMe sets `RCLONE_CONFIG` and optional bandwidth/transfers/retries from set fields. That is the **upload / push** of encrypted repository objects — not a plain folder sync.
+Scheduled or manual backup runs restic against the cloud-backed repo. SyncMe sets `RCLONE_CONFIG` and optional bandwidth/transfers/retries from set fields. That is the **upload / push** of encrypted repository objects - not a plain folder sync.
 
-### Pull / recover
+### Pull / recover - **No** rclone bisync or mirror job. - Recover with **restic restore** from the cloud repo to a **local** empty folder (browse + restore in Operations).
 
-- **No** rclone bisync or mirror job.
-- Recover with **restic restore** from the cloud repo to a **local** empty folder (browse + restore in Operations).
-
-### Practical notes
-
-- Prefer local disk or NAS as primary when possible; consumer clouds throttle large repos.
-- Each set needs its **own** restic repo subfolder (never the cloud drive root).
-- Keep the **restic password** offline; cloud login alone cannot decrypt data.
+### Practical notes - Prefer local disk or NAS as primary when possible; consumer clouds throttle large repos. - Each set needs its **own** restic repo subfolder (never the cloud drive root). - Keep the **restic password** offline; cloud login alone cannot decrypt data.
 
 ---
 
@@ -368,9 +321,9 @@ All APIs are served by [`SyncMe-Host.ps1`](SyncMe-Host.ps1) on `http://127.0.0.1
 | `Build-SyncMeMonitorSetup.ps1` | Optional add-on: `dist\SyncMe-Monitor-Setup-<ver>\` (+ zip). Self-hosted fleet dashboard (HttpListener, default port 17846). |
 | `Build-SyncMePackage.ps1` | Full zip `dist\SyncMe-<VERSION>.zip` (same product include list). |
 | `Deploy-SyncMe.ps1` | Copy project → target (default `C:\SyncMe`); preserve Config and set JSON under Logs; stop running host; copy `tools\` binaries. |
-| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.4.3`). Monitor uses `Monitor\VERSION.txt` (aligned to the same line). |
+| `VERSION.txt` | Semver; must match setup folder naming (`SyncMe-Setup-1.5.0`). Monitor uses `Monitor\VERSION.txt` (aligned to the same line). |
 
-**Typical shipped include list:** bats, host/backup/restore/watchdog, Register/Deploy, Config template, docs (including this file), Modules, ui, OfficeAgent, tools — not `website/`, not customer log/report contents beyond placeholders.
+**Typical shipped include list:** bats, host/backup/restore/watchdog, Register/Deploy, Config template, docs (including this file), Modules, ui, OfficeAgent, tools - not `website/`, not customer log/report contents beyond placeholders.
 
 ---
 
@@ -382,31 +335,13 @@ Scripts under [`OfficeAgent/`](OfficeAgent/) run on the **source** machine to en
 
 ## 12. UI structure
 
-[`ui/js/app.js`](ui/js/app.js) drives:
-
-- **Setup wizard** — network mode, sources, destination (local / NAS / cloud), schedule, apply.
-- **Dashboard** — status cards, live activity, last-run details, Cloud & Retention modals, set switcher.
-- **Operations** — Run now / dry run / check / prune, snapshot list, browse, restore, store password, Check for updates, Fleet dashboards (LocalOps Console + SyncMe Monitor).
+[`ui/js/app.js`](ui/js/app.js) drives: - **Setup wizard** - network mode, sources, destination (local / NAS / cloud), schedule, apply. - **Dashboard** - status cards, live activity, last-run details, Cloud & Retention modals, set switcher. - **Operations** - Run now / dry run / check / prune, snapshot list, browse, restore, store password, Check for updates, Fleet dashboards (LocalOps Console + SyncMe Monitor).
 
 Static assets: [`ui/index.html`](ui/index.html), [`ui/css/app.css`](ui/css/app.css).
 
 ---
 
-## 13. Limitations and design constraints
-
-- **Localhost-only console** — use an interactive / RDP session on the Backup PC; not a remote multi-tenant web UI.
-- **Windows PowerShell 5.1** target on the Backup PC.
-- **Trust model** — save the restic password in a password manager; verify with dry run → real backup → Check → test restore.
-- **Exit 3** is common on live shares with locked files; prefer OfficeAgent shadows.
-- **No restic mount on Windows** — browse + restore only.
-- **UNC-path-era snapshots** may be unrestorable; use post–drive-letter-rewrite snapshots.
-- **Archive Disk2** is optional/legacy; empty `ArchivePath` is normal.
-- **One set ↔ one restic repo path** (dedicated subfolder, never a drive root).
-- **Secrets account alignment** — Credential Manager user must match the scheduled-task user.
-- **rclone cloud** is restic remote only; throttling; no free-space metrics; no bisync yet.
-- **Concurrency** — backup lock per set; restore blocked while backup runs.
-- **Tailscale** hard-required only when `NetworkMode=tailscale`.
-- Customer packages must not include `website/`.
+## 13. Limitations and design constraints - **Localhost-only console** - use an interactive / RDP session on the Backup PC; not a remote multi-tenant web UI. - **Windows PowerShell 5.1** target on the Backup PC. - **Trust model** - save the restic password in a password manager; verify with dry run → real backup → Check → test restore. - **Exit 3** is common on live shares with locked files; prefer OfficeAgent shadows. - **No restic mount on Windows** - browse + restore only. - **UNC-path-era snapshots** may be unrestorable; use post-drive-letter-rewrite snapshots. - **Archive Disk2** is optional/legacy; empty `ArchivePath` is normal. - **One set ↔ one restic repo path** (dedicated subfolder, never a drive root). - **Secrets account alignment** - Credential Manager user must match the scheduled-task user. - **rclone cloud** is restic remote only; throttling; no free-space metrics; no bisync yet. - **Concurrency** - backup lock per set; restore blocked while backup runs. - **Tailscale** hard-required only when `NetworkMode=tailscale`. - Customer packages must not include `website/`.
 
 ---
 

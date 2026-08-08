@@ -670,9 +670,10 @@ function Get-SyncMeSnapshotListing {
 
 function Test-SyncMeRestoreDrill {
     <#
-      Advisory restore drill: dump up to 3 random files from the latest snapshot and verify bytes.
+      Restore drill: dump up to 3 random files from the latest snapshot and verify bytes.
       Uses restic dump (not restore --include) to avoid Windows UNC-root restore failures.
-      Returns Ok / Skipped / Message. Callers must not fail the overall backup job on Ok=$false.
+      Returns Ok / Skipped / Message. By default the backup job treats Ok=$false as advisory;
+      callers may fail the job when FailJobOnRestoreDrillFailure is enabled on the set.
     #>
     [CmdletBinding()]
     param(

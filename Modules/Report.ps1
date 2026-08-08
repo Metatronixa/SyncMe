@@ -322,7 +322,7 @@ function New-BackupHtmlReport {
         <tr><th>Structural check</th><td>$(ConvertTo-HtmlEncoded $RunInfo.RepoCheckRan) - $(ConvertTo-HtmlEncoded $RunInfo.RepoCheckDetail)</td></tr>
         <tr><th>Repo status</th><td>$(ConvertTo-HtmlEncoded $RunInfo.RepoStatus)</td></tr>
         <tr><th>Data subset check</th><td>$(ConvertTo-HtmlEncoded $RunInfo.DataCheckRan) - $(ConvertTo-HtmlEncoded $RunInfo.DataCheckDetail)</td></tr>
-        <tr><th>Restore drill</th><td>$(if ($null -ne $RunInfo.LastRestoreDrillSuccess) { if ($RunInfo.LastRestoreDrillSuccess) { 'PASS' } else { 'FAIL (advisory)' } } elseif ($RunInfo.LastRestoreDrillDetail -and ([string]$RunInfo.LastRestoreDrillDetail).StartsWith('Skipped:')) { 'SKIP' } elseif ($RunInfo.LastRestoreDrillDetail) { 'SKIP' } else { '-' }) - $(ConvertTo-HtmlEncoded $RunInfo.LastRestoreDrillDetail)$(if ($RunInfo.LastRestoreDrillDate) { ' (' + (ConvertTo-HtmlEncoded $RunInfo.LastRestoreDrillDate) + ')' } else { '' })</td></tr>
+        <tr><th>Restore drill</th><td>$(if ($null -ne $RunInfo.LastRestoreDrillSuccess) { if ($RunInfo.LastRestoreDrillSuccess) { 'PASS' } elseif ($RunInfo.LastRestoreDrillEnforced) { 'FAIL (job failed)' } else { 'FAIL (advisory)' } } elseif ($RunInfo.LastRestoreDrillDetail -and ([string]$RunInfo.LastRestoreDrillDetail).StartsWith('Skipped:')) { 'SKIP' } elseif ($RunInfo.LastRestoreDrillDetail) { 'SKIP' } else { '-' }) - $(ConvertTo-HtmlEncoded $RunInfo.LastRestoreDrillDetail)$(if ($RunInfo.LastRestoreDrillDate) { ' (' + (ConvertTo-HtmlEncoded $RunInfo.LastRestoreDrillDate) + ')' } else { '' })</td></tr>
       </table>
     </section>
 

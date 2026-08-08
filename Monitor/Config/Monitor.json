@@ -1,4 +1,9 @@
 {
   "Token": "change-me",
-  "Port": 17846
+  "Port": 17846,
+  "WebhookUrl": "",
+  "WebhookOnFail": true,
+  "WebhookOnStale": true,
+  "StaleHours": 36,
+  "WebhookCooldownMinutes": 60
 }

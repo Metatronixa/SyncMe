@@ -822,6 +822,31 @@ input::placeholder, textarea::placeholder {
   color: var(--info);
 }
 
+.banner.banner-warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  background: var(--warn-soft);
+  border-color: rgba(251, 191, 36, 0.45);
+  color: var(--warn);
+}
+
+.banner.banner-warn .banner-text {
+  flex: 1 1 220px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.banner.banner-warn .banner-text strong { color: var(--ink); }
+
+.banner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .list {
   list-style: none;
   margin: 0;
