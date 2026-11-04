@@ -210,7 +210,7 @@ if (-not (Test-Path -LiteralPath $updatesDir)) {
 Copy-Item -LiteralPath $setupZipPath -Destination (Join-Path $updatesDir $setupZipName) -Force
 
 $notes = @"
-SyncMe $pkgVer - Setup UX: local sources without host name; Select folder opens Windows Explorer picker for source, destination, and restore paths. Includes 1.9.0 security criticals.
+SyncMe $pkgVer - Fix backup hang (missing set ReportsDir/LogsDir under StrictMode); refuse drive-root repos; Select folder UX from 1.9.1.
 "@
 $latestUrl = "https://www.syncme.co.za/updates/$setupZipName"
 $latest = [ordered]@{

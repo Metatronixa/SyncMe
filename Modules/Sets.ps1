@@ -1,12 +1,66 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  Multi backup-set helpers for SyncMe. Compatible with legacy single BackupConfig.
+  Multi backup-set helpers for SyncMe.
+  Preferred store: Config\sets.json (no passwords). Legacy: Config.ps1 (read-only fallback).
 #>
 
-function Get-SyncMeSetsFromConfigFile {
+function Get-SyncMeSetsJsonPath {
     param([string]$ScriptRoot)
+    return (Join-Path $ScriptRoot 'Config\sets.json')
+}
 
+function Test-SyncMeSecretPropertyName {
+    param([string]$Name)
+    if ([string]::IsNullOrWhiteSpace($Name)) { return $false }
+    $n = $Name.ToLowerInvariant()
+    if ($n -match 'password|secret|credentialblob|accesstoken|refreshtoken|apikey|clientsecret|plainpass') {
+        # Credential *names* (e.g. ResticCredentialName) are OK — values that look like secrets are not.
+        if ($n -match 'credentialname|credentialtarget') { return $false }
+        return $true
+    }
+    return $false
+}
+
+function ConvertTo-SyncMeSetJsonObject {
+    param($Set)
+    $norm = ConvertTo-SyncMeSetObject -Config $Set -Id $(if ($Set.Id) { $Set.Id } else { 'set1' }) `
+        -DisplayName $(if ($Set.DisplayName) { $Set.DisplayName } else { 'Backup set 1' })
+    $out = [ordered]@{}
+    foreach ($p in $norm.PSObject.Properties) {
+        if (Test-SyncMeSecretPropertyName -Name $p.Name) { continue }
+        $out[$p.Name] = $p.Value
+    }
+    return [pscustomobject]$out
+}
+
+function Get-SyncMeSetsFromJsonFile {
+    param([string]$ScriptRoot)
+    $path = Get-SyncMeSetsJsonPath -ScriptRoot $ScriptRoot
+    if (-not (Test-Path -LiteralPath $path)) { return @() }
+    try {
+        $raw = Get-Content -LiteralPath $path -Raw -Encoding UTF8 -ErrorAction Stop
+        if ([string]::IsNullOrWhiteSpace($raw)) { return @() }
+        $doc = $raw | ConvertFrom-Json -ErrorAction Stop
+        $list = @()
+        if ($doc.PSObject.Properties.Name -contains 'sets') {
+            $list = @($doc.sets)
+        } elseif ($doc -is [System.Array]) {
+            $list = @($doc)
+        }
+        $out = foreach ($s in $list) {
+            if (-not $s) { continue }
+            ConvertTo-SyncMeSetObject -Config $s -Id $(if ($s.Id) { $s.Id } else { 'set1' }) `
+                -DisplayName $(if ($s.DisplayName) { $s.DisplayName } else { 'Backup set 1' })
+        }
+        return @($out)
+    } catch {
+        throw "Failed to read Config\sets.json: $($_.Exception.Message)"
+    }
+}
+
+function Get-SyncMeSetsFromLegacyConfigPs1 {
+    param([string]$ScriptRoot)
     $cfgPath = Join-Path $ScriptRoot 'Config.ps1'
     if (-not (Test-Path -LiteralPath $cfgPath)) { return @() }
 
@@ -25,6 +79,66 @@ function Get-SyncMeSetsFromConfigFile {
         }
     }
     return @()
+}
+
+function Get-SyncMeSetsFromConfigFile {
+    param([string]$ScriptRoot)
+
+    $jsonSets = @(Get-SyncMeSetsFromJsonFile -ScriptRoot $ScriptRoot)
+    if ($jsonSets.Count -gt 0) { return $jsonSets }
+
+    return @(Get-SyncMeSetsFromLegacyConfigPs1 -ScriptRoot $ScriptRoot)
+}
+
+function Save-SyncMeSetsConfig {
+    param(
+        [Parameter(Mandatory)][string]$ScriptRoot,
+        [Parameter(Mandatory)][AllowEmptyCollection()][object[]]$Sets
+    )
+    $dir = Join-Path $ScriptRoot 'Config'
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $path = Get-SyncMeSetsJsonPath -ScriptRoot $ScriptRoot
+    if (Test-Path -LiteralPath $path) {
+        $bak = Join-Path $dir ("sets.json.bak-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+        Copy-Item -LiteralPath $path -Destination $bak -Force
+    }
+
+    $clean = @(foreach ($s in @($Sets)) { ConvertTo-SyncMeSetJsonObject -Set $s })
+    $doc = [ordered]@{
+        schemaVersion = 3
+        updatedUtc    = (Get-Date).ToUniversalTime().ToString('o')
+        sets          = @($clean)
+    }
+    $json = ($doc | ConvertTo-Json -Depth 8)
+    [IO.File]::WriteAllText($path, ($json + "`r`n"), (New-Object System.Text.UTF8Encoding $false))
+
+    # Keep a tiny legacy Config.ps1 pointer so old docs / rescue still find something.
+    $legacy = Join-Path $ScriptRoot 'Config.ps1'
+    $pointer = @"
+#Requires -Version 5.1
+<#
+.SYNOPSIS
+  SyncMe legacy pointer. Backup sets live in Config\sets.json (no passwords).
+  Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'). Do not store passwords here.
+#>
+# Sets are loaded from Config\sets.json via Modules\Sets.ps1 (Get-SyncMeSetsFromConfigFile).
+`$script:BackupSets = @()
+`$script:BackupConfig = `$null
+function Get-BackupConfig { return `$null }
+function Get-BackupSets { return @() }
+"@
+    if (Test-Path -LiteralPath $legacy) {
+        $legacyBak = Join-Path $ScriptRoot ("Config.ps1.bak-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+        # Only backup if it still looks like a real multi-set file (not already a pointer)
+        $head = ''
+        try { $head = Get-Content -LiteralPath $legacy -TotalCount 8 -ErrorAction SilentlyContinue | Out-String } catch { }
+        if ($head -notmatch 'sets\.json') {
+            Copy-Item -LiteralPath $legacy -Destination $legacyBak -Force -ErrorAction SilentlyContinue
+        }
+    }
+    [IO.File]::WriteAllText($legacy, $pointer, (New-Object System.Text.UTF8Encoding $true))
 }
 
 function ConvertTo-SyncMeSetObject {
@@ -79,6 +193,21 @@ function ConvertTo-SyncMeSetObject {
     if (-not $obj.Contains('FailJobOnRestoreDrillFailure')) { $obj['FailJobOnRestoreDrillFailure'] = $false }
     if (-not $obj.Contains('PreBackupScript')) { $obj['PreBackupScript'] = '' }
     if (-not $obj.Contains('PostBackupScript')) { $obj['PostBackupScript'] = '' }
+    $sid = if ($obj.Contains('Id') -and $obj['Id']) { [string]$obj['Id'] } else { $Id }
+    if (-not $obj.Contains('ReportsDir')) { $obj['ReportsDir'] = 'Reports' }
+    if (-not $obj.Contains('LogsDir')) { $obj['LogsDir'] = ("Logs\sets\{0}" -f $sid) }
+    if (-not $obj.Contains('ArchiveStampFile')) { $obj['ArchiveStampFile'] = ("Logs\sets\{0}\last-archive-utc.txt" -f $sid) }
+    if (-not $obj.Contains('LastSuccessStampFile')) { $obj['LastSuccessStampFile'] = ("Logs\sets\{0}\last-success-utc.txt" -f $sid) }
+    if (-not $obj.Contains('BackupLockFile')) { $obj['BackupLockFile'] = ("Logs\sets\{0}\backup.lock" -f $sid) }
+    if (-not $obj.Contains('SnapshotTags')) { $obj['SnapshotTags'] = @('syncme', $sid) }
+    if (-not $obj.Contains('ShareDriveLetter')) { $obj['ShareDriveLetter'] = '' }
+    if (-not $obj.Contains('RequireSourceReachable')) { $obj['RequireSourceReachable'] = $true }
+    if (-not $obj.Contains('ToastAppId')) { $obj['ToastAppId'] = 'SyncMe' }
+    if (-not $obj.Contains('ArchiveEveryDays')) { $obj['ArchiveEveryDays'] = 14 }
+    if (-not $obj.Contains('ClearArchiveBeforeRestore')) { $obj['ClearArchiveBeforeRestore'] = $true }
+    if (-not $obj.Contains('MinFreeRepoGb')) { $obj['MinFreeRepoGb'] = 5 }
+    if (-not $obj.Contains('MinFreeArchiveGb')) { $obj['MinFreeArchiveGb'] = 10 }
+    if (-not $obj.Contains('SourcePaths')) { $obj['SourcePaths'] = @() }
     $obj['ExcludePatterns'] = @(Merge-SyncMeExcludePatterns -Existing $(if ($obj.Contains('ExcludePatterns')) { @($obj['ExcludePatterns']) } else { @() }))
     return [pscustomobject]$obj
 }
@@ -382,6 +511,37 @@ function Get-SyncMeResticDestructiveCredentialTarget {
     }
 }
 
+function Test-SyncMePathIsDriveRoot {
+    param([string]$Path)
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    if ($Path -match '^rclone:') { return $false }
+    $full = $Path.Trim().TrimEnd('\', '/')
+    $root = [System.IO.Path]::GetPathRoot($Path)
+    if ([string]::IsNullOrWhiteSpace($root)) { return $false }
+    $rootTrim = $root.TrimEnd('\', '/')
+    return ($full.Equals($rootTrim, [StringComparison]::OrdinalIgnoreCase) -or $full -match '^[A-Za-z]:$')
+}
+
+function Test-SyncMeResticRepoPathSafe {
+    <#
+      Refuse restic repository at a drive root (e.g. D:\) — use a dedicated subfolder.
+    #>
+    param([string]$ResticRepo)
+    if ([string]::IsNullOrWhiteSpace($ResticRepo)) {
+        return @{ Ok = $false; Message = 'Restic repository path is required.' }
+    }
+    if ($ResticRepo -match '^rclone:') {
+        return @{ Ok = $true; Message = '' }
+    }
+    if (Test-SyncMePathIsDriveRoot -Path $ResticRepo) {
+        return @{
+            Ok = $false
+            Message = "Restic repository cannot be a drive root ($ResticRepo). Choose a dedicated subfolder (e.g. D:\Backups\SyncMe)."
+        }
+    }
+    return @{ Ok = $true; Message = '' }
+}
+
 function Test-SyncMeArchivePathSafe {
     <#
       Refuse ArchivePath that is a drive root (e.g. E:\) - ClearArchiveBeforeRestore would wipe the volume.
@@ -390,13 +550,7 @@ function Test-SyncMeArchivePathSafe {
     if ([string]::IsNullOrWhiteSpace($ArchivePath)) {
         return @{ Ok = $true; Message = '' }
     }
-    $full = $ArchivePath.TrimEnd('\', '/')
-    $root = [System.IO.Path]::GetPathRoot($ArchivePath)
-    if ([string]::IsNullOrWhiteSpace($root)) {
-        return @{ Ok = $false; Message = "ArchivePath is not a valid path: $ArchivePath" }
-    }
-    $rootTrim = $root.TrimEnd('\', '/')
-    if ($full.Equals($rootTrim, [StringComparison]::OrdinalIgnoreCase) -or $full -match '^[A-Za-z]:$') {
+    if (Test-SyncMePathIsDriveRoot -Path $ArchivePath) {
         return @{
             Ok = $false
             Message = "ArchivePath cannot be a drive root ($ArchivePath). Use a dedicated subfolder (e.g. E:\SyncMeArchive\UserA) - SyncMe deletes the folder contents before each plain archive."

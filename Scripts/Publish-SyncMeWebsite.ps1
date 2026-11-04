@@ -32,8 +32,8 @@ put -nopermissions -nopreservetime "$site\js\*" js/
 put -nopermissions -nopreservetime "$site\assets\*" assets/
 put -nopermissions -nopreservetime "$site\updates\latest.json" updates/
 put -nopermissions -nopreservetime "$site\updates\SHA256SUMS.txt" updates/
-put -nopermissions -nopreservetime "$site\updates\SyncMe-Setup-1.9.1.zip" updates/
-put -nopermissions -nopreservetime "$site\updates\SyncMe-Monitor-Setup-1.9.1.zip" updates/
+put -nopermissions -nopreservetime "$site\updates\SyncMe-Setup-1.9.2.zip" updates/
+put -nopermissions -nopreservetime "$site\updates\SyncMe-Monitor-Setup-1.9.2.zip" updates/
 put -nopermissions -nopreservetime "$site\assets\screenshots\*" assets/screenshots/
 exit
 "@

@@ -5,8 +5,8 @@
   prunes old snapshots, and optionally restores a plain-file copy to Disk 2.
 
 .DESCRIPTION
-  Run via SyncMe console / Task Scheduler on the Backup PC. Configure in Config.ps1.
-  Store the restic password and optional SMB share credentials in Windows Credential Manager
+  Run via SyncMe console / Task Scheduler on the Backup PC. Configure sets in Config\sets.json
+  (wizard). Store the restic password and optional SMB share credentials in Windows Credential Manager
   (see README.md).
 
 .EXAMPLE
@@ -33,13 +33,15 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $ScriptRoot = $PSScriptRoot
-. (Join-Path $ScriptRoot 'Config.ps1')
 . (Join-Path $ScriptRoot 'Modules\Common.ps1')
 . (Join-Path $ScriptRoot 'Modules\Security.ps1')
 . (Join-Path $ScriptRoot 'Modules\Notify.ps1')
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Report.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
+# Optional legacy Config.ps1 (pre-sets.json installs); preferred store is Config\sets.json
+$legacyCfg = Join-Path $ScriptRoot 'Config.ps1'
+if (Test-Path -LiteralPath $legacyCfg) { . $legacyCfg }
 foreach ($mod in @('Update.ps1', 'MonitorClient.ps1', 'LocalOpsClient.ps1')) {
     $modPath = Join-Path $ScriptRoot ('Modules\' + $mod)
     if (-not (Test-Path -LiteralPath $modPath)) {
@@ -1349,9 +1351,28 @@ function Set-ArchiveStamp {
 }
 
 # --- Prepare paths / logging ---
-$reportsDir = Resolve-ConfigPath $Config.ReportsDir
-$logsDir    = Resolve-ConfigPath $Config.LogsDir
-$stampFile  = Resolve-ConfigPath $Config.ArchiveStampFile
+# sets.json may omit legacy Host-emitted fields; never throw under StrictMode here.
+$reportsDir = Resolve-ConfigPath $(if ($Config.PSObject.Properties.Name -contains 'ReportsDir' -and $Config.ReportsDir) { [string]$Config.ReportsDir } else { 'Reports' })
+$logsDir    = Resolve-ConfigPath $(if ($Config.PSObject.Properties.Name -contains 'LogsDir' -and $Config.LogsDir) { [string]$Config.LogsDir } else { Join-Path 'Logs\sets' $ActiveSetId })
+$stampFile  = Resolve-ConfigPath $(if ($Config.PSObject.Properties.Name -contains 'ArchiveStampFile' -and $Config.ArchiveStampFile) { [string]$Config.ArchiveStampFile } else { Join-Path (Join-Path 'Logs\sets' $ActiveSetId) 'last-archive-utc.txt' })
+if (-not ($Config.PSObject.Properties.Name -contains 'SnapshotTags') -or $null -eq $Config.SnapshotTags) {
+    $Config | Add-Member -NotePropertyName SnapshotTags -NotePropertyValue @('syncme', $ActiveSetId) -Force
+}
+if (-not ($Config.PSObject.Properties.Name -contains 'ShareDriveLetter')) {
+    $Config | Add-Member -NotePropertyName ShareDriveLetter -NotePropertyValue '' -Force
+}
+if (-not ($Config.PSObject.Properties.Name -contains 'RequireSourceReachable')) {
+    $Config | Add-Member -NotePropertyName RequireSourceReachable -NotePropertyValue $true -Force
+}
+if (-not ($Config.PSObject.Properties.Name -contains 'ToastAppId') -or [string]::IsNullOrWhiteSpace([string]$Config.ToastAppId)) {
+    $Config | Add-Member -NotePropertyName ToastAppId -NotePropertyValue 'SyncMe' -Force
+}
+if (-not ($Config.PSObject.Properties.Name -contains 'ArchiveEveryDays')) {
+    $Config | Add-Member -NotePropertyName ArchiveEveryDays -NotePropertyValue 14 -Force
+}
+if (-not ($Config.PSObject.Properties.Name -contains 'ClearArchiveBeforeRestore')) {
+    $Config | Add-Member -NotePropertyName ClearArchiveBeforeRestore -NotePropertyValue $true -Force
+}
 
 foreach ($d in @($reportsDir, $logsDir)) {
     if (-not (Test-Path -LiteralPath $d)) {
@@ -1481,8 +1502,10 @@ try {
     Initialize-SyncMeRcloneEnvironment -Config $Config -ScriptRoot $ScriptRoot -LogPath $logPath
 
     # Free space: repo (skipped for rclone:)
-    $minRepo = 50
-    if ($Config.PSObject.Properties.Name -contains 'MinFreeRepoGb') { $minRepo = [double]$Config.MinFreeRepoGb }
+    $minRepo = 5
+    if ($Config.PSObject.Properties.Name -contains 'MinFreeRepoGb' -and $null -ne $Config.MinFreeRepoGb) {
+        $minRepo = [double]$Config.MinFreeRepoGb
+    }
     Test-MonarchFreeSpace -Path $Config.ResticRepo -MinGb $minRepo -Label 'Disk1/repo' -LogPath $logPath | Out-Null
 
     # Password from Credential Manager (backup/check/restore write key — never load admin here)

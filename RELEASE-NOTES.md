@@ -1,5 +1,11 @@
 # SyncMe release notes
 
+## 1.9.2 — Backup start hang fix
+
+- Fix: backup child died immediately under StrictMode when `sets.json` lacked `ReportsDir` / `LogsDir` / related defaults — UI stuck on “Starting backup…”
+- Normalize missing set fields in `ConvertTo-SyncMeSetObject`; surface early child-process failure in live progress (toast never ran because the job never reached that code)
+- Refuse restic repository at a drive root (e.g. `D:\`); default `MinFreeRepoGb` lowered to 5
+
 ## 1.9.1 — Setup UX hotfix
 
 - Local source folders no longer require a source host name (host only required for UNC)

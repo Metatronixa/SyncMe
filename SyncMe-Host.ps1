@@ -286,140 +286,9 @@ public static class NativeCredWrite {
     }
 }
 
-function Escape-Sq {
-    param([string]$Text)
-    if ($null -eq $Text) { return '' }
-    return ($Text -replace "'", "''")
-}
-
-function Format-Arr {
-    param([string[]]$Items)
-    if (-not $Items -or $Items.Count -eq 0) { return '@()' }
-    $inner = ($Items | ForEach-Object { "'{0}'" -f (Escape-Sq $_) }) -join "`r`n        "
-    return "@(`r`n        $inner`r`n    )"
-}
-
-function Format-SyncMeSetLiteral {
-    param($Set, $tf)
-    $stamp = if ($Set.ArchiveStampFile) { $Set.ArchiveStampFile } else { "Logs\sets\$($Set.Id)\last-archive-utc.txt" }
-    $lock = if ($Set.BackupLockFile) { $Set.BackupLockFile } else { "Logs\sets\$($Set.Id)\backup.lock" }
-    $success = if ($Set.LastSuccessStampFile) { $Set.LastSuccessStampFile } else { "Logs\sets\$($Set.Id)\last-success-utc.txt" }
-    $keepLast = if ($null -ne $Set.KeepLast) { [int]$Set.KeepLast } else { 7 }
-    $keepDaily = if ($null -ne $Set.KeepDaily) { [int]$Set.KeepDaily } else { 14 }
-    $keepWeekly = if ($null -ne $Set.KeepWeekly) { [int]$Set.KeepWeekly } else { 8 }
-    $keepMonthly = if ($null -ne $Set.KeepMonthly) { [int]$Set.KeepMonthly } else { 6 }
-    $enableCheck = if ($null -ne $Set.EnableRepoCheck) { [bool]$Set.EnableRepoCheck } else { $true }
-    $checkDay = if ($Set.WeeklyDataCheckDay) { [string]$Set.WeeklyDataCheckDay } else { 'Sunday' }
-    $limitUp = if ($null -ne $Set.ResticLimitUploadKByte) { [int]$Set.ResticLimitUploadKByte } else { 0 }
-    $rclonePath = if ($Set.RclonePath) { [string]$Set.RclonePath } else { '' }
-    $rcloneConf = if ($Set.RcloneConfigPath) { [string]$Set.RcloneConfigPath } else { '' }
-    $bw = if ($Set.RcloneBwLimit) { [string]$Set.RcloneBwLimit } else { 'off' }
-    $transfers = if ($null -ne $Set.RcloneTransfers) { [int]$Set.RcloneTransfers } else { 4 }
-    $checkers = if ($null -ne $Set.RcloneCheckers) { [int]$Set.RcloneCheckers } else { 8 }
-    $retries = if ($null -ne $Set.RcloneRetries) { [int]$Set.RcloneRetries } else { 3 }
-    $llRetries = if ($null -ne $Set.RcloneLowLevelRetries) { [int]$Set.RcloneLowLevelRetries } else { 10 }
-    $mtStreams = if ($null -ne $Set.RcloneMultiThreadStreams) { [int]$Set.RcloneMultiThreadStreams } else { 4 }
-    $schedStart = if ($Set.ScheduleStartDate) { [string]$Set.ScheduleStartDate } else { (Get-Date).ToString('yyyy-MM-dd') }
-    $schedRec = if ($Set.ScheduleRecurrence) { [string]$Set.ScheduleRecurrence } else { 'Daily' }
-    $schedEnd = if ($Set.ScheduleEndDate) { [string]$Set.ScheduleEndDate } else { '' }
-    $schedDays = if ($Set.ScheduleDaysOfWeek) { @($Set.ScheduleDaysOfWeek) } else { @('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday') }
-    $excludes = @(Merge-SyncMeExcludePatterns -Existing $(if ($Set.ExcludePatterns) { @($Set.ExcludePatterns) } else { @() }))
-    @"
-    [pscustomobject]@{
-        Id = '$(Escape-Sq $Set.Id)'
-        DisplayName = '$(Escape-Sq $Set.DisplayName)'
-        NetworkMode = '$(Escape-Sq $Set.NetworkMode)'
-        DestinationType = '$(Escape-Sq $Set.DestinationType)'
-        RunTime = '$(Escape-Sq $Set.RunTime)'
-        ScheduleStartDate = '$(Escape-Sq $schedStart)'
-        ScheduleRecurrence = '$(Escape-Sq $schedRec)'
-        ScheduleEndDate = '$(Escape-Sq $schedEnd)'
-        ScheduleDaysOfWeek = $(Format-Arr $schedDays)
-        SourcePaths = $(Format-Arr @($Set.SourcePaths))
-        ShareCredentialName = '$(Escape-Sq $Set.ShareCredentialName)'
-        ShareDriveLetter = ''
-        ResticRepo = '$(Escape-Sq $Set.ResticRepo)'
-        ArchivePath = '$(Escape-Sq $Set.ArchivePath)'
-        ResticCredentialName = '$(Escape-Sq $Set.ResticCredentialName)'
-        ResticAdminCredentialName = '$(Escape-Sq $(if ($Set.ResticAdminCredentialName) { $Set.ResticAdminCredentialName } else { '' }))'
-        ResticPath = '$(Escape-Sq $Set.ResticPath)'
-        KeepLast = $keepLast; KeepDaily = $keepDaily; KeepWeekly = $keepWeekly; KeepMonthly = $keepMonthly
-        ArchiveEveryDays = 14
-        ArchiveStampFile = '$(Escape-Sq $stamp)'
-        ClearArchiveBeforeRestore = `$true
-        ExcludePatterns = $(Format-Arr $excludes)
-        SnapshotTags = @('syncme','$(Escape-Sq $Set.Id)')
-        EnableToastNotifications = $(& $tf $Set.EnableToastNotifications)
-        ToastAppId = 'SyncMe'
-        EnableEmailNotifications = $(& $tf $Set.EnableEmailNotifications)
-        SmtpServer = '$(Escape-Sq $Set.SmtpServer)'
-        SmtpPort = $($Set.SmtpPort)
-        SmtpUseSsl = $(& $tf $Set.SmtpUseSsl)
-        MailFrom = '$(Escape-Sq $Set.MailFrom)'
-        MailTo = $(Format-Arr @($Set.MailTo))
-        SmtpCredentialName = 'SyncMeSmtp'
-        EmailOnStart = `$true
-        EmailOnComplete = `$true
-        ReportsDir = 'Reports'
-        LogsDir = 'Logs'
-        SourceHost = '$(Escape-Sq $Set.SourceHost)'
-        RequireSourceReachable = `$true
-        UseShadowCopySources = $(& $tf $(if ($null -ne $Set.UseShadowCopySources) { $Set.UseShadowCopySources } else { $true }))
-        ShadowPointerRelativePath = '.monarch-latest-shadow.txt'
-        ShadowCopyRequired = `$false
-        EnableWakeOnLan = $(& $tf $Set.EnableWakeOnLan)
-        WakeMacAddress = '$(Escape-Sq $Set.WakeMacAddress)'
-        EnableRepoCheck = $(& $tf $enableCheck)
-        WeeklyDataCheckDay = '$(Escape-Sq $checkDay)'
-        AppendOnly = $(& $tf $(if ($null -ne $Set.AppendOnly) { $Set.AppendOnly } else { $false }))
-        FailJobOnRestoreDrillFailure = $(& $tf $(if ($null -ne $Set.FailJobOnRestoreDrillFailure) { $Set.FailJobOnRestoreDrillFailure } else { $false }))
-        PreBackupScript = '$(Escape-Sq $(if ($Set.PreBackupScript) { $Set.PreBackupScript } else { '' }))'
-        PostBackupScript = '$(Escape-Sq $(if ($Set.PostBackupScript) { $Set.PostBackupScript } else { '' }))'
-        MinFreeRepoGb = 50
-        MinFreeArchiveGb = 100
-        WatchdogMaxAgeDays = 2
-        LogRetentionDays = 90
-        ResticLimitUploadKByte = $limitUp
-        RclonePath = '$(Escape-Sq $rclonePath)'
-        RcloneConfigPath = '$(Escape-Sq $rcloneConf)'
-        RcloneBwLimit = '$(Escape-Sq $bw)'
-        RcloneTransfers = $transfers
-        RcloneCheckers = $checkers
-        RcloneRetries = $retries
-        RcloneLowLevelRetries = $llRetries
-        RcloneMultiThreadStreams = $mtStreams
-        LockStaleHours = 36
-        LastSuccessStampFile = '$(Escape-Sq $success)'
-        BackupLockFile = '$(Escape-Sq $lock)'
-    }
-"@
-}
-
 function Write-SyncMeSetsConfigFile {
     param([object[]]$Sets)
-    $tf = { param($b) if ($b) { '$true' } else { '$false' } }
-    $norm = foreach ($s in @($Sets)) {
-        ConvertTo-SyncMeSetObject -Config $s -Id $s.Id -DisplayName $(if ($s.DisplayName) { $s.DisplayName } else { $s.Id })
-    }
-    $setLiterals = ($norm | ForEach-Object { Format-SyncMeSetLiteral -Set $_ -tf $tf }) -join ",`r`n"
-    $configPath = Join-Path $ScriptRoot 'Config.ps1'
-    if (Test-Path $configPath) {
-        Copy-Item $configPath (Join-Path $ScriptRoot ("Config.ps1.bak-{0}" -f (Get-Date -Format 'yyyyMMdd-HHmmss'))) -Force
-    }
-    $content = @"
-#Requires -Version 5.1
-<#
-.SYNOPSIS
-  SyncMe configuration (multi-set). Generated $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'). Do not store passwords here.
-#>
-`$script:BackupSets = @(
-$setLiterals
-)
-`$script:BackupConfig = `$script:BackupSets[0]
-function Get-BackupConfig { return `$script:BackupConfig }
-function Get-BackupSets { return `$script:BackupSets }
-"@
-    [IO.File]::WriteAllText($configPath, $content, $utf8Bom)
+    Save-SyncMeSetsConfig -ScriptRoot $ScriptRoot -Sets @($Sets)
 }
 
 function Get-SyncMeRcloneConfigPath {
@@ -1312,6 +1181,8 @@ function Invoke-SyncMeSetupApply {
         if ($resticRepo -notmatch '^[A-Za-z]:\\' -and $resticRepo -notmatch '^\\\\[^\\]+\\[^\\]+') {
             throw 'Repository must be a full path (e.g. D:\Backups\repo) or a UNC path (\\server\share\repo). Relative paths are not allowed.'
         }
+        $repoSafe = Test-SyncMeResticRepoPathSafe -ResticRepo $resticRepo
+        if (-not $repoSafe.Ok) { throw $repoSafe.Message }
         if ($archivePath -and $archivePath -notmatch '^[A-Za-z]:\\' -and $archivePath -notmatch '^\\\\[^\\]+\\[^\\]+') {
             throw 'Archive path must be a full path or UNC when set. Leave it blank to skip.'
         }
@@ -1756,7 +1627,24 @@ function Update-SyncMeBackupJob {
         $script:BackupJob.Running = $false
         $script:BackupJob.Finished = $true
         $script:BackupJob.ExitCode = $script:BackupJob.Process.ExitCode
-        $script:BackupJob.Message = "Backup finished (exit $($script:BackupJob.ExitCode))."
+        $code = $script:BackupJob.ExitCode
+        if ($null -eq $code) { $code = -1 }
+        if ([int]$code -eq 0) {
+            $script:BackupJob.Message = "Backup finished (exit $code)."
+        } else {
+            $script:BackupJob.Message = "Backup failed to start or exited early (exit $code). Check Logs\\sets\\$($script:BackupJob.SetId) or Logs\\syncme-structured.log."
+            try {
+                Write-SyncMeLiveProgress -ScriptRoot $ScriptRoot -SetId $(if ($script:BackupJob.SetId) { $script:BackupJob.SetId } else { 'set1' }) `
+                    -Phase 'error' -Message $script:BackupJob.Message -RunId '' -JsonLog ''
+            } catch { }
+            try {
+                Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level ERROR -Message 'Backup child process exited with failure' -Fields @{
+                    setId = $(if ($script:BackupJob.SetId) { $script:BackupJob.SetId } else { '' })
+                    exitCode = $code
+                    pid = $(if ($script:BackupJob.Process) { $script:BackupJob.Process.Id } else { '' })
+                }
+            } catch { }
+        }
         $script:BackupJob.Detail = ''
     }
 }
@@ -1893,7 +1781,7 @@ $script:SyncMeSession = New-SyncMeOperatorSession -ScriptRoot $ScriptRoot -TtlHo
 $script:SyncMeCsrfToken = [string]$script:SyncMeSession.csrfToken
 $script:SyncMeSessionToken = [string]$script:SyncMeSession.sessionToken
 try {
-    $mig = Invoke-SyncMeConfigMigrate -ScriptRoot $ScriptRoot -TargetVersion 2
+    $mig = Invoke-SyncMeConfigMigrate -ScriptRoot $ScriptRoot -TargetVersion 3
     if (-not $mig.Skipped) {
         Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level INFO -Message 'Config migration applied' -Fields @{ actions = ($mig.Actions -join '; ') }
         Write-Host ("  Config schema migrated to v{0}" -f $mig.To) -ForegroundColor DarkCyan

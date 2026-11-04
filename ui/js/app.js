@@ -834,6 +834,9 @@
         if (!/^[A-Za-z]:\\/.test(repo) && !/^\\\\[^\\]+\\[^\\]+/.test(repo)) {
           return 'Repository must be a full path (e.g. D:\\Backups\\repo) or UNC. Relative paths are not allowed.';
         }
+        if (/^[A-Za-z]:\\?$/.test(repo)) {
+          return 'Repository cannot be a drive root (e.g. D:\\). Choose a dedicated subfolder such as D:\\Backups\\SyncMe.';
+        }
       }
     }
     if (state.step === 4) {
