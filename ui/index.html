@@ -135,6 +135,7 @@
               <button type="button" class="btn ghost" id="btnOpenReports">Open reports</button>
               <button type="button" class="btn ghost" id="btnOpenLogs">Open logs</button>
               <button type="button" class="btn ghost" id="btnSetResticPath">Set ResticPath</button>
+              <button type="button" class="btn danger" id="btnShutdownHost">Stop SyncMe host</button>
             </div>
           </div>
           <div class="status-line" id="opsStatus" style="margin-top:10px"></div>
@@ -234,8 +235,11 @@
           <p class="sub">Snapshots for the active set. Select a row, then <strong>Restore selected</strong> (or Restore latest) to copy files to an empty folder outside the live repository. Never restore into the live repository or source share.</p>
           <div class="grid two">
             <label class="field">Restore target folder
-              <input type="text" id="restoreTarget" />
-              <span class="hint">Use Suggest for a safe folder outside the repo.</span>
+              <div class="path-row path-row-dest">
+                <input type="text" id="restoreTarget" />
+                <button type="button" class="btn soft" id="btnBrowseRestoreTarget">Select folder</button>
+              </div>
+              <span class="hint">Use Suggest or Select folder for a safe empty folder outside the repo.</span>
             </label>
             <label class="field">Optional include path
               <input type="text" id="restoreInclude" placeholder="Leave blank for full snapshot" />

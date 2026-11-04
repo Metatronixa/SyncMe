@@ -1,5 +1,10 @@
 # SyncMe release notes
 
+## 1.9.1 — Setup UX hotfix
+
+- Local source folders no longer require a source host name (host only required for UNC)
+- **Select folder** opens a Windows folder dialog for source paths, restic destination, and restore target
+
 ## 1.9.0 — 2.1 Security Criticals
 
 - Localhost operator session (`X-SyncMe-Session`) + CSRF; destructive confirm (`X-SyncMe-Confirm`)

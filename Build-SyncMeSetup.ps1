@@ -39,7 +39,7 @@ New-Item -ItemType Directory -Path $setupDir -Force | Out-Null
 
 # Customer ship list only - never add website/ (local marketing site).
 $include = @(
-    'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Host.ps1',
+    'SyncMe.bat', 'SyncMe-Menu.bat', 'SyncMe-Stop.bat', 'SyncMe-Host.ps1',
     'SyncMe-Backup.ps1', 'SyncMe-Restore.ps1', 'Config.ps1',
     'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1',
@@ -80,6 +80,16 @@ Get-ChildItem -LiteralPath $toolsDir -File -ErrorAction SilentlyContinue |
     ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
 Set-Content -Path (Join-Path $toolsDir '.gitkeep') -Value '' -Encoding ASCII
 
+# Config defaults (never ship local rclone.conf / secrets)
+$configStage = Join-Path $stage 'Config'
+New-Item -ItemType Directory -Path $configStage -Force | Out-Null
+foreach ($cfgName in @('sets.json', 'schema-version.txt', 'SyncMeOptions.json')) {
+    $cfgSrc = Join-Path $root ('Config\' + $cfgName)
+    if (Test-Path -LiteralPath $cfgSrc) {
+        Copy-Item -LiteralPath $cfgSrc -Destination (Join-Path $configStage $cfgName) -Force
+    }
+}
+
 New-Item -ItemType Directory -Path (Join-Path $stage 'Logs') -Force | Out-Null
 New-Item -ItemType Directory -Path (Join-Path $stage 'Reports') -Force | Out-Null
 Set-Content -Path (Join-Path $stage 'Logs\.gitkeep') -Value '' -Encoding ASCII
@@ -90,7 +100,7 @@ $startHere = @"
 SyncMe setup package $pkgVer
 ====================
 1. Double-click SyncMe-Setup.cmd (Run as administrator recommended on Windows Server).
-2. Files unpack to $InstallDir (existing Config.ps1 is kept if present).
+2. Files unpack to $InstallDir (existing Config.ps1 and Config\sets.json are kept if present).
 3. SyncMe opens the browser wizard at http://127.0.0.1:17845/
 4. Use a dedicated Windows account for unattended backups; enter that password in Schedule.
 5. Each backup set needs its own restic repository path (dedicated subfolder - never a drive root).
@@ -152,8 +162,10 @@ echo.
   "`$zip='%PAYLOAD%';" ^
   "if (-not (Test-Path -LiteralPath `$install)) { New-Item -ItemType Directory -Path `$install -Force | Out-Null };" ^
   "`$cfg = Join-Path `$install 'Config.ps1';" ^
-  "`$preserve = `$false; `$tmp = `$null;" ^
+  "`$setsJson = Join-Path `$install 'Config\sets.json';" ^
+  "`$preserve = `$false; `$tmp = `$null; `$preserveSets = `$false; `$tmpSets = `$null;" ^
   "if (Test-Path -LiteralPath `$cfg) { `$preserve = `$true; `$tmp = Join-Path `$env:TEMP ('SyncMe-Config-' + [guid]::NewGuid().ToString() + '.ps1'); Copy-Item -LiteralPath `$cfg -Destination `$tmp -Force };" ^
+  "if (Test-Path -LiteralPath `$setsJson) { `$preserveSets = `$true; `$tmpSets = Join-Path `$env:TEMP ('SyncMe-Sets-' + [guid]::NewGuid().ToString() + '.json'); Copy-Item -LiteralPath `$setsJson -Destination `$tmpSets -Force };" ^
   "Add-Type -AssemblyName System.IO.Compression.FileSystem;" ^
   "`$tmpExtract = Join-Path `$env:TEMP ('SyncMe-Extract-' + [guid]::NewGuid().ToString());" ^
   "New-Item -ItemType Directory -Path `$tmpExtract -Force | Out-Null;" ^
@@ -163,6 +175,7 @@ echo.
   "Clear-SyncMeNestedInstallJunk -InstallRoot `$install;" ^
   "Remove-Item -LiteralPath `$tmpExtract -Recurse -Force -ErrorAction SilentlyContinue;" ^
   "if (`$preserve -and `$tmp -and (Test-Path -LiteralPath `$tmp)) { Copy-Item -LiteralPath `$tmp -Destination `$cfg -Force; Remove-Item -LiteralPath `$tmp -Force -ErrorAction SilentlyContinue };" ^
+  "if (`$preserveSets -and `$tmpSets -and (Test-Path -LiteralPath `$tmpSets)) { `$cfgDir = Join-Path `$install 'Config'; if (-not (Test-Path -LiteralPath `$cfgDir)) { New-Item -ItemType Directory -Path `$cfgDir -Force | Out-Null }; Copy-Item -LiteralPath `$tmpSets -Destination `$setsJson -Force; Remove-Item -LiteralPath `$tmpSets -Force -ErrorAction SilentlyContinue };" ^
   "foreach (`$req in @('SyncMe-Host.ps1','Modules\Update.ps1','Modules\MonitorClient.ps1','Modules\InstallMerge.ps1','Modules\Security.ps1','Modules\Jobs.ps1','Modules\Router.ps1','Modules\ProcessRunner.ps1','Modules\Http.ps1','Modules\Controllers\ApiDispatch.ps1','Modules\UpdatePublicKey.xml','ui\js\app.js')) { if (-not (Test-Path -LiteralPath (Join-Path `$install `$req))) { throw ('Setup incomplete: missing ' + `$req + ' under ' + `$install) } };" ^
   "Write-Host ('Installed to ' + `$install) -ForegroundColor Green"
 
@@ -197,7 +210,7 @@ if (-not (Test-Path -LiteralPath $updatesDir)) {
 Copy-Item -LiteralPath $setupZipPath -Destination (Join-Path $updatesDir $setupZipName) -Force
 
 $notes = @"
-SyncMe $pkgVer - 2.1 Security Criticals: operator session + CSRF, ModuleEntra fingerprint, fleet per-device HMAC, split restic admin credentials. Not Zero Trust complete.
+SyncMe $pkgVer - Setup UX: local sources without host name; Select folder opens Windows Explorer picker for source, destination, and restore paths. Includes 1.9.0 security criticals.
 "@
 $latestUrl = "https://www.syncme.co.za/updates/$setupZipName"
 $latest = [ordered]@{

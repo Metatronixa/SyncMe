@@ -366,12 +366,30 @@
     return Array.from(inputs).map((i) => i.value.trim()).filter(Boolean);
   }
 
+  async function pickFolder(opts) {
+    const o = opts || {};
+    const description = o.description || 'Select a folder';
+    const initialPath = o.initialPath || '';
+    try {
+      const d = await api('/api/pick-folder', {
+        method: 'POST',
+        body: JSON.stringify({ description: description, initialPath: initialPath })
+      });
+      if (d.cancelled) return null;
+      return d.path || null;
+    } catch (e) {
+      alert(e.message || 'Folder picker failed.');
+      return null;
+    }
+  }
+
   function renderPathList() {
     const box = document.getElementById('pathList');
     if (!box) return;
     const paths = state.form.sourcePaths && state.form.sourcePaths.length ? state.form.sourcePaths : [''];
     box.innerHTML = paths.map((p, i) =>
       '<div class="path-row"><input class="path-input" type="text" data-i="' + i + '" value="' + esc(p) + '" placeholder="D:\\Data or \\\\pc\\share" />' +
+      '<button type="button" class="btn soft btn-browse-path" data-i="' + i + '">Select folder</button>' +
       '<button type="button" class="btn ghost btn-rm-path" data-i="' + i + '">Remove</button></div>'
     ).join('');
     box.querySelectorAll('.btn-rm-path').forEach((b) => {
@@ -380,6 +398,29 @@
         state.form.sourcePaths.splice(parseInt(b.getAttribute('data-i'), 10), 1);
         if (!state.form.sourcePaths.length) state.form.sourcePaths = [''];
         renderPathList();
+      };
+    });
+    box.querySelectorAll('.btn-browse-path').forEach((b) => {
+      b.onclick = async () => {
+        const i = parseInt(b.getAttribute('data-i'), 10);
+        const inputs = document.querySelectorAll('#pathList input.path-input');
+        const current = inputs[i] ? inputs[i].value.trim() : '';
+        b.disabled = true;
+        try {
+          const picked = await pickFolder({
+            description: 'Select a source folder to back up',
+            initialPath: current
+          });
+          if (!picked) return;
+          state.form.sourcePaths = Array.from(inputs).map((el, idx) => {
+            if (idx === i) return picked;
+            return el.value.trim();
+          });
+          if (!state.form.sourcePaths.length) state.form.sourcePaths = [picked];
+          renderPathList();
+        } finally {
+          b.disabled = false;
+        }
       };
     });
   }
@@ -478,7 +519,8 @@
         '<div class="grid">' +
         '<label class="field">restic repository' + tip('Versioned restic repository folder. Prefer a dedicated subfolder, not a drive root.') +
         '<span class="hint">Full path on this Backup PC (your drive letter) or \\\\nas\\share\\repo</span>' +
-        '<input id="fRepo" type="text" value="' + esc(f.resticRepo && f.resticRepo.indexOf('rclone:') === 0 ? '' : f.resticRepo) + '" placeholder="D:\\Backups\\repo" /></label>' +
+        '<div class="path-row path-row-dest"><input id="fRepo" type="text" value="' + esc(f.resticRepo && f.resticRepo.indexOf('rclone:') === 0 ? '' : f.resticRepo) + '" placeholder="D:\\Backups\\repo" />' +
+        '<button type="button" class="btn soft" id="btnBrowseRepo">Select folder</button></div></label>' +
         '<label class="check"><input id="fCreate" type="checkbox" ' + (f.createFolders ? 'checked' : '') + ' /> Create local/NAS folders if they do not exist</label></div>' +
         '</div>' +
         '<div id="destRclone" class="hidden">' +
@@ -507,6 +549,25 @@
       };
       document.querySelectorAll('input[name="fDestType"]').forEach((r) => { r.onchange = syncDest; });
       syncDest();
+      if (document.getElementById('btnBrowseRepo')) {
+        document.getElementById('btnBrowseRepo').onclick = async () => {
+          const el = document.getElementById('fRepo');
+          const btn = document.getElementById('btnBrowseRepo');
+          if (btn) btn.disabled = true;
+          try {
+            const picked = await pickFolder({
+              description: 'Select restic repository folder',
+              initialPath: el ? el.value.trim() : ''
+            });
+            if (picked && el) {
+              el.value = picked;
+              state.form.resticRepo = picked;
+            }
+          } finally {
+            if (btn) btn.disabled = false;
+          }
+        };
+      }
       if (document.getElementById('btnWzRcloneRefresh')) {
         document.getElementById('btnWzRcloneRefresh').onclick = () => refreshRcloneRemotes('fRcloneRemote', 'wzRcloneStatus');
         document.getElementById('btnWzAddOd').onclick = () => startRcloneOAuth('onedrive', 'wzRcloneStatus', 'fRcloneRemote');
@@ -593,7 +654,7 @@
         'Set: ' + esc(f.displayName) + '<br/>' +
         'Operator: ' + esc(f.operatorName || 'friend') + '<br/>' +
         'Network: ' + esc(f.networkMode) + '<br/>' +
-        'Source: ' + esc(f.sourceHost) + ' — ' + esc((f.sourcePaths || []).join(', ')) + '<br/>' +
+        'Source: ' + esc(f.sourceHost || 'this Backup PC') + ' — ' + esc((f.sourcePaths || []).join(', ')) + '<br/>' +
         'Destination: ' + esc(f.destinationType) + ' — ' + esc(f.resticRepo) + '<br/>' +
         'Email: ' + (f.enableEmail ? 'yes (' + esc(f.smtpServer) + ')' : 'no') + '<br/>' +
         'Task logon: ' + (f.taskLogonType === 'Interactive' ? 'while logged on' : 'whether logged on or not') + '<br/>' +
@@ -751,7 +812,6 @@
       if (!state.resticOk) return 'Install restic first (or Refresh checks once it is available).';
     }
     if (state.step === 2) {
-      if (!f.sourceHost) return 'Enter source host name (Tailscale MagicDNS or LAN hostname).';
       if (!f.sourcePaths || !f.sourcePaths.length) return 'Add at least one source folder (local path or UNC).';
       const bad = (f.sourcePaths || []).find((p) => {
         const s = String(p).trim();
@@ -2048,6 +2108,16 @@
   if ($('btnOpenReportsDash')) $('btnOpenReportsDash').onclick = () => openPath('reports');
   if ($('btnOpenLastLog')) $('btnOpenLastLog').onclick = () => openPath('logs');
   $('btnOpenLogs').onclick = () => openPath('logs');
+  if ($('btnShutdownHost')) {
+    $('btnShutdownHost').onclick = async () => {
+      if (!confirm('Stop the SyncMe host?\n\nThe console will stop responding until you run SyncMe.bat again. Scheduled backups still run via Task Scheduler.')) return;
+      try {
+        await api('/api/shutdown', { method: 'POST', body: '{}' });
+      } catch (e) { /* host may close before response */ }
+      flashStatus(opsStatusEl(), 'SyncMe host stopped. Run SyncMe.bat to start again.', 'warn', 12000);
+      setTop('Host stopped', 'warn');
+    };
+  }
 
   if ($('btnExportRescueKit')) {
     $('btnExportRescueKit').onclick = async () => {
@@ -2229,6 +2299,22 @@
     $('restoreInclude').addEventListener('input', () => updateBrowseButtons());
   }
   $('btnOpenChecklist').onclick = () => openPath('checklist');
+  if ($('btnBrowseRestoreTarget')) {
+    $('btnBrowseRestoreTarget').onclick = async () => {
+      const el = $('restoreTarget');
+      const btn = $('btnBrowseRestoreTarget');
+      if (btn) btn.disabled = true;
+      try {
+        const picked = await pickFolder({
+          description: 'Select an empty restore target folder',
+          initialPath: el ? el.value.trim() : ''
+        });
+        if (picked && el) el.value = picked;
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    };
+  }
   $('btnSuggestTarget').onclick = async () => {
     try {
       const q = state.activeSetId ? ('?setId=' + encodeURIComponent(state.activeSetId)) : '';

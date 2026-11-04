@@ -477,6 +477,39 @@ function Invoke-SyncMeApiDispatch {
         return $true
             }
 
+            if ($path -eq '/api/pick-folder' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    $body = Read-SyncMeBody $req
+                    $desc = if ($body -and $body.description) { [string]$body.description } else { 'Select a folder' }
+                    $init = if ($body -and $body.initialPath) { [string]$body.initialPath } else { '' }
+                    if ($desc.Length -gt 200) { $desc = $desc.Substring(0, 200) }
+                    if ($init.Length -gt 512) { $init = $init.Substring(0, 512) }
+                    $picked = Show-SyncMeFolderPicker -Description $desc -InitialPath $init
+                    if ($picked.Ok) {
+                        Write-SyncMeJson @{
+                            ok        = $true
+                            path      = [string]$picked.Path
+                            cancelled = $false
+                        } -Response $res
+                    } elseif ($picked.Cancelled) {
+                        Write-SyncMeJson @{
+                            ok        = $true
+                            path      = ''
+                            cancelled = $true
+                            message   = 'Cancelled'
+                        } -Response $res
+                    } else {
+                        Write-SyncMeJson @{
+                            ok      = $false
+                            message = $(if ($picked.Message) { [string]$picked.Message } else { 'Folder picker failed.' })
+                        } -StatusCode 400 -Response $res
+                    }
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                return $true
+            }
+
             if ($path -eq '/api/test-source' -and $req.HttpMethod -eq 'POST') {
                 $body = Read-SyncMeBody $req
                 $msgs = New-Object System.Collections.Generic.List[string]

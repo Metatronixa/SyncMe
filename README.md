@@ -58,7 +58,7 @@ Both zips (plus a short `START-HERE.txt`) are produced under `dist\SyncMe-Releas
 | Cloud backend | [rclone](https://rclone.org/) as restic remote only (OAuth for OneDrive / Google Drive) |
 | Schedule | Windows Task Scheduler (+ SyncMe-Watchdog) |
 | UI | Static HTML5 + CSS + vanilla JavaScript (`ui/`), dark slate + cyan ops theme (Segoe UI + Consolas) |
-| Config / secrets | `Config.ps1` (no database); Windows Credential Manager; `Config\rclone.conf` |
+| Config / secrets | `Config\sets.json` (no database; no passwords); Windows Credential Manager; `Config\rclone.conf` |
 | Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source), **LocalOps Console** (SyncMe tab + fleet heartbeats — [docs/LOCALOPS_INTEGRATION.md](docs/LOCALOPS_INTEGRATION.md)), SyncMe Monitor (deprecated dual-write package) |
 | Platform | Windows 10/11 or Windows Server (Backup PC) |
 
@@ -88,7 +88,7 @@ SyncMe is an **orchestration frontend** - not a replacement for restic or rclone
 | Wake-on-LAN | Optional MAC per set before backup / Wake button |
 | Shadow copies | OfficeAgent scripts on source PC |
 | Detached Run now | Manual backup survives closing SyncMe |
-| In-app updates | HTTPS feed (`latest.json`), SHA-256 verify, keeps existing `Config.ps1` |
+| In-app updates | HTTPS feed (`latest.json`), SHA-256 verify, keeps `Config.ps1` + `Config\sets.json` |
 | SyncMe Monitor | Optional self-hosted fleet dashboard via post-backup (and Save) heartbeats. **Upcoming:** absorb this role into LocalOps Console ([docs/LOCALOPS_INTEGRATION.md](docs/LOCALOPS_INTEGRATION.md)); Monitor package remains until dual-write cutover |
 | LocalOps Console | Optional: when LocalOps runs on the same PC, SyncMe registers so the SyncMe tab finds the install + last run. **Upcoming:** also host backup-fleet heartbeats (replacing Monitor) |
 
@@ -193,9 +193,9 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-Current release: **1.9.0**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (setup + Monitor zips + `SHA256SUMS.txt`).
+Current release: **1.9.1**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (setup + Monitor zips + `SHA256SUMS.txt`).
 
-**1.9.0** ships the 2.1 Security Criticals slice (session, ModuleEntra, fleet device HMAC, split restic admin CM) — not Zero Trust complete. Track remaining work in [docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md) §0. Tests: `Tests\Run-SyncMeTests.ps1`. DR proof: `Scripts\Prove-SyncMeDisasterRecovery.ps1`.
+**1.9.1** setup UX hotfix (local sources + Select folder). **1.9.0** shipped the 2.1 Security Criticals slice — not Zero Trust complete. Track remaining work in [docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md) §0. Tests: `Tests\Run-SyncMeTests.ps1`. DR proof: `Scripts\Prove-SyncMeDisasterRecovery.ps1`.
 
 **1.5.1** LocalOps fleet cutover dual-write: heartbeats to LocalOps (`/api/heartbeat` + loopback sites ingest), Monitor package marked deprecated, Fleet dashboards copy prefers LocalOps.
 

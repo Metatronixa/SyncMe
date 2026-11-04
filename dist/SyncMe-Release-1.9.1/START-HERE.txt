@@ -1,0 +1,21 @@
+﻿SyncMe Release 1.9.1
+======================
+This folder contains both customer packages:
+
+1) SyncMe-Setup-1.9.1.zip
+   Backup PC console (wizard, backups, restore, schedule, signed HTTPS updates).
+   Unzip, then run SyncMe-Setup.cmd (admin recommended on Windows Server).
+   Verify: SHA256SUMS.txt
+
+2) SyncMe-Monitor-Setup-1.9.1.zip  (DEPRECATED optional add-on)
+   Prefer LocalOps Console fleet ingest (Operations → SyncMe). This zip is still built for dual-write cutover.
+   Legacy: unzip to a Monitor PC, edit Config\Monitor.json token, run SyncMe-Monitor.bat.
+
+Update feed (website): upload dist\updates\latest.json, SHA256SUMS.txt, SyncMe-Setup-1.9.1.zip, and SyncMe-Monitor-Setup-1.9.1.zip
+to https://www.syncme.co.za/updates/
+
+Manifest signature present: yes
+SHA256 (SyncMe-Setup-1.9.1.zip): 86cdcfee437b8248017fe61940a11ddb060f037da00d30f16749aebba91f25d2
+SHA256 (SyncMe-Monitor-Setup-1.9.1.zip): 13a1cd8332c248a9d27a7117502d84b2166d5e6c3b5b59b371ea4c51cac72052
+
+Also see RELEASE-NOTES.md and RELEASE-CHECKLIST.md in this folder.

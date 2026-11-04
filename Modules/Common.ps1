@@ -156,6 +156,76 @@ function Add-SyncMeSharedLine {
     Add-Content -LiteralPath $Path -Value $Line -Encoding UTF8 -ErrorAction SilentlyContinue
 }
 
+function Show-SyncMeFolderPicker {
+    <#
+      Native Windows folder picker (Explorer-style FolderBrowserDialog) on an STA thread.
+      Returns @{ Ok; Path; Cancelled; Message }.
+    #>
+    param(
+        [string]$Description = 'Select a folder',
+        [string]$InitialPath = ''
+    )
+    $runspace = [runspacefactory]::CreateRunspace()
+    $runspace.ApartmentState = 'STA'
+    $runspace.ThreadOptions = 'ReuseThread'
+    $runspace.Open()
+    $ps = [powershell]::Create()
+    try {
+        $ps.Runspace = $runspace
+        [void]$ps.AddScript({
+            param([string]$Desc, [string]$Init)
+            Add-Type -AssemblyName System.Windows.Forms -ErrorAction Stop
+            $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+            $dlg.Description = $(if ([string]::IsNullOrWhiteSpace($Desc)) { 'Select a folder' } else { $Desc })
+            $dlg.ShowNewFolderButton = $true
+            if (-not [string]::IsNullOrWhiteSpace($Init)) {
+                try {
+                    if (Test-Path -LiteralPath $Init) {
+                        $dlg.SelectedPath = (Resolve-Path -LiteralPath $Init).Path
+                    } else {
+                        $parent = Split-Path -Parent $Init
+                        if ($parent -and (Test-Path -LiteralPath $parent)) {
+                            $dlg.SelectedPath = (Resolve-Path -LiteralPath $parent).Path
+                        }
+                    }
+                } catch { }
+            }
+            $form = New-Object System.Windows.Forms.Form
+            $form.TopMost = $true
+            $form.ShowInTaskbar = $false
+            $form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+            $form.Opacity = 0
+            try {
+                [void]$form.Show()
+                $form.Activate()
+                $r = $dlg.ShowDialog($form)
+                if ($r -eq [System.Windows.Forms.DialogResult]::OK -and -not [string]::IsNullOrWhiteSpace($dlg.SelectedPath)) {
+                    return [pscustomobject]@{ Ok = $true; Path = [string]$dlg.SelectedPath; Cancelled = $false; Message = '' }
+                }
+                return [pscustomobject]@{ Ok = $false; Path = ''; Cancelled = $true; Message = 'Cancelled' }
+            } finally {
+                try { $form.Close() } catch { }
+                try { $form.Dispose() } catch { }
+                try { $dlg.Dispose() } catch { }
+            }
+        }).AddArgument([string]$Description).AddArgument([string]$InitialPath)
+        $out = $ps.Invoke()
+        if ($ps.HadErrors) {
+            $err = ($ps.Streams.Error | ForEach-Object { $_.ToString() }) -join '; '
+            return [pscustomobject]@{ Ok = $false; Path = ''; Cancelled = $false; Message = $(if ($err) { $err } else { 'Folder picker failed.' }) }
+        }
+        $first = @($out) | Select-Object -First 1
+        if ($first) { return $first }
+        return [pscustomobject]@{ Ok = $false; Path = ''; Cancelled = $true; Message = 'No selection' }
+    } catch {
+        return [pscustomobject]@{ Ok = $false; Path = ''; Cancelled = $false; Message = $_.Exception.Message }
+    } finally {
+        try { $ps.Dispose() } catch { }
+        try { $runspace.Close() } catch { }
+        try { $runspace.Dispose() } catch { }
+    }
+}
+
 function Read-SyncMeSharedTextTail {
     <#
       Read last N lines with FileShare.ReadWrite (safe while backup appends).
