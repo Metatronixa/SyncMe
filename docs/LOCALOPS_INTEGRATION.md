@@ -47,7 +47,7 @@
 2. SyncMe: set Monitor URL to LocalOps; shared token; Save (test heartbeat).
 3. Optional dual-write: keep a second Monitor host on `:17846` during transition.
 4. Phase 4: stop building Monitor zip; Fleet dashboards UI LocalOps-only; update `V2.md` D005.
-5. **2.1+:** replace shared fleet Bearer with per-device credentials before any remote command channel ([V2.1-SECURITY.md](V2.1-SECURITY.md)).
+5. **1.9.0:** per-device HMAC identity (`Data/Fleet/device.json`, DPAPI) + `X-SyncMe-Device-*` headers on heartbeats; LocalOps verifies signature/skew/nonce when headers present. Shared Bearer remains the channel gate for one release (dual-write compat). Loopback register publishes `deviceId` + `deviceHmacSecret` into `data/syncme/devices/`. No remote command channel yet.
 
 ## Related
 

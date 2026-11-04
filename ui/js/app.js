@@ -43,6 +43,9 @@
       createFolders: true,
       resticPassword: '',
       resticPassword2: '',
+      resticAdminPassword: '',
+      resticAdminPassword2: '',
+      resticAdminSameAsBackup: false,
       storeShare: false,
       shareUser: '',
       sharePassword: '',
@@ -181,18 +184,44 @@
   }
 
   let csrfToken = '';
+  let sessionToken = '';
+  let sessionExpiresUtc = '';
+
+  function applySessionPayload(data) {
+    if (!data) return;
+    if (data.csrfToken) csrfToken = data.csrfToken;
+    if (data.sessionToken) sessionToken = data.sessionToken;
+    if (data.sessionExpiresUtc) sessionExpiresUtc = data.sessionExpiresUtc;
+  }
+
+  async function refreshSessionIfNeeded() {
+    if (!sessionExpiresUtc) return;
+    try {
+      const exp = Date.parse(sessionExpiresUtc);
+      if (!exp || Number.isNaN(exp)) return;
+      // Refresh when under 30 minutes remaining
+      if ((exp - Date.now()) > (30 * 60 * 1000)) return;
+      const data = await api('/api/session/refresh', { method: 'POST', body: '{}' });
+      applySessionPayload(data);
+    } catch (e) {
+      console.warn('Session refresh failed', e);
+    }
+  }
 
   async function api(path, opts) {
     const o = Object.assign({}, opts || {});
     const method = (o.method || 'GET').toUpperCase();
     const headers = Object.assign({ 'Content-Type': 'application/json' }, o.headers || {});
-    if (method !== 'GET' && method !== 'HEAD' && csrfToken) {
-      headers['X-SyncMe-CSRF'] = csrfToken;
+    if (method !== 'GET' && method !== 'HEAD') {
+      if (csrfToken) headers['X-SyncMe-CSRF'] = csrfToken;
+      if (sessionToken) headers['X-SyncMe-Session'] = sessionToken;
+      if (o.confirmDestructive) headers['X-SyncMe-Confirm'] = '1';
     }
     o.headers = headers;
+    delete o.confirmDestructive;
     const res = await fetch(path, o);
     const data = await res.json().catch(() => ({}));
-    if (data && data.csrfToken) csrfToken = data.csrfToken;
+    applySessionPayload(data);
     if (!res.ok || data.ok === false) {
       throw new Error(data.message || ('Request failed: ' + res.status));
     }
@@ -301,6 +330,9 @@
     } else if (state.step === 4) {
       f.resticPassword = val('fRestPass');
       f.resticPassword2 = val('fRestPass2');
+      f.resticAdminPassword = val('fRestAdminPass');
+      f.resticAdminPassword2 = val('fRestAdminPass2');
+      f.resticAdminSameAsBackup = !!(document.getElementById('fRestAdminSame') && document.getElementById('fRestAdminSame').checked);
       f.storeShare = checked('fStoreShare');
       f.shareUser = val('fShareUser');
       f.sharePassword = val('fSharePass');
@@ -485,9 +517,13 @@
     } else if (state.step === 4) {
       body.innerHTML =
         '<div class="field-stack">' +
-        '<label class="field">restic password' + tip('Stored in Windows Credential Manager for this Windows account — never in Config.ps1.') +
+        '<label class="field">restic password (backup / check / restore)' + tip('Stored in Windows Credential Manager for this Windows account — never in Config.ps1.') +
         '<span class="hint">' + (state.isNewSet ? '' : 'Leave blank to keep the existing password') + '</span><input id="fRestPass" type="password" autocomplete="new-password" /></label>' +
         '<label class="field">Confirm restic password<input id="fRestPass2" type="password" autocomplete="new-password" /></label>' +
+        '<label class="field">restic admin password (forget / prune / delete)' + tip('Prefer a separate restic key with destructive rights. Append-Only Mode still blocks prune/delete in SyncMe even if this key exists.') +
+        '<span class="hint">' + (state.isNewSet ? 'Defaults to a distinct Credential Manager target' : 'Leave blank to keep existing admin target') + '</span><input id="fRestAdminPass" type="password" autocomplete="new-password" /></label>' +
+        '<label class="field">Confirm admin password<input id="fRestAdminPass2" type="password" autocomplete="new-password" /></label>' +
+        '<label class="check"><input id="fRestAdminSame" type="checkbox" ' + (f.resticAdminSameAsBackup ? 'checked' : '') + ' /> Use same credential for backup and destructive ops (not recommended — health WARNING)</label>' +
         '</div>' +
         '<label class="check"><input id="fStoreShare" type="checkbox" ' + (f.storeShare ? 'checked' : '') + ' /> Also store source share credentials</label>' +
         '<div class="field-stack" style="margin-top:8px">' +
@@ -743,6 +779,16 @@
     if (state.step === 4) {
       if (state.isNewSet || f.resticPassword || f.resticPassword2) {
         if (!f.resticPassword || f.resticPassword !== f.resticPassword2) return 'restic passwords are empty or do not match.';
+      }
+      if (!f.resticAdminSameAsBackup && (f.resticAdminPassword || f.resticAdminPassword2)) {
+        if (!f.resticAdminPassword || f.resticAdminPassword !== f.resticAdminPassword2) {
+          return 'restic admin passwords are empty or do not match.';
+        }
+      }
+      if (f.resticAdminSameAsBackup && state.isNewSet) {
+        if (!confirm('Using the same Credential Manager target for backup and forget/prune/delete reduces ransomware resilience.\n\nContinue anyway? (Health will WARN until you split keys.)')) {
+          return 'Choose a separate admin password, or cancel.';
+        }
       }
       if (f.storeShare) {
         if (!f.shareUser) return 'Enter share username.';
@@ -1061,6 +1107,7 @@
   }
 
   async function loadDash() {
+    await refreshSessionIfNeeded();
     const q = state.activeSetId ? ('?setId=' + encodeURIComponent(state.activeSetId)) : '';
     const d = await api('/api/status' + q);
     state.sets = d.sets || [];
@@ -1405,6 +1452,7 @@
     try {
       const d = await api('/api/backup', {
         method: 'POST',
+        confirmDestructive: mode === 'pruneOnly',
         body: JSON.stringify({ mode: mode || '', setId: state.activeSetId || 'set1' })
       });
       flashStatus(st, d.message || 'Backup started.', 'ok', 8000);
@@ -1771,6 +1819,7 @@
     try {
       const d = await api('/api/snapshot/delete', {
         method: 'POST',
+        confirmDestructive: true,
         body: JSON.stringify({ snapshot: sid, setId: state.activeSetId || 'set1' })
       });
       setStatus($('restoreStatus'), d.message || 'Snapshot deleted.', 'ok');
@@ -1825,6 +1874,9 @@
     f.rcloneMultiThreadStreams = d.rcloneMultiThreadStreams != null ? d.rcloneMultiThreadStreams : 4;
     f.resticPassword = '';
     f.resticPassword2 = '';
+    f.resticAdminPassword = '';
+    f.resticAdminPassword2 = '';
+    f.resticAdminSameAsBackup = false;
   }
 
   async function openEditSet(setId) {
@@ -1844,7 +1896,7 @@
     const setId = id || state.activeSetId || 'set1';
     if (!confirm('Delete backup set "' + setId + '" and its scheduled task?\n\nThe restic repository on disk will NOT be deleted.')) return;
     try {
-      const d = await api('/api/set/delete', { method: 'POST', body: JSON.stringify({ setId: setId }) });
+      const d = await api('/api/set/delete', { method: 'POST', confirmDestructive: true, body: JSON.stringify({ setId: setId }) });
       flashStatus(opsStatusEl(), d.message || 'Deleted.', 'ok', 8000);
       state.activeSetId = '';
       await loadDash();
@@ -2110,6 +2162,9 @@
       state.form.sourceHost = '';
       state.form.resticPassword = '';
       state.form.resticPassword2 = '';
+      state.form.resticAdminPassword = '';
+      state.form.resticAdminPassword2 = '';
+      state.form.resticAdminSameAsBackup = false;
       renderSteps();
       renderSetupBody();
       show('view-setup');
@@ -2239,7 +2294,7 @@
     try {
       if (btn) btn.disabled = true;
       if (status) setStatus(status, 'Downloading and verifying (hash' + (state.updateInfo && state.updateInfo.signed ? ' + signature' : '') + ')… SyncMe will restart.', 'warn');
-      const d = await api('/api/update/install', { method: 'POST', body: '{}' });
+      const d = await api('/api/update/install', { method: 'POST', confirmDestructive: true, body: '{}' });
       if (status) setStatus(status, d.message || 'Installing…', 'ok');
       setTimeout(() => {
         alert((d.message || 'Update started.') + '\n\nSyncMe will close and reopen. Config.ps1 is preserved. If health checks fail, SyncMe rolls back Logs\\previous-release automatically.');
@@ -2249,6 +2304,82 @@
       if (btn) btn.disabled = false;
       alert(e.message);
     }
+  }
+
+  function joinCsv(arr) {
+    return (arr && arr.length) ? arr.join(', ') : '';
+  }
+  function splitCsv(s) {
+    return String(s || '').split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+  }
+
+  async function loadEntraOptions() {
+    try {
+      const d = await api('/api/entra');
+      if ($('entraEnabled')) $('entraEnabled').checked = !!d.entraEnabled;
+      if ($('entraTenantId')) $('entraTenantId').value = d.tenantId || '';
+      if ($('entraClientId')) $('entraClientId').value = d.clientId || '';
+      if ($('entraCertThumbprint')) $('entraCertThumbprint').value = d.certThumbprint || '';
+      if ($('entraCertStore')) $('entraCertStore').value = d.certStore || 'CurrentUser\\My';
+      if ($('entraWorkloads')) $('entraWorkloads').value = joinCsv(d.workloads);
+      if ($('entraExpectedRoles')) $('entraExpectedRoles').value = joinCsv(d.expectedAppRoles);
+      if ($('entraSelectedSites')) $('entraSelectedSites').value = joinCsv(d.selectedSiteIds);
+      if ($('entraUseClientSecret')) $('entraUseClientSecret').checked = !!d.useClientSecret;
+      if (d.playbook && $('entraPlaybook')) {
+        state.entraPlaybook = d.playbook;
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  async function saveEntraOptions() {
+    const statusEl = $('entraStatus');
+    try {
+      if (statusEl) setStatus(statusEl, 'Saving Entra settings…', '');
+      const body = {
+        entraEnabled: $('entraEnabled') ? !!$('entraEnabled').checked : false,
+        tenantId: $('entraTenantId') ? $('entraTenantId').value.trim() : '',
+        clientId: $('entraClientId') ? $('entraClientId').value.trim() : '',
+        certThumbprint: $('entraCertThumbprint') ? $('entraCertThumbprint').value.trim() : '',
+        certStore: $('entraCertStore') ? $('entraCertStore').value.trim() : 'CurrentUser\\My',
+        useClientSecret: $('entraUseClientSecret') ? !!$('entraUseClientSecret').checked : false,
+        workloads: splitCsv($('entraWorkloads') ? $('entraWorkloads').value : ''),
+        expectedAppRoles: splitCsv($('entraExpectedRoles') ? $('entraExpectedRoles').value : ''),
+        selectedSiteIds: splitCsv($('entraSelectedSites') ? $('entraSelectedSites').value : '')
+      };
+      const d = await api('/api/entra', { method: 'POST', body: JSON.stringify(body) });
+      const kind = (d.healthStatus === 'fail') ? 'danger' : ((d.healthStatus === 'warn') ? 'warn' : 'ok');
+      if (statusEl) setStatus(statusEl, (d.message || 'Saved.') + (d.healthDetail ? (' — ' + d.healthDetail) : ''), kind);
+    } catch (e) {
+      if (statusEl) setStatus(statusEl, e.message, 'danger');
+      alert(e.message);
+    }
+  }
+
+  async function checkEntraHealth() {
+    const statusEl = $('entraStatus');
+    try {
+      if (statusEl) setStatus(statusEl, 'Running Entra check…', 'busy');
+      const d = await api('/api/entra/check', { method: 'POST', body: '{}' });
+      const kind = (d.status === 'fail') ? 'danger' : ((d.status === 'warn') ? 'warn' : 'ok');
+      if (statusEl) setStatus(statusEl, (d.status || 'ok') + ': ' + (d.detail || ''), kind);
+      if (d.playbook) state.entraPlaybook = d.playbook;
+    } catch (e) {
+      if (statusEl) setStatus(statusEl, e.message, 'danger');
+    }
+  }
+
+  function showEntraPlaybook() {
+    const el = $('entraPlaybook');
+    if (!el) return;
+    const pb = state.entraPlaybook;
+    if (!pb) {
+      el.textContent = 'Playbook not loaded yet — Save or Run Entra check first.';
+      el.classList.remove('hidden');
+      return;
+    }
+    const steps = (pb.steps || []).map((s, i) => (i + 1) + '. ' + s).join('\n');
+    el.textContent = (pb.title || 'Credential Compromised') + '\n\n' + (pb.note || '') + '\n\n' + steps;
+    el.classList.toggle('hidden');
   }
 
   async function loadMonitorOptions() {
@@ -2294,6 +2425,15 @@
   if ($('btnSaveMonitor')) {
     $('btnSaveMonitor').onclick = () => saveMonitorOptions();
   }
+  if ($('btnSaveEntra')) {
+    $('btnSaveEntra').onclick = () => saveEntraOptions();
+  }
+  if ($('btnCheckEntra')) {
+    $('btnCheckEntra').onclick = () => checkEntraHealth();
+  }
+  if ($('btnEntraPlaybook')) {
+    $('btnEntraPlaybook').onclick = () => showEntraPlaybook();
+  }
 
   async function boot() {
     try {
@@ -2310,10 +2450,12 @@
         await loadDash();
         if (typeof refreshSnaps === 'function') refreshSnaps();
         loadMonitorOptions();
+        loadEntraOptions();
       } else {
         show('view-dash');
         await loadDash();
         loadMonitorOptions();
+        loadEntraOptions();
         if (!shotMode) checkForUpdates({ quiet: true });
       }
     } catch (e) {

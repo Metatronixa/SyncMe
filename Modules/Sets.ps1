@@ -52,6 +52,7 @@ function ConvertTo-SyncMeSetObject {
     if (-not $obj.Contains('MailTo')) { $obj['MailTo'] = @() }
     if (-not $obj.Contains('ShareCredentialName')) { $obj['ShareCredentialName'] = '' }
     if (-not $obj.Contains('ResticCredentialName')) { $obj['ResticCredentialName'] = 'SyncMeRestic' }
+    if (-not $obj.Contains('ResticAdminCredentialName')) { $obj['ResticAdminCredentialName'] = '' }
     if (-not $obj.Contains('ResticPath')) { $obj['ResticPath'] = 'restic' }
     if (-not $obj.Contains('SourceHost')) { $obj['SourceHost'] = '' }
     if (-not $obj.Contains('ResticRepo')) { $obj['ResticRepo'] = '' }
@@ -327,6 +328,58 @@ function Format-SyncMeBytes {
     if ($Bytes -ge 1MB) { return ('{0:N1} MB' -f ($Bytes / 1MB)) }
     if ($Bytes -ge 1KB) { return ('{0:N0} KB' -f ($Bytes / 1KB)) }
     return ('{0} B' -f $Bytes)
+}
+
+function Get-SyncMeResticDestructiveCredentialTarget {
+    <#
+      Returns CM target for forget/prune/delete. Empty admin → fall back to backup write target (migration).
+      Does not load the password. Backup path must never use the admin target.
+    #>
+    param(
+        [Parameter(Mandatory)]$Config,
+        [string]$ScriptRoot = '',
+        [switch]$AllowFallback
+    )
+    $writeName = if ($Config.ResticCredentialName) { [string]$Config.ResticCredentialName } else { 'SyncMeRestic' }
+    $adminName = ''
+    if ($Config.PSObject.Properties['ResticAdminCredentialName'] -and $Config.ResticAdminCredentialName) {
+        $adminName = [string]$Config.ResticAdminCredentialName
+    }
+    $fallback = $false
+    $sameAsWrite = $false
+    if ([string]::IsNullOrWhiteSpace($adminName)) {
+        if (-not $AllowFallback) {
+            return [pscustomobject]@{
+                TargetName   = ''
+                Fallback     = $true
+                SameAsWrite  = $true
+                WriteTarget  = $writeName
+                Warning      = 'ResticAdminCredentialName not set — configure a separate destructive CM target.'
+            }
+        }
+        $adminName = $writeName
+        $fallback = $true
+        $sameAsWrite = $true
+        if ($ScriptRoot) {
+            try {
+                Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level SECURITY -Message 'Destructive restic op falling back to backup credential (admin CM missing)' -Fields @{ writeTarget = $writeName }
+            } catch { }
+        }
+    } elseif ($adminName -eq $writeName) {
+        $sameAsWrite = $true
+        if ($ScriptRoot) {
+            try {
+                Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level SECURITY -Message 'ResticAdminCredentialName equals ResticCredentialName (split keys recommended)' -Fields @{ target = $adminName }
+            } catch { }
+        }
+    }
+    return [pscustomobject]@{
+        TargetName  = $adminName
+        Fallback    = $fallback
+        SameAsWrite = $sameAsWrite
+        WriteTarget = $writeName
+        Warning     = $(if ($sameAsWrite) { 'Admin credential matches backup write credential.' } else { '' })
+    }
 }
 
 function Test-SyncMeArchivePathSafe {

@@ -29,7 +29,7 @@ $utf8Bom = New-Object System.Text.UTF8Encoding $true
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
 . (Join-Path $ScriptRoot 'Modules\Jobs.ps1')
 . (Join-Path $ScriptRoot 'Modules\Report.ps1')
-foreach ($mod in @('Update.ps1', 'MonitorClient.ps1', 'LocalOpsClient.ps1', 'Migrate.ps1')) {
+foreach ($mod in @('Update.ps1', 'ModuleEntra.ps1', 'FleetDevice.ps1', 'MonitorClient.ps1', 'LocalOpsClient.ps1', 'Migrate.ps1')) {
     $modPath = Join-Path $ScriptRoot ('Modules\' + $mod)
     if (-not (Test-Path -LiteralPath $modPath)) {
         throw "Missing $modPath. Re-run SyncMe-Setup (or copy Modules\$mod into the install folder)."
@@ -341,6 +341,7 @@ function Format-SyncMeSetLiteral {
         ResticRepo = '$(Escape-Sq $Set.ResticRepo)'
         ArchivePath = '$(Escape-Sq $Set.ArchivePath)'
         ResticCredentialName = '$(Escape-Sq $Set.ResticCredentialName)'
+        ResticAdminCredentialName = '$(Escape-Sq $(if ($Set.ResticAdminCredentialName) { $Set.ResticAdminCredentialName } else { '' }))'
         ResticPath = '$(Escape-Sq $Set.ResticPath)'
         KeepLast = $keepLast; KeepDaily = $keepDaily; KeepWeekly = $keepWeekly; KeepMonthly = $keepMonthly
         ArchiveEveryDays = 14
@@ -1383,8 +1384,32 @@ function Invoke-SyncMeSetupApply {
     }
 
     $resticCred = if ($setId -eq 'set1') { 'SyncMeRestic' } else { "SyncMeRestic-$setId" }
+    $resticAdminCred = if ($setId -eq 'set1') { 'SyncMeResticAdmin' } else { "SyncMeResticAdmin-$setId" }
     if (-not [string]::IsNullOrEmpty($resticPassword)) {
         Set-CmdKeyGeneric -Target $resticCred -User 'restic' -Password $resticPassword
+    }
+    $adminSame = ($Body.resticAdminSameAsBackup -eq $true)
+    $adminPassword = if ($null -ne $Body.resticAdminPassword) { [string]$Body.resticAdminPassword } else { '' }
+    if ($adminSame) {
+        $resticAdminCred = $resticCred
+        try {
+            Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level SECURITY -Message 'Operator chose same restic credential for backup and destructive ops' -Fields @{ setId = $setId; target = $resticCred }
+        } catch { }
+    } elseif (-not [string]::IsNullOrEmpty($adminPassword)) {
+        Set-CmdKeyGeneric -Target $resticAdminCred -User 'restic-admin' -Password $adminPassword
+    } else {
+        $prevAdmin = $existing | Where-Object { $_.Id -eq $setId } | Select-Object -First 1
+        if ($prevAdmin -and $prevAdmin.ResticAdminCredentialName) {
+            $resticAdminCred = [string]$prevAdmin.ResticAdminCredentialName
+        } elseif (-not [string]::IsNullOrEmpty($resticPassword)) {
+            # New set without separate admin password: create admin target with same password once, still distinct CM name
+            Set-CmdKeyGeneric -Target $resticAdminCred -User 'restic-admin' -Password $resticPassword
+            try {
+                Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level SECURITY -Message 'Admin CM target seeded from backup password — rotate to a distinct restic key when possible' -Fields @{ setId = $setId; adminTarget = $resticAdminCred }
+            } catch { }
+        } else {
+            $resticAdminCred = ''
+        }
     }
 
     $shareCred = ''
@@ -1503,6 +1528,7 @@ function Invoke-SyncMeSetupApply {
         ResticRepo               = $resticRepo
         ArchivePath              = $archivePath
         ResticCredentialName     = $resticCred
+        ResticAdminCredentialName = $resticAdminCred
         ResticPath               = $configResticPath
         KeepLast                 = $(if ($null -ne $Body.keepLast) { [int]$Body.keepLast } else { 7 })
         KeepDaily                = $(if ($null -ne $Body.keepDaily) { [int]$Body.keepDaily } else { 14 })
@@ -1862,7 +1888,10 @@ function Send-StaticFile {
 }
 
 # --- listener ---
-$script:SyncMeCsrfToken = New-SyncMeCsrfToken
+# Localhost operator session + CSRF (rotated together; no login wall).
+$script:SyncMeSession = New-SyncMeOperatorSession -ScriptRoot $ScriptRoot -TtlHours 12
+$script:SyncMeCsrfToken = [string]$script:SyncMeSession.csrfToken
+$script:SyncMeSessionToken = [string]$script:SyncMeSession.sessionToken
 try {
     $mig = Invoke-SyncMeConfigMigrate -ScriptRoot $ScriptRoot -TargetVersion 2
     if (-not $mig.Skipped) {
@@ -1953,7 +1982,7 @@ try {
 
             if ($path.StartsWith('/api/') -and $req.HttpMethod -notin @('GET', 'HEAD', 'OPTIONS')) {
                 try {
-                    Assert-SyncMeMutatingApiRequest -Request $req -ExpectedPort $Port -CsrfToken $script:SyncMeCsrfToken
+                    Assert-SyncMeMutatingApiRequest -Request $req -ExpectedPort $Port -CsrfToken $script:SyncMeCsrfToken -ScriptRoot $ScriptRoot -RequireSession
                 } catch {
                     $code = 403
                     $msg = $_.Exception.Message

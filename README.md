@@ -193,9 +193,9 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-Current release: **1.8.0**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (setup + Monitor zips + `SHA256SUMS.txt`).
+Current release: **1.9.0**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (setup + Monitor zips + `SHA256SUMS.txt`).
 
-**1.8.0** starts the 2.1 backlog: Watchdog restore verification with SHA-256/read evidence, SECRET log class, stronger reparse path rejects. **1.7.0** closed audit Phase 4. Track remaining 2.1 work in [docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md) §0. Tests: `Tests\Run-SyncMeTests.ps1`. DR proof: `Scripts\Prove-SyncMeDisasterRecovery.ps1`.
+**1.9.0** ships the 2.1 Security Criticals slice (session, ModuleEntra, fleet device HMAC, split restic admin CM) — not Zero Trust complete. Track remaining work in [docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md) §0. Tests: `Tests\Run-SyncMeTests.ps1`. DR proof: `Scripts\Prove-SyncMeDisasterRecovery.ps1`.
 
 **1.5.1** LocalOps fleet cutover dual-write: heartbeats to LocalOps (`/api/heartbeat` + loopback sites ingest), Monitor package marked deprecated, Fleet dashboards copy prefers LocalOps.
 

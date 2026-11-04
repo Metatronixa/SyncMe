@@ -270,7 +270,7 @@
           (local disk, NAS, or cloud via <strong>rclone</strong> / OneDrive).
         </p>
         <p class="meta">
-          SyncMe <strong>1.8.0</strong> (restore verification evidence, signed updates, hardened Host) ·
+          SyncMe <strong>1.9.0</strong> (2.1 security criticals, session, ModuleEntra, fleet device HMAC, split restic keys) ·
           Free to use - keep author credit.
           See <code>LICENSE.txt</code> ·
           Website <a href="https://www.syncme.co.za">www.syncme.co.za</a> ·
@@ -347,6 +347,8 @@ Backup PC - SyncMe console + Task Scheduler
           The restic password encrypts the repository. Without it there is no restore or recovery.
           Save it in a <strong>password manager or other safe place</strong> when you create it.
           Credential Manager keeps this Backup PC able to run jobs; your vault copy is for disaster recovery if the PC dies.
+          From <strong>1.9.0</strong>, prefer a separate Credential Manager target for forget/prune/delete
+          (<code>SyncMeResticAdmin</code>) from the backup/write password (<code>SyncMeRestic</code>).
           Do not put the password in <code>Config.ps1</code>.
         </div>
         <div class="callout danger">
@@ -525,6 +527,21 @@ Backup PC - SyncMe console + Task Scheduler
         <p>You can also upgrade manually with <code>SyncMe-Setup.cmd</code> from a release zip - existing Config is preserved the same way.</p>
       </section>
 
+      <section class="card" id="entra">
+        <h2>Microsoft Entra (optional)</h2>
+        <p>
+          Operations &rarr; <strong>Microsoft Entra (ModuleEntra)</strong> configures optional Graph app identity health.
+          Prefer a certificate on the Backup PC; client secret is compatibility-only. SyncMe compares granted app
+          permissions to your expected fingerprint and warns on drift or over-permission. For SharePoint, prefer
+          <strong>Sites.Selected</strong> with site IDs — SyncMe does not force this for rclone-only installs.
+        </p>
+        <p>
+          If a certificate or secret may be compromised, open the <strong>Credential compromised playbook</strong>
+          in Operations. A tenant administrator must revoke credentials in Entra; SyncMe does not call admin revoke APIs.
+          rclone OneDrive remains the restic cloud backend.
+        </p>
+      </section>
+
       <section class="card" id="monitor">
         <h2>Fleet dashboards (optional)</h2>
         <h3>LocalOps Console</h3>
@@ -539,7 +556,7 @@ Backup PC - SyncMe console + Task Scheduler
         <p>
           Separate self-hosted package for a <strong>fleet status dashboard</strong> (HTML + local host on Windows).
           Not part of the main SyncMe zip and not meant for public web hosting.
-          Download <strong>SyncMe-Monitor-Setup-1.8.0.zip</strong> (same line as SyncMe Setup) from
+          Download <strong>SyncMe-Monitor-Setup-1.9.0.zip</strong> (same line as SyncMe Setup) from
           <a href="https://github.com/Metatronixa/SyncMe/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>
           or <a href="https://www.syncme.co.za" target="_blank" rel="noopener noreferrer">www.syncme.co.za</a> Downloads.
         </p>

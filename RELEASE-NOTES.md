@@ -1,6 +1,15 @@
 # SyncMe release notes
 
+## 1.9.0 — 2.1 Security Criticals
+
+- Localhost operator session (`X-SyncMe-Session`) + CSRF; destructive confirm (`X-SyncMe-Confirm`)
+- ModuleEntra: certificate app auth, Graph permission fingerprint, Sites.Selected preference, compromise playbook
+- Fleet per-device HMAC identity + nonce replay (LocalOps verify); shared Bearer dual-write fallback
+- Split restic CM targets: `ResticCredentialName` (backup) vs `ResticAdminCredentialName` (forget/prune/delete)
+- Not Zero Trust complete — MI/WIF/CA/CAE and remote command channel remain later
+
 ## 1.8.0 — 2.1 restore verification slice
+
 
 - Fix: host no longer exits after the first API call (PowerShell $true -eq 'shutdown' coercion)
 

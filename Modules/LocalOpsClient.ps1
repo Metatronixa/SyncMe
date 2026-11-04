@@ -110,6 +110,17 @@ function Send-SyncMeLocalOpsRegister {
         listening   = $listening
     }
 
+    # Loopback-only: publish per-device HMAC secret so LocalOps can verify fleet signatures.
+    if (Get-Command Get-SyncMeFleetDeviceIdentity -ErrorAction SilentlyContinue) {
+        try {
+            $dev = Get-SyncMeFleetDeviceIdentity -ScriptRoot $ScriptRoot -Ensure
+            if ($dev) {
+                $payload['deviceId'] = [string]$dev.deviceId
+                $payload['deviceHmacSecret'] = [string]$dev.secretBase64
+            }
+        } catch { }
+    }
+
     if ($RunInfo) {
         $payload['success'] = [bool]$RunInfo.Success
         $payload['summary'] = $(if ($RunInfo.Summary) { [string]$RunInfo.Summary } else { '' })
@@ -223,6 +234,14 @@ function Send-SyncMeLocalOpsFleetHeartbeat {
     $headers = @{
         'User-Agent'    = 'SyncMe'
         'Authorization' = "Bearer $token"
+    }
+    if (Get-Command Get-SyncMeFleetDeviceAuthHeaders -ErrorAction SilentlyContinue) {
+        try {
+            $devHdr = Get-SyncMeFleetDeviceAuthHeaders -ScriptRoot $ScriptRoot -BodyJson $body -EnsureDevice
+            if ($devHdr) {
+                foreach ($k in $devHdr.Keys) { $headers[$k] = $devHdr[$k] }
+            }
+        } catch { }
     }
 
     try {

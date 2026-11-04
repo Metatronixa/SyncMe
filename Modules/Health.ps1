@@ -45,6 +45,25 @@ function Get-SyncMeHealthProbe {
         } catch { $credOk = $false }
         Add-Check 'resticCredential' $(if ($credOk) { 'ok' } else { 'fail' }) $credName
 
+        if (Get-Command Get-SyncMeResticDestructiveCredentialTarget -ErrorAction SilentlyContinue) {
+            $adminMeta = Get-SyncMeResticDestructiveCredentialTarget -Config $cfg -ScriptRoot $ScriptRoot
+            if ([string]::IsNullOrWhiteSpace([string]$adminMeta.TargetName) -or $adminMeta.Fallback -or $adminMeta.SameAsWrite) {
+                Add-Check 'resticAdminCredential' 'warn' $(if ($adminMeta.Warning) { [string]$adminMeta.Warning } else { 'Split admin CM target missing' })
+            } else {
+                $adminOk = $false
+                try {
+                    if (Get-Command Get-GenericCredentialPassword -ErrorAction SilentlyContinue) {
+                        $null = Get-GenericCredentialPassword -TargetName ([string]$adminMeta.TargetName)
+                        $adminOk = $true
+                    } elseif (Get-Command Get-BackupStoredCredential -ErrorAction SilentlyContinue) {
+                        $null = Get-BackupStoredCredential -TargetName ([string]$adminMeta.TargetName)
+                        $adminOk = $true
+                    }
+                } catch { $adminOk = $false }
+                Add-Check 'resticAdminCredential' $(if ($adminOk) { 'ok' } else { 'warn' }) ([string]$adminMeta.TargetName)
+            }
+        }
+
         if (Get-Command Get-SyncMeCanonicalRepoKey -ErrorAction SilentlyContinue) {
             try {
                 Assert-SyncMeUniqueRepositories -ScriptRoot $ScriptRoot
@@ -72,7 +91,7 @@ function Get-SyncMeHealthProbe {
         Add-Check 'scheduler' 'warn' 'SyncMe-Backup task not registered'
     }
 
-    $mods = @('Modules\Security.ps1', 'Modules\Jobs.ps1', 'Modules\Update.ps1', 'Modules\ProcessRunner.ps1', 'Modules\Router.ps1')
+    $mods = @('Modules\Security.ps1', 'Modules\Jobs.ps1', 'Modules\Update.ps1', 'Modules\ProcessRunner.ps1', 'Modules\Router.ps1', 'Modules\ModuleEntra.ps1')
     foreach ($m in $mods) {
         $p = Join-Path $ScriptRoot $m
         if (Test-Path -LiteralPath $p) {
@@ -84,6 +103,22 @@ function Get-SyncMeHealthProbe {
 
     $pub = Join-Path $ScriptRoot 'Modules\UpdatePublicKey.xml'
     Add-Check 'updatePublicKey' $(if (Test-Path -LiteralPath $pub) { 'ok' } else { 'warn' }) ''
+
+    if (Get-Command Test-SyncMeEntraHealth -ErrorAction SilentlyContinue) {
+        try {
+            $entra = Test-SyncMeEntraHealth -ScriptRoot $ScriptRoot
+            $entraStatus = [string]$entra.status
+            if ($entraStatus -eq 'skipped') { $entraStatus = 'skipped' }
+            elseif ($entraStatus -eq 'ok') { $entraStatus = 'ok' }
+            elseif ($entraStatus -eq 'fail') { $entraStatus = 'fail' }
+            else { $entraStatus = 'warn' }
+            Add-Check 'entra' $entraStatus ([string]$entra.detail)
+        } catch {
+            Add-Check 'entra' 'warn' $_.Exception.Message
+        }
+    } else {
+        Add-Check 'entra' 'skipped' 'ModuleEntra not loaded'
+    }
 
     if ($cfg) {
         $sid = if ($cfg.Id) { [string]$cfg.Id } else { 'set1' }

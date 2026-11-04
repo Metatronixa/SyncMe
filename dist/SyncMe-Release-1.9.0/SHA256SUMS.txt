@@ -1,0 +1,2 @@
+e341e3096237a1ee0ba395d61a0fffbd4891d4d04f63edd36cbdd1b131062709  SyncMe-Setup-1.9.0.zip
+928fd4e111102dc71ebf94d4d8bd8238448bcf6b80a0a8b2a165f9c906b9755c  SyncMe-Monitor-Setup-1.9.0.zip

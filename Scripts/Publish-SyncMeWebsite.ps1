@@ -6,9 +6,10 @@ param(
   [string]$RemoteRoot = $(if ($env:SYNCME_FTP_REMOTE) { $env:SYNCME_FTP_REMOTE } else { '/' })
 )
 $ErrorActionPreference = 'Stop'
-$root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$root = Split-Path -Parent $scriptDir
 $site = Join-Path $root 'website'
-if (-not (Test-Path $site)) { throw "Missing website/ folder" }
+if (-not (Test-Path $site)) { throw "Missing website/ folder at $site" }
 if ([string]::IsNullOrWhiteSpace($HostName) -or [string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($Pass)) {
   throw "Set SYNCME_FTP_HOST, SYNCME_FTP_USER, SYNCME_FTP_PASS (and optional SYNCME_FTP_REMOTE)."
 }
@@ -20,7 +21,7 @@ if (-not $winscp) { throw "WinSCP.com not found. Install WinSCP or upload websit
 $script = @"
 option batch abort
 option confirm off
-open ftp://${User}:${Pass}@${HostName}/ -passive=on
+open ftpes://${User}:${Pass}@${HostName}/ -explicit -certificate=* -passive=on
 cd $RemoteRoot
 put -nopermissions -nopreservetime "$site\index.html"
 put -nopermissions -nopreservetime "$site\guide.html"
@@ -31,8 +32,8 @@ put -nopermissions -nopreservetime "$site\js\*" js/
 put -nopermissions -nopreservetime "$site\assets\*" assets/
 put -nopermissions -nopreservetime "$site\updates\latest.json" updates/
 put -nopermissions -nopreservetime "$site\updates\SHA256SUMS.txt" updates/
-put -nopermissions -nopreservetime "$site\updates\SyncMe-Setup-1.8.0.zip" updates/
-put -nopermissions -nopreservetime "$site\updates\SyncMe-Monitor-Setup-1.8.0.zip" updates/
+put -nopermissions -nopreservetime "$site\updates\SyncMe-Setup-1.9.0.zip" updates/
+put -nopermissions -nopreservetime "$site\updates\SyncMe-Monitor-Setup-1.9.0.zip" updates/
 put -nopermissions -nopreservetime "$site\assets\screenshots\*" assets/screenshots/
 exit
 "@

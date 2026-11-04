@@ -116,6 +116,84 @@ function New-SyncMeCsrfToken {
     return (($b64 -replace '\+', '-') -replace '/', '_')
 }
 
+function New-SyncMeSessionToken {
+    return (New-SyncMeCsrfToken)
+}
+
+function Get-SyncMeSessionDir {
+    param([string]$ScriptRoot)
+    return (Join-Path $ScriptRoot 'Data\Session')
+}
+
+function New-SyncMeOperatorSession {
+    <#
+      Issues a localhost operator session (no login wall). TTL hours default 12.
+      Rotates CSRF when called so session+csrf stay bound for the UI bootstrap.
+    #>
+    param(
+        [Parameter(Mandatory)][string]$ScriptRoot,
+        [int]$TtlHours = 12
+    )
+    $dir = Get-SyncMeSessionDir -ScriptRoot $ScriptRoot
+    if (-not (Test-Path -LiteralPath $dir)) {
+        New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $issued = [DateTime]::UtcNow
+    $expires = $issued.AddHours([Math]::Max(1, $TtlHours))
+    $session = New-SyncMeSessionToken
+    $csrf = New-SyncMeCsrfToken
+    $meta = [ordered]@{
+        sessionToken = $session
+        csrfToken    = $csrf
+        issuedUtc    = $issued.ToString('o')
+        expiresUtc   = $expires.ToString('o')
+        ttlHours     = $TtlHours
+    }
+    $path = Join-Path $dir 'current.json'
+    $json = ($meta | ConvertTo-Json -Compress)
+    [System.IO.File]::WriteAllText($path, $json, (New-Object System.Text.UTF8Encoding $false))
+    return [pscustomobject]$meta
+}
+
+function Get-SyncMeOperatorSession {
+    param([Parameter(Mandatory)][string]$ScriptRoot)
+    $path = Join-Path (Get-SyncMeSessionDir -ScriptRoot $ScriptRoot) 'current.json'
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    try {
+        $raw = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+        $o = $raw | ConvertFrom-Json
+        return $o
+    } catch {
+        return $null
+    }
+}
+
+function Test-SyncMeOperatorSessionValid {
+    param(
+        [Parameter(Mandatory)][string]$ScriptRoot,
+        [string]$SessionToken
+    )
+    if ([string]::IsNullOrWhiteSpace($SessionToken)) { return $false }
+    $meta = Get-SyncMeOperatorSession -ScriptRoot $ScriptRoot
+    if (-not $meta -or [string]::IsNullOrWhiteSpace([string]$meta.sessionToken)) { return $false }
+    if (-not (Test-SyncMeConstantTimeEquals -A $SessionToken -B ([string]$meta.sessionToken))) { return $false }
+    try {
+        $exp = [DateTime]::Parse([string]$meta.expiresUtc, $null, [System.Globalization.DateTimeStyles]::RoundtripKind).ToUniversalTime()
+        if ([DateTime]::UtcNow -gt $exp) { return $false }
+    } catch {
+        return $false
+    }
+    return $true
+}
+
+function Assert-SyncMeDestructiveConfirm {
+    param($Request)
+    $confirm = [string]$Request.Headers['X-SyncMe-Confirm']
+    if ($confirm -ne '1') {
+        throw 'Forbidden: destructive action requires X-SyncMe-Confirm: 1 after UI confirmation.'
+    }
+}
+
 function Test-SyncMeConstantTimeEquals {
     param([string]$A, [string]$B)
     if ($null -eq $A) { $A = '' }
@@ -204,6 +282,8 @@ function Assert-SyncMeMutatingApiRequest {
         $Request,
         [int]$ExpectedPort,
         [string]$CsrfToken,
+        [string]$ScriptRoot = '',
+        [switch]$RequireSession,
         [long]$MaxBodyBytes = 1048576
     )
     $method = [string]$Request.HttpMethod
@@ -218,6 +298,16 @@ function Assert-SyncMeMutatingApiRequest {
         throw 'Forbidden: missing or invalid CSRF token.'
     }
 
+    if ($RequireSession) {
+        if ([string]::IsNullOrWhiteSpace($ScriptRoot)) {
+            throw 'Forbidden: session validation unavailable.'
+        }
+        $sess = [string]$Request.Headers['X-SyncMe-Session']
+        if (-not (Test-SyncMeOperatorSessionValid -ScriptRoot $ScriptRoot -SessionToken $sess)) {
+            throw 'Forbidden: missing or expired session. Refresh the console.'
+        }
+    }
+
     if ($Request.HasEntityBody) {
         $ct = [string]$Request.ContentType
         if ([string]::IsNullOrWhiteSpace($ct) -or ($ct -notmatch '(?i)^application/json(\s*;|$)')) {
@@ -226,6 +316,13 @@ function Assert-SyncMeMutatingApiRequest {
         if ($Request.ContentLength64 -gt $MaxBodyBytes) {
             throw "Payload too large (max $MaxBodyBytes bytes)."
         }
+    }
+
+    # Destructive endpoints require explicit UI confirmation header.
+    $path = ''
+    try { $path = [string]$Request.Url.AbsolutePath } catch { }
+    if ($path -in @('/api/update/install', '/api/snapshot/delete', '/api/set/delete')) {
+        Assert-SyncMeDestructiveConfirm -Request $Request
     }
 }
 

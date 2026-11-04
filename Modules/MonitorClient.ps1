@@ -78,6 +78,14 @@ function Send-SyncMeMonitorHeartbeat {
         if (-not [string]::IsNullOrWhiteSpace($token)) {
             $headers['Authorization'] = "Bearer $token"
         }
+        if (Get-Command Get-SyncMeFleetDeviceAuthHeaders -ErrorAction SilentlyContinue) {
+            try {
+                $devHdr = Get-SyncMeFleetDeviceAuthHeaders -ScriptRoot $ScriptRoot -BodyJson $body -EnsureDevice
+                if ($devHdr) {
+                    foreach ($k in $devHdr.Keys) { $headers[$k] = $devHdr[$k] }
+                }
+            } catch { }
+        }
 
         try {
             [Net.ServicePointManager]::SecurityProtocol =

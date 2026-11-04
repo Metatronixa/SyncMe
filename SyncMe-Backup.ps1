@@ -1485,8 +1485,19 @@ try {
     if ($Config.PSObject.Properties.Name -contains 'MinFreeRepoGb') { $minRepo = [double]$Config.MinFreeRepoGb }
     Test-MonarchFreeSpace -Path $Config.ResticRepo -MinGb $minRepo -Label 'Disk1/repo' -LogPath $logPath | Out-Null
 
-    # Password from Credential Manager
+    # Password from Credential Manager (backup/check/restore write key — never load admin here)
     $resticPassword = Get-GenericCredentialPassword -TargetName $Config.ResticCredentialName
+    function Get-SyncMePrunePasswordLocal {
+        $adminTarget = [string]$Config.ResticCredentialName
+        if (Get-Command Get-SyncMeResticDestructiveCredentialTarget -ErrorAction SilentlyContinue) {
+            $meta = Get-SyncMeResticDestructiveCredentialTarget -Config $Config -ScriptRoot $ScriptRoot -AllowFallback
+            if ($meta.TargetName) { $adminTarget = [string]$meta.TargetName }
+            if ($meta.SameAsWrite -or $meta.Fallback) {
+                Write-Log ("SECURITY: destructive restic credential not split ($($meta.Warning))") $logPath 'WARN'
+            }
+        }
+        return (Get-GenericCredentialPassword -TargetName $adminTarget)
+    }
 
     $isRcloneRepo = ([string]$Config.ResticRepo -match '^rclone:')
     if (-not $isRcloneRepo -and -not (Test-Path -LiteralPath $Config.ResticRepo)) {
@@ -1567,10 +1578,11 @@ try {
         foreach ($tag in $Config.SnapshotTags) {
             $forgetArgs += @('--tag', $tag)
         }
+        $prunePassword = Get-SyncMePrunePasswordLocal
         $pruneResult = Invoke-ResticWithLockRetry `
             -ResticExe $resticExe `
             -Repo $Config.ResticRepo `
-            -Password $resticPassword `
+            -Password $prunePassword `
             -Arguments $forgetArgs `
             -LogPath $logPath `
             -JsonLogPath $pruneJsonLog `
@@ -1788,10 +1800,11 @@ try {
             $forgetArgs += @('--tag', $tag)
         }
 
+        $prunePassword = Get-SyncMePrunePasswordLocal
         $pruneResult = Invoke-ResticWithLockRetry `
             -ResticExe $resticExe `
             -Repo $Config.ResticRepo `
-            -Password $resticPassword `
+            -Password $prunePassword `
             -Arguments $forgetArgs `
             -LogPath $logPath `
             -JsonLogPath $pruneJsonLog `

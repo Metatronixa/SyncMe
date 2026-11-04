@@ -68,7 +68,14 @@ The **1.x** trust model above still applies. Frozen architecture: [docs/V2.1-SEC
 - Pester suite + GitHub Actions workflow
 - `RescueKit\SyncMe-Rescue.ps1`
 
-**Not shipped yet (do not assume in audits):** full session/login model beyond CSRF, Graph permission fingerprints / Sites.Selected enforcement, per-device fleet certificates, split restic destructive credentials. Watchdog restore-evidence (hash/read) ships in **1.8.0** (still advisory for job success unless FailJobOnRestoreDrillFailure).
+**Shipped in 1.9.0 (2.1 Criticals slice — not “Zero Trust complete”):**
+
+- Localhost operator session (`X-SyncMe-Session`) + CSRF; destructive confirm header
+- ModuleEntra: cert app auth, Graph permission fingerprint, Sites.Selected preference, compromise playbook (operator-driven)
+- Fleet per-device HMAC identity + nonce replay (shared Bearer dual-write fallback for one release)
+- Split restic Credential Manager targets: backup write vs destructive admin
+
+**Still later / out of scope for 1.9.0:** Managed Identity / WIF / CA / CAE; remote command channel; replacing rclone OneDrive with Graph file backup.
 
 ## Trust boundary: localhost console
 
@@ -96,6 +103,15 @@ Security constraints for this path:
 3. The payload contains install path, version, hostname, site id, console URL, and optional last-run summary - **never** restic passwords, SMTP secrets, or rclone OAuth tokens.
 4. Fleet heartbeats to LocalOps (1.5.1+) reuse the **Monitor/shared token** as Bearer (`syncMeFleetToken` on LocalOps). That token is **not** a restic or Graph secret. **2.1** intends per-device credentials for command-capable fleet channels ([docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md)); 1.x shared Bearer remains impersonable if leaked.
 
+## Microsoft Entra (ModuleEntra)
+
+Optional Graph identity health (`Config\Entra.json`, Operations → Microsoft Entra). Certificate-based client assertion is the default; client secret is compatibility-only and logged as SECURITY WARNING.
+
+- Health compares granted app roles to the expected fingerprint. Drift or over-permission (`Sites.ReadWrite.All`, `Mail.ReadWrite`, `Directory.Read.All`, …) is WARNING, not Healthy.
+- SharePoint workload: prefer **Sites.Selected** + `SelectedSiteIds` probes. SyncMe does **not** force Sites.Selected for rclone-only installs.
+- **Credential Compromised** playbook in the UI is operator-driven. SyncMe does not call Entra admin revoke APIs — a tenant admin must disable credentials / SP / excess permissions, then re-validate fingerprint before resuming Graph-dependent work.
+- rclone OneDrive remains the restic cloud backend; ModuleEntra is additive.
+
 ## Secrets and credentials
 
 ### What must never go in `Config.ps1`
@@ -110,9 +126,12 @@ SyncMe uses Generic Credential Manager targets such as:
 
 | Target pattern | Purpose |
 |---|---|
-| `SyncMeRestic` / `SyncMeRestic-<setId>` | Restic repository password |
+| `SyncMeRestic` / `SyncMeRestic-<setId>` | Restic **backup / check / restore** password |
+| `SyncMeResticAdmin` / `SyncMeResticAdmin-<setId>` | Restic **forget / prune / delete** password (separate CM target; map to restic append-only / distinct keys when the repo supports it) |
 | `SyncMeSmtp` | SMTP password for optional email |
 | `SyncMeShare` / `SyncMeShare-<setId>` | Optional SMB credentials |
+
+Config stores `ResticCredentialName` and `ResticAdminCredentialName` only — never passwords. Missing admin falls back to the backup target with a SECURITY warning until split. “Same as backup” is allowed with an explicit warning and health WARNING. Append-Only Mode remains fail-closed even when an admin key exists.
 
 Operational rules that matter for security:
 

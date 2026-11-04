@@ -17,6 +17,22 @@ function Invoke-SyncMeApiDispatch {
     $res = $Response
     $path = $req.Url.AbsolutePath
 
+            if ($path -eq '/api/session/refresh' -and $req.HttpMethod -eq 'POST') {
+                $script:SyncMeSession = New-SyncMeOperatorSession -ScriptRoot $ScriptRoot -TtlHours 12
+                $script:SyncMeCsrfToken = [string]$script:SyncMeSession.csrfToken
+                $script:SyncMeSessionToken = [string]$script:SyncMeSession.sessionToken
+                try {
+                    Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level AUDIT -Message 'Operator session refreshed' -Fields @{ expiresUtc = $script:SyncMeSession.expiresUtc }
+                } catch { }
+                Write-SyncMeJson @{
+                    ok                = $true
+                    csrfToken         = $script:SyncMeCsrfToken
+                    sessionToken      = $script:SyncMeSessionToken
+                    sessionExpiresUtc = [string]$script:SyncMeSession.expiresUtc
+                } -Response $res
+                return $true
+            }
+
             if ($path -eq '/api/status' -and $req.HttpMethod -eq 'GET') {
                 $qSet = $req.QueryString['setId']
                 $sets = @(Get-SyncMeSetsFromConfigFile -ScriptRoot $ScriptRoot)
@@ -82,6 +98,8 @@ function Invoke-SyncMeApiDispatch {
                 Write-SyncMeJson @{
                     ok                   = $true
                     csrfToken            = $script:SyncMeCsrfToken
+                    sessionToken         = $(if ($script:SyncMeSessionToken) { $script:SyncMeSessionToken } else { '' })
+                    sessionExpiresUtc    = $(if ($script:SyncMeSession -and $script:SyncMeSession.expiresUtc) { [string]$script:SyncMeSession.expiresUtc } else { '' })
                     packageVersion       = (Get-SyncMePackageVersion)
                     updateFeedUrl        = [string]$opts.UpdateFeedUrl
                     monitorConfigured    = (-not [string]::IsNullOrWhiteSpace([string]$opts.MonitorUrl))
@@ -289,6 +307,91 @@ function Invoke-SyncMeApiDispatch {
         return $true
             }
 
+            if ($path -eq '/api/entra' -and $req.HttpMethod -eq 'GET') {
+                try {
+                    $cfg = Get-SyncMeEntraConfig -ScriptRoot $ScriptRoot
+                    $playbook = Get-SyncMeEntraCompromisePlaybook
+                    Write-SyncMeJson @{
+                        ok                      = $true
+                        entraEnabled            = [bool]$cfg.EntraEnabled
+                        tenantId                = [string]$cfg.TenantId
+                        clientId                = [string]$cfg.ClientId
+                        certThumbprint          = [string]$cfg.CertThumbprint
+                        certStore               = [string]$cfg.CertStore
+                        useClientSecret         = [bool]$cfg.UseClientSecret
+                        clientSecretTargetName  = [string]$cfg.ClientSecretTargetName
+                        workloads               = @($cfg.Workloads)
+                        expectedAppRoles        = @($cfg.ExpectedAppRoles)
+                        expectedDelegatedScopes = @($cfg.ExpectedDelegatedScopes)
+                        selectedSiteIds         = @($cfg.SelectedSiteIds)
+                        playbook                = $playbook
+                    } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                return $true
+            }
+
+            if ($path -eq '/api/entra' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    $body = Read-SyncMeBody $req
+                    if ($null -eq $body) { throw 'Request body is required.' }
+                    $propNames = @($body.PSObject.Properties | ForEach-Object { $_.Name })
+                    $saveArgs = @{ ScriptRoot = $ScriptRoot }
+                    if ($propNames -contains 'entraEnabled') { $saveArgs.EntraEnabled = $body.entraEnabled }
+                    if ($propNames -contains 'tenantId') { $saveArgs.TenantId = [string]$body.tenantId }
+                    if ($propNames -contains 'clientId') { $saveArgs.ClientId = [string]$body.clientId }
+                    if ($propNames -contains 'certThumbprint') { $saveArgs.CertThumbprint = [string]$body.certThumbprint }
+                    if ($propNames -contains 'certStore') { $saveArgs.CertStore = [string]$body.certStore }
+                    if ($propNames -contains 'useClientSecret') { $saveArgs.UseClientSecret = $body.useClientSecret }
+                    if ($propNames -contains 'clientSecretTargetName') { $saveArgs.ClientSecretTargetName = [string]$body.clientSecretTargetName }
+                    if ($propNames -contains 'workloads') { $saveArgs.Workloads = $body.workloads }
+                    if ($propNames -contains 'expectedAppRoles') { $saveArgs.ExpectedAppRoles = $body.expectedAppRoles }
+                    if ($propNames -contains 'expectedDelegatedScopes') { $saveArgs.ExpectedDelegatedScopes = $body.expectedDelegatedScopes }
+                    if ($propNames -contains 'selectedSiteIds') { $saveArgs.SelectedSiteIds = $body.selectedSiteIds }
+                    $saved = Save-SyncMeEntraConfig @saveArgs
+                    $health = $null
+                    try { $health = Test-SyncMeEntraHealth -ScriptRoot $ScriptRoot } catch { $health = @{ status = 'warn'; detail = $_.Exception.Message } }
+                    Write-SyncMeJson @{
+                        ok                      = $true
+                        message                 = 'Entra settings saved.'
+                        entraEnabled            = [bool]$saved.EntraEnabled
+                        tenantId                = [string]$saved.TenantId
+                        clientId                = [string]$saved.ClientId
+                        certThumbprint          = [string]$saved.CertThumbprint
+                        certStore               = [string]$saved.CertStore
+                        useClientSecret         = [bool]$saved.UseClientSecret
+                        clientSecretTargetName  = [string]$saved.ClientSecretTargetName
+                        workloads               = @($saved.Workloads)
+                        expectedAppRoles        = @($saved.ExpectedAppRoles)
+                        expectedDelegatedScopes = @($saved.ExpectedDelegatedScopes)
+                        selectedSiteIds         = @($saved.SelectedSiteIds)
+                        healthStatus            = $(if ($health) { [string]$health.status } else { '' })
+                        healthDetail            = $(if ($health) { [string]$health.detail } else { '' })
+                    } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                return $true
+            }
+
+            if ($path -eq '/api/entra/check' -and $req.HttpMethod -eq 'POST') {
+                try {
+                    $health = Test-SyncMeEntraHealth -ScriptRoot $ScriptRoot
+                    Write-SyncMeJson @{
+                        ok           = $true
+                        status       = [string]$health.status
+                        detail       = [string]$health.detail
+                        fingerprint  = $health.fingerprint
+                        sites        = @($health.sites)
+                        playbook     = (Get-SyncMeEntraCompromisePlaybook)
+                    } -Response $res
+                } catch {
+                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
+                }
+                return $true
+            }
+
             if ($path -eq '/api/options/ack-skipped-files' -and $req.HttpMethod -eq 'POST') {
                 try {
                     $body = Read-SyncMeBody $req
@@ -434,6 +537,12 @@ function Invoke-SyncMeApiDispatch {
                 $mode = if ($body.mode) { [string]$body.mode } else { '' }
                 $setId = if ($body.setId) { [string]$body.setId } else { 'set1' }
                 try {
+                    if ($mode -match '(?i)prune') {
+                        Assert-SyncMeDestructiveConfirm -Request $req
+                        try {
+                            Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level AUDIT -Message 'Prune confirmed' -Fields @{ setId = $setId }
+                        } catch { }
+                    }
                     $msg = Start-SyncMeBackupJob -Mode $mode -SetId $setId
                     Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
                 } catch {

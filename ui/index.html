@@ -191,6 +191,44 @@
           <div class="status-line" id="monitorStatus" style="margin-top:10px"></div>
         </div>
 
+        <div class="card">
+          <h2>Microsoft Entra (ModuleEntra)</h2>
+          <p class="sub">Optional Graph identity health for app permissions. Certificate auth is preferred. rclone OneDrive remains the restic cloud backend — ModuleEntra does not replace it.</p>
+          <label class="check"><input id="entraEnabled" type="checkbox" /> Enable Entra health checks</label>
+          <div class="grid two" style="margin-top:10px">
+            <label class="field">Tenant ID
+              <input type="text" id="entraTenantId" autocomplete="off" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+            </label>
+            <label class="field">Application (client) ID
+              <input type="text" id="entraClientId" autocomplete="off" />
+            </label>
+            <label class="field">Certificate thumbprint
+              <input type="text" id="entraCertThumbprint" autocomplete="off" />
+            </label>
+            <label class="field">Certificate store
+              <input type="text" id="entraCertStore" value="CurrentUser\My" />
+            </label>
+            <label class="field">Workloads (comma-separated)
+              <input type="text" id="entraWorkloads" placeholder="SharePoint" />
+              <span class="hint">SharePoint enables Sites.Selected preference (not forced for rclone-only).</span>
+            </label>
+            <label class="field">Expected app roles
+              <input type="text" id="entraExpectedRoles" placeholder="Sites.Selected" />
+            </label>
+            <label class="field">Selected site IDs
+              <input type="text" id="entraSelectedSites" placeholder="site-id-1, site-id-2" />
+            </label>
+            <label class="check" style="align-self:end"><input id="entraUseClientSecret" type="checkbox" /> Use client secret (compat — WARNING)</label>
+          </div>
+          <div class="actions" style="margin-top:10px">
+            <button type="button" class="btn soft" id="btnSaveEntra">Save Entra settings</button>
+            <button type="button" class="btn ghost" id="btnCheckEntra">Run Entra check</button>
+            <button type="button" class="btn ghost" id="btnEntraPlaybook">Credential compromised playbook</button>
+          </div>
+          <div class="status-line" id="entraStatus" style="margin-top:10px"></div>
+          <div id="entraPlaybook" class="sub hidden" style="margin-top:12px;white-space:pre-wrap"></div>
+        </div>
+
         <div class="card restore-workspace">
           <h2>Restore workspace</h2>
           <p class="sub">Snapshots for the active set. Select a row, then <strong>Restore selected</strong> (or Restore latest) to copy files to an empty folder outside the live repository. Never restore into the live repository or source share.</p>

@@ -44,7 +44,7 @@ $include = @(
     'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1',
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md', 'TECHNICAL.md',
-    'RELEASE-NOTES.md', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'VERSION.txt',
+    'RELEASE-NOTES.md', 'SECURITY.md', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'VERSION.txt',
     'Modules', 'ui', 'OfficeAgent', 'RescueKit', 'Scripts', 'docs'
 )
 
@@ -197,7 +197,7 @@ if (-not (Test-Path -LiteralPath $updatesDir)) {
 Copy-Item -LiteralPath $setupZipPath -Destination (Join-Path $updatesDir $setupZipName) -Force
 
 $notes = @"
-SyncMe $pkgVer - Restore verification evidence, signed updates, hardened Host (API shutdown coercion fix), SECRET logs, reparse guards. Includes Phase 4 product completion + foundation + hardening.
+SyncMe $pkgVer - 2.1 Security Criticals: operator session + CSRF, ModuleEntra fingerprint, fleet per-device HMAC, split restic admin credentials. Not Zero Trust complete.
 "@
 $latestUrl = "https://www.syncme.co.za/updates/$setupZipName"
 $latest = [ordered]@{

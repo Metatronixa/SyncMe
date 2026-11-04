@@ -116,6 +116,94 @@ Describe 'Repository canonical keys' {
     }
 }
 
+Describe 'Operator session' {
+    It 'issues a session with csrf and expiry' {
+        $tmp = Join-Path $env:TEMP ('sm-sess-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $tmp | Out-Null
+        try {
+            $s = New-SyncMeOperatorSession -ScriptRoot $tmp -TtlHours 12
+            $s.sessionToken.Length | Should -BeGreaterThan 20
+            $s.csrfToken.Length | Should -BeGreaterThan 20
+            $s.expiresUtc | Should -Not -BeNullOrEmpty
+            (Test-SyncMeOperatorSessionValid -ScriptRoot $tmp -SessionToken $s.sessionToken) | Should -BeTrue
+        } finally {
+            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'rejects missing session token' {
+        $tmp = Join-Path $env:TEMP ('sm-sess-miss-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $tmp | Out-Null
+        try {
+            $null = New-SyncMeOperatorSession -ScriptRoot $tmp -TtlHours 12
+            (Test-SyncMeOperatorSessionValid -ScriptRoot $tmp -SessionToken '') | Should -BeFalse
+            (Test-SyncMeOperatorSessionValid -ScriptRoot $tmp -SessionToken 'wrong-token') | Should -BeFalse
+        } finally {
+            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'fails closed when expired' {
+        $tmp = Join-Path $env:TEMP ('sm-sess-exp-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $tmp | Out-Null
+        try {
+            $s = New-SyncMeOperatorSession -ScriptRoot $tmp -TtlHours 12
+            $path = Join-Path $tmp 'Data\Session\current.json'
+            $raw = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+            $raw.expiresUtc = ([DateTime]::UtcNow.AddHours(-1)).ToString('o')
+            ($raw | ConvertTo-Json -Compress) | Set-Content -LiteralPath $path -Encoding UTF8
+            (Test-SyncMeOperatorSessionValid -ScriptRoot $tmp -SessionToken $s.sessionToken) | Should -BeFalse
+        } finally {
+            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'rotation invalidates previous token' {
+        $tmp = Join-Path $env:TEMP ('sm-sess-rot-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $tmp | Out-Null
+        try {
+            $a = New-SyncMeOperatorSession -ScriptRoot $tmp -TtlHours 12
+            $b = New-SyncMeOperatorSession -ScriptRoot $tmp -TtlHours 12
+            (Test-SyncMeOperatorSessionValid -ScriptRoot $tmp -SessionToken $a.sessionToken) | Should -BeFalse
+            (Test-SyncMeOperatorSessionValid -ScriptRoot $tmp -SessionToken $b.sessionToken) | Should -BeTrue
+        } finally {
+            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'mutating API rejects missing session when required' {
+        $tmp = Join-Path $env:TEMP ('sm-sess-mut-' + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $tmp | Out-Null
+        try {
+            $s = New-SyncMeOperatorSession -ScriptRoot $tmp -TtlHours 12
+            $req = [pscustomobject]@{
+                HttpMethod      = 'POST'
+                Headers         = @{
+                    Host            = '127.0.0.1:17890'
+                    Origin          = 'http://127.0.0.1:17890'
+                    'X-SyncMe-CSRF' = [string]$s.csrfToken
+                }
+                HasEntityBody   = $false
+                ContentType     = ''
+                ContentLength64 = 0
+                Url             = [uri]'http://127.0.0.1:17890/api/schedule'
+            }
+            { Assert-SyncMeMutatingApiRequest -Request $req -ExpectedPort 17890 -CsrfToken $s.csrfToken -ScriptRoot $tmp -RequireSession } | Should -Throw
+            $req.Headers['X-SyncMe-Session'] = [string]$s.sessionToken
+            { Assert-SyncMeMutatingApiRequest -Request $req -ExpectedPort 17890 -CsrfToken $s.csrfToken -ScriptRoot $tmp -RequireSession } | Should -Not -Throw
+        } finally {
+            Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'destructive confirm requires header' {
+        $req = [pscustomobject]@{ Headers = @{} }
+        { Assert-SyncMeDestructiveConfirm -Request $req } | Should -Throw
+        $req2 = [pscustomobject]@{ Headers = @{ 'X-SyncMe-Confirm' = '1' } }
+        { Assert-SyncMeDestructiveConfirm -Request $req2 } | Should -Not -Throw
+    }
+}
+
 Describe 'Elevation DPAPI handoff' {
     It 'protects and unprotects a secret' {
         Add-Type -AssemblyName System.Security

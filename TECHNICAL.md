@@ -1,6 +1,6 @@
 ﻿# SyncMe - Technical Breakdown
 
-**Version:** 1.8.0 (see [`VERSION.txt`](VERSION.txt))  
+**Version:** 1.9.0 (see [`VERSION.txt`](VERSION.txt))  
 **Website:** [www.syncme.co.za](https://www.syncme.co.za)  
 **Copyright Â© 2026 Bradford Lotriet** (`brad@web-zilla.co.za`)
 

@@ -319,8 +319,14 @@ function Remove-SyncMeSnapshot {
     if ([string]::IsNullOrWhiteSpace($SnapshotId) -or $SnapshotId -eq 'latest') {
         throw 'A specific snapshot id is required to delete (not latest).'
     }
-    $resticExe = Get-SyncMeResticExePath -Config $Config -ScriptRoot (Split-Path -Parent $PSScriptRoot)
-    $cred = Get-BackupStoredCredential -TargetName $Config.ResticCredentialName
+    $scriptRoot = Split-Path -Parent $PSScriptRoot
+    $resticExe = Get-SyncMeResticExePath -Config $Config -ScriptRoot $scriptRoot
+    $credTarget = [string]$Config.ResticCredentialName
+    if (Get-Command Get-SyncMeResticDestructiveCredentialTarget -ErrorAction SilentlyContinue) {
+        $meta = Get-SyncMeResticDestructiveCredentialTarget -Config $Config -ScriptRoot $scriptRoot -AllowFallback
+        if ($meta.TargetName) { $credTarget = [string]$meta.TargetName }
+    }
+    $cred = Get-BackupStoredCredential -TargetName $credTarget
     $plain = $cred.GetNetworkCredential().Password
     $env:RESTIC_PASSWORD = $plain
     $env:RESTIC_REPOSITORY = $Config.ResticRepo
