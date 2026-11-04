@@ -14,11 +14,17 @@
   }
 
   function classify(site) {
-    if (site.phase === 'running' || (site.percent > 0 && site.percent < 100 && site.phase !== 'done' && site.phase !== 'error')) {
+    if (site.phase === 'running' || (site.percent > 0 && site.percent < 100 && site.phase !== 'done' && site.phase !== 'error' && site.phase !== 'degraded')) {
       return { cls: 'warn', text: 'Running', bucket: 'running' };
     }
-    if (site.success === false || site.phase === 'error') {
+    if (site.success === false || site.phase === 'error' || site.status === 'failed') {
       return { cls: 'danger', text: 'Failed', bucket: 'failed' };
+    }
+    const exit3 = String(site.exitCode || '') === '3';
+    const degraded = site.status === 'degraded' || site.phase === 'degraded' || exit3 ||
+      ((site.summary || '').indexOf('EXIT3') >= 0);
+    if (degraded) {
+      return { cls: 'warn', text: 'Degraded', bucket: 'attention' };
     }
     const t = Date.parse(site.endedUtc || site.receivedUtc || '');
     if (t && (Date.now() - t) > 2 * 24 * 3600 * 1000) {

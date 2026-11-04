@@ -2,6 +2,9 @@ SyncMe - Recovery Checklist
 Copyright © 2026 Bradford Lotriet (brad@web-zilla.co.za)
 Free to use — keep this credit. See LICENSE.txt
 ============================================
+Full clean-PC procedure: docs\DISASTER-RECOVERY.md
+Support policy: docs\SUPPORT.md
+Windows matrix: docs\SUPPORTED-WINDOWS.md
 
 KEEP THESE SAFE (offline + password manager):
 [ ] restic repository password — REQUIRED for any restore (Credential Manager: SyncMeRestic or SyncMeRestic-<setId>)
@@ -11,6 +14,7 @@ KEEP THESE SAFE (offline + password manager):
 [ ] Windows account password for the SyncMe task (Task Scheduler "run whether logged on")
 [ ] This checklist printed or stored offline
 [ ] Bookmark https://www.syncme.co.za for FAQ / User Guide
+[ ] Copy of SyncMe-Setup-<ver>.zip + SHA256SUMS.txt for the release you trust
 
 VERIFY AFTER BACKUP / BEFORE YOU NEED A REAL DISASTER RESTORE:
 [ ] Run dry run after setup Apply, then a real backup
@@ -52,10 +56,23 @@ OPEN-FILE ISSUES (exit code 3):
 - On source desktops, run OfficeAgent Shadow Copies (elevated)
 - Prefer SourceMode=ShadowCopy in HTML reports
 
+IF THE HOST UI WILL NOT START:
+1. .\RescueKit\SyncMe-Rescue.ps1 -Action Diagnostics
+2. .\RescueKit\SyncMe-Rescue.ps1 -Action ValidateConfig
+3. .\RescueKit\SyncMe-Rescue.ps1 -Action RestorePrevious   (uses Logs\previous-release)
+4. .\RescueKit\SyncMe-Rescue.ps1 -Action SafeMode
+5. Or re-run SyncMe-Setup.cmd from a known-good zip (Config.ps1 is preserved)
+
+CLEAN MACHINE / SECONDARY BACKUP PC:
+1. Install SyncMe-Setup zip → store EXISTING restic password → point set at existing repo
+2. Restore to an EMPTY folder; spot-check files
+3. .\Scripts\Prove-SyncMeDisasterRecovery.ps1 -InstallRoot C:\SyncMe
+4. Re-register Task Scheduler under the dedicated account
+
 NEVER:
 - Commit passwords to Config.ps1 or git
 - Blindly run "restic unlock" while another backup is running
-- Restore into the live restic repository folder
+- Restore into the live restic repository folder, drive roots, or non-empty targets
 
 CREDENTIAL / TASK NAMES:
 - Credential targets: SyncMeRestic, SyncMeSmtp, SyncMeShare

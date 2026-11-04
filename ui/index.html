@@ -160,10 +160,10 @@
 
         <div class="card">
           <h2>Fleet dashboards</h2>
-          <p class="sub">Optional. Register this Backup PC with <strong>LocalOps Console</strong> (SyncMe tab) and/or send heartbeats to <strong>SyncMe Monitor</strong>. Leave blank to disable each target.</p>
+          <p class="sub">Prefer <strong>LocalOps Console</strong> for multi-site backup status (Operations → SyncMe). SyncMe Monitor still works for one dual-write release but is <strong>deprecated</strong>.</p>
 
-          <h3 class="ops-sets-label" style="margin:12px 0 8px">LocalOps Console</h3>
-          <p class="sub" style="margin-bottom:10px">When LocalOps is running on this PC (default <code>http://127.0.0.1:8787</code>), SyncMe registers its install path so the SyncMe tab lights up without editing <code>settings.json</code>.</p>
+          <h3 class="ops-sets-label" style="margin:12px 0 8px">LocalOps Console (same PC)</h3>
+          <p class="sub" style="margin-bottom:10px">Registers this install so LocalOps can open the console / start backup. Loopback only (default <code>http://127.0.0.1:8787</code>). When a shared token is set below, SyncMe also dual-writes fleet heartbeats to LocalOps on this PC.</p>
           <div class="grid two">
             <label class="field">LocalOps URL
               <input type="text" id="localOpsUrl" placeholder="http://127.0.0.1:8787" />
@@ -172,17 +172,17 @@
             <label class="check" style="align-self:end"><input id="localOpsEnabled" type="checkbox" checked /> Enable LocalOps registration</label>
           </div>
 
-          <h3 class="ops-sets-label" style="margin:18px 0 8px">SyncMe Monitor</h3>
-          <p class="sub" style="margin-bottom:10px">Self-hosted fleet dashboard (separate package). Leave URL blank to disable.</p>
+          <h3 class="ops-sets-label" style="margin:18px 0 8px">Fleet heartbeat URL</h3>
+          <p class="sub" style="margin-bottom:10px">Point at <strong>LocalOps</strong> (recommended): e.g. <code>http://OPS-PC:8787</code> — token must match LocalOps <code>syncMeFleetToken</code>. Legacy SyncMe Monitor (<code>:17846</code>) still accepted during cutover.</p>
           <div class="grid two">
-            <label class="field">Monitor URL
-              <input type="text" id="monitorUrl" placeholder="http://monitor-pc:17846" />
+            <label class="field">Monitor / LocalOps URL
+              <input type="text" id="monitorUrl" placeholder="http://ops-pc:8787" />
             </label>
             <label class="field">Site id
               <input type="text" id="monitorSiteId" placeholder="Office-BackupPC" />
             </label>
             <label class="field">Shared token
-              <input type="password" id="monitorToken" autocomplete="off" placeholder="Same token as Monitor" />
+              <input type="password" id="monitorToken" autocomplete="off" placeholder="Same as LocalOps syncMeFleetToken" />
             </label>
           </div>
           <div class="actions" style="margin-top:10px">

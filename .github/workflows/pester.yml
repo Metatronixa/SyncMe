@@ -1,0 +1,20 @@
+name: SyncMe Pester
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  pester:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pester 5
+        shell: pwsh
+        run: |
+          Install-Module Pester -MinimumVersion 5.0.0 -Force -SkipPublisherCheck -Scope CurrentUser
+      - name: Run tests
+        shell: pwsh
+        run: |
+          ./Tests/Run-SyncMeTests.ps1 -Output Detailed

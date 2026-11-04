@@ -270,7 +270,7 @@
           (local disk, NAS, or cloud via <strong>rclone</strong> / OneDrive).
         </p>
         <p class="meta">
-          SyncMe <strong>1.5.0</strong> ·
+          SyncMe <strong>1.8.0</strong> (restore verification evidence, signed updates, hardened Host) ·
           Free to use - keep author credit.
           See <code>LICENSE.txt</code> ·
           Website <a href="https://www.syncme.co.za">www.syncme.co.za</a> ·
@@ -508,16 +508,18 @@ Backup PC - SyncMe console + Task Scheduler
       </section>
 
       <section class="card" id="updates">
-        <h2>In-app updates (1.4.0+)</h2>
+        <h2>In-app updates (1.4.0+ / signed feed 1.7+)</h2>
         <p>
           When the console opens, SyncMe checks <code>https://www.syncme.co.za/updates/latest.json</code> over HTTPS
-          (also Operations -> <strong>Check for updates</strong>).
+          (also Operations -> <strong>Check for updates</strong>). From <strong>1.7.0+</strong> the feed is
+          <strong>RSA-signed</strong>; the console shows when the package signature verified.
         </p>
         <ol>
           <li>If a newer version is listed, a popup shows <strong>Update available</strong> (current -> new).</li>
           <li>Choose <strong>Install</strong> or <strong>Later</strong>.</li>
-          <li>Install downloads the setup zip, verifies <strong>SHA-256</strong>, copies <code>Config.ps1</code> to a timestamped
-              <code>Config.ps1.bak-...</code>, then applies files <strong>without overwriting</strong> your live <code>Config.ps1</code>.</li>
+          <li>Install downloads the setup zip, verifies <strong>SHA-256</strong> and signature, copies <code>Config.ps1</code> to a timestamped
+              <code>Config.ps1.bak-...</code>, then applies files <strong>without overwriting</strong> your live <code>Config.ps1</code>
+              (with previous-release rollback if needed).</li>
           <li>SyncMe restarts when finished. Your backup sets stay intact.</li>
         </ol>
         <p>You can also upgrade manually with <code>SyncMe-Setup.cmd</code> from a release zip - existing Config is preserved the same way.</p>
@@ -537,7 +539,7 @@ Backup PC - SyncMe console + Task Scheduler
         <p>
           Separate self-hosted package for a <strong>fleet status dashboard</strong> (HTML + local host on Windows).
           Not part of the main SyncMe zip and not meant for public web hosting.
-          Download <strong>SyncMe-Monitor-Setup-1.5.0.zip</strong> from
+          Download <strong>SyncMe-Monitor-Setup-1.8.0.zip</strong> (same line as SyncMe Setup) from
           <a href="https://github.com/Metatronixa/SyncMe/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a>
           or <a href="https://www.syncme.co.za" target="_blank" rel="noopener noreferrer">www.syncme.co.za</a> Downloads.
         </p>
@@ -559,7 +561,7 @@ Backup PC - SyncMe console + Task Scheduler
           <li>Optional: Operations -> <strong>More...</strong> -> <strong>Export Rescue Kit</strong> for a printable recovery sheet (repo path + Credential Manager target - password stays in your vault).</li>
         </ol>
         <div class="callout">
-          <strong>Retention &amp; integrity (1.3.0+ / 1.5.0)</strong>
+          <strong>Retention &amp; integrity (1.3.0+ / 1.8.0)</strong>
           Dashboard -> <strong>Retention &amp; integrity</strong>: keep policies, optional <strong>Append-Only Mode</strong>, optional <strong>Fail job if restore drill fails</strong> (CRITICAL when enabled), and optional pre/post backup script paths (must be non-interactive for Task Scheduler).
           Weekly data checks run a restore drill (`restic dump` of up to three random files). Default is advisory (PASS / FAIL / SKIP without failing the job). Restic exit&nbsp;3 (skipped files) shows a persistent console banner until Acknowledge.
           Operations -> More -> <strong>Export / Import migration package</strong> for a secondary Backup PC (AES-encrypted).

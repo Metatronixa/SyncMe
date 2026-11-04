@@ -44,8 +44,8 @@ $include = @(
     'Register-BackupTask.ps1', 'SyncMe-Watchdog.ps1',
     'Deploy-SyncMe.ps1',
     'START-HERE.txt', 'RecoveryChecklist.txt', 'UserGuide.html', 'README.md', 'TECHNICAL.md',
-    'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'VERSION.txt',
-    'Modules', 'ui', 'OfficeAgent'
+    'RELEASE-NOTES.md', 'LICENSE.txt', 'THIRD-PARTY-NOTICES.txt', 'VERSION.txt',
+    'Modules', 'ui', 'OfficeAgent', 'RescueKit', 'Scripts', 'docs'
 )
 
 foreach ($item in $include) {
@@ -91,11 +91,15 @@ SyncMe setup package $pkgVer
 ====================
 1. Double-click SyncMe-Setup.cmd (Run as administrator recommended on Windows Server).
 2. Files unpack to $InstallDir (existing Config.ps1 is kept if present).
-3. SyncMe opens the browser wizard.
+3. SyncMe opens the browser wizard at http://127.0.0.1:17845/
 4. Use a dedicated Windows account for unattended backups; enter that password in Schedule.
 5. Each backup set needs its own restic repository path (dedicated subfolder - never a drive root).
+6. After first backup: restore to an EMPTY test folder (Operations). Save the restic password offline.
 
-Passwords stay in Windows Credential Manager. See START-HERE.txt, LICENSE.txt, and THIRD-PARTY-NOTICES.txt after install.
+Updates: console checks the signed HTTPS feed. Manual zip: verify SHA256SUMS.txt.
+Rescue: RescueKit\SyncMe-Rescue.ps1 | docs\DISASTER-RECOVERY.md | Scripts\Prove-SyncMeDisasterRecovery.ps1
+
+Passwords stay in Windows Credential Manager. See START-HERE.txt, LICENSE.txt, SUPPORT.md, and THIRD-PARTY-NOTICES.txt after install.
 Confirm VERSION.txt shows $pkgVer after install.
 "@
 Set-Content -Path (Join-Path $setupDir 'START-HERE.txt') -Value $startHere.Trim() -Encoding UTF8
@@ -159,7 +163,7 @@ echo.
   "Clear-SyncMeNestedInstallJunk -InstallRoot `$install;" ^
   "Remove-Item -LiteralPath `$tmpExtract -Recurse -Force -ErrorAction SilentlyContinue;" ^
   "if (`$preserve -and `$tmp -and (Test-Path -LiteralPath `$tmp)) { Copy-Item -LiteralPath `$tmp -Destination `$cfg -Force; Remove-Item -LiteralPath `$tmp -Force -ErrorAction SilentlyContinue };" ^
-  "foreach (`$req in @('SyncMe-Host.ps1','Modules\Update.ps1','Modules\MonitorClient.ps1','Modules\InstallMerge.ps1','ui\js\app.js')) { if (-not (Test-Path -LiteralPath (Join-Path `$install `$req))) { throw ('Setup incomplete: missing ' + `$req + ' under ' + `$install) } };" ^
+  "foreach (`$req in @('SyncMe-Host.ps1','Modules\Update.ps1','Modules\MonitorClient.ps1','Modules\InstallMerge.ps1','Modules\Security.ps1','Modules\Jobs.ps1','Modules\Router.ps1','Modules\ProcessRunner.ps1','Modules\Http.ps1','Modules\Controllers\ApiDispatch.ps1','Modules\UpdatePublicKey.xml','ui\js\app.js')) { if (-not (Test-Path -LiteralPath (Join-Path `$install `$req))) { throw ('Setup incomplete: missing ' + `$req + ' under ' + `$install) } };" ^
   "Write-Host ('Installed to ' + `$install) -ForegroundColor Green"
 
 if errorlevel 1 (
@@ -193,15 +197,32 @@ if (-not (Test-Path -LiteralPath $updatesDir)) {
 Copy-Item -LiteralPath $setupZipPath -Destination (Join-Path $updatesDir $setupZipName) -Force
 
 $notes = @"
-SyncMe $pkgVer - dark slate+cyan ops theme, LocalOps Console SyncMe-tab registration (loopback), Monitor XSS-safe rendering, Fleet dashboards UI. Optional Monitor package remains separate.
+SyncMe $pkgVer - Restore verification evidence, signed updates, hardened Host (API shutdown coercion fix), SECRET logs, reparse guards. Includes Phase 4 product completion + foundation + hardening.
 "@
+$latestUrl = "https://www.syncme.co.za/updates/$setupZipName"
 $latest = [ordered]@{
     version = $pkgVer
     file    = $setupZipName
     sha256  = $sha
     notes   = $notes.Trim()
-    url     = "https://www.syncme.co.za/updates/$setupZipName"
+    url     = $latestUrl
 }
+
+# Sign manifest when private key is available (Tools\syncme-update-private.xml or SYNCME_UPDATE_KEY_XML).
+$updateMod = Join-Path $root 'Modules\Update.ps1'
+. $updateMod
+$privPath = Join-Path $root 'Tools\syncme-update-private.xml'
+if (-not [string]::IsNullOrWhiteSpace($env:SYNCME_UPDATE_KEY_XML) -and (Test-Path -LiteralPath $env:SYNCME_UPDATE_KEY_XML)) {
+    $privPath = $env:SYNCME_UPDATE_KEY_XML
+}
+if (Test-Path -LiteralPath $privPath) {
+    $sig = New-SyncMeUpdateManifestSignature -PrivateKeyXmlPath $privPath -Version $pkgVer -File $setupZipName -Sha256 $sha -Url $latestUrl
+    $latest['signature'] = $sig
+    Write-Host "Signed update manifest with $privPath" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: No update signing key at Tools\syncme-update-private.xml — latest.json is UNSIGNED." -ForegroundColor Yellow
+}
+
 $latestJson = ($latest | ConvertTo-Json -Depth 4) + "`r`n"
 $latestPath = Join-Path $updatesDir 'latest.json'
 [IO.File]::WriteAllText($latestPath, $latestJson, (New-Object System.Text.UTF8Encoding $false))
@@ -243,24 +264,49 @@ Copy-Item -LiteralPath $setupZipPath -Destination (Join-Path $releaseDir $setupZ
 if (Test-Path -LiteralPath $monitorZipPath) {
     Copy-Item -LiteralPath $monitorZipPath -Destination (Join-Path $releaseDir $monitorZipName) -Force
 }
+
+# Checksums for the release folder (+ updates feed)
+$sums = New-Object System.Collections.Generic.List[string]
+$sums.Add("$sha  $setupZipName")
+$monitorSha = ''
+if (Test-Path -LiteralPath $monitorZipPath) {
+    $monitorSha = (Get-FileHash -LiteralPath $monitorZipPath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $sums.Add("$monitorSha  $monitorZipName")
+}
+$sumsText = ($sums -join "`r`n") + "`r`n"
+[IO.File]::WriteAllText((Join-Path $releaseDir 'SHA256SUMS.txt'), $sumsText, (New-Object System.Text.UTF8Encoding $false))
+[IO.File]::WriteAllText((Join-Path $updatesDir 'SHA256SUMS.txt'), $sumsText, (New-Object System.Text.UTF8Encoding $false))
+if (Test-Path -LiteralPath (Join-Path $root 'website')) {
+    $websiteUpdates = Join-Path $root 'website\updates'
+    if (-not (Test-Path -LiteralPath $websiteUpdates)) { New-Item -ItemType Directory -Path $websiteUpdates -Force | Out-Null }
+    [IO.File]::WriteAllText((Join-Path $websiteUpdates 'SHA256SUMS.txt'), $sumsText, (New-Object System.Text.UTF8Encoding $false))
+}
+Copy-Item -LiteralPath (Join-Path $root 'RELEASE-NOTES.md') -Destination (Join-Path $releaseDir 'RELEASE-NOTES.md') -Force -ErrorAction SilentlyContinue
+Copy-Item -LiteralPath (Join-Path $root 'docs\RELEASE-CHECKLIST.md') -Destination (Join-Path $releaseDir 'RELEASE-CHECKLIST.md') -Force -ErrorAction SilentlyContinue
+
+$signedNote = if (-not [string]::IsNullOrWhiteSpace([string]$latest['signature'])) { 'yes' } else { 'NO - missing private key' }
 $releaseStart = @"
 SyncMe Release $pkgVer
 ======================
 This folder contains both customer packages:
 
 1) $setupZipName
-   Backup PC console (wizard, backups, restore, schedule, HTTPS updates).
+   Backup PC console (wizard, backups, restore, schedule, signed HTTPS updates).
    Unzip, then run SyncMe-Setup.cmd (admin recommended on Windows Server).
+   Verify: SHA256SUMS.txt
 
-2) $monitorZipName  (optional add-on)
-   Self-hosted fleet dashboard for LAN / Tailscale.
-   Unzip to a Monitor PC, edit Config\Monitor.json token, run SyncMe-Monitor.bat.
-   On each Backup PC: Operations → Monitor add-on → Save (sends a test ping).
+2) $monitorZipName  (DEPRECATED optional add-on)
+   Prefer LocalOps Console fleet ingest (Operations → SyncMe). This zip is still built for dual-write cutover.
+   Legacy: unzip to a Monitor PC, edit Config\Monitor.json token, run SyncMe-Monitor.bat.
 
-Update feed (website): upload dist\updates\latest.json, $setupZipName, and $monitorZipName
-to https://www.syncme.co.za/updates/ (site Downloads section uses the same folder).
+Update feed (website): upload dist\updates\latest.json, SHA256SUMS.txt, $setupZipName, and $monitorZipName
+to https://www.syncme.co.za/updates/
 
+Manifest signature present: $signedNote
 SHA256 ($setupZipName): $sha
+$(if ($monitorSha) { "SHA256 ($monitorZipName): $monitorSha" } else { '' })
+
+Also see RELEASE-NOTES.md and RELEASE-CHECKLIST.md in this folder.
 "@
 Set-Content -Path (Join-Path $releaseDir 'START-HERE.txt') -Value $releaseStart.Trim() -Encoding UTF8
 

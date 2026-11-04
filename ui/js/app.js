@@ -107,6 +107,8 @@
   const params = new URLSearchParams(location.search);
   const forceSetup = params.get('view') === 'setup';
   const forceConsole = params.get('view') === 'console';
+  // Marketing / docs captures: ?shot=splash|setup|dash|ops (skips or holds splash as needed)
+  const shotMode = (params.get('shot') || '').toLowerCase();
 
   function setStatus(el, text, kind) {
     if (!el) return;
@@ -178,11 +180,19 @@
     el.className = 'stat' + (kind ? ' ' + kind : '');
   }
 
+  let csrfToken = '';
+
   async function api(path, opts) {
-    const res = await fetch(path, Object.assign({
-      headers: { 'Content-Type': 'application/json' }
-    }, opts || {}));
+    const o = Object.assign({}, opts || {});
+    const method = (o.method || 'GET').toUpperCase();
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, o.headers || {});
+    if (method !== 'GET' && method !== 'HEAD' && csrfToken) {
+      headers['X-SyncMe-CSRF'] = csrfToken;
+    }
+    o.headers = headers;
+    const res = await fetch(path, o);
     const data = await res.json().catch(() => ({}));
+    if (data && data.csrfToken) csrfToken = data.csrfToken;
     if (!res.ok || data.ok === false) {
       throw new Error(data.message || ('Request failed: ' + res.status));
     }
@@ -2178,11 +2188,15 @@
     const notes = $('updateModalNotes');
     const status = $('updateModalStatus');
     if (summary) {
-      summary.textContent = 'SyncMe ' + (info.currentVersion || '?') + ' → ' + (info.version || '?');
+      const sig = info.signed ? ' · signature verified' : '';
+      summary.textContent = 'SyncMe ' + (info.currentVersion || '?') + ' → ' + (info.version || '?') + sig;
     }
     if (notes) {
-      notes.textContent = info.notes ? String(info.notes) : '';
-      notes.classList.toggle('hidden', !info.notes);
+      const extra = info.signed
+        ? '\n\nThis package was verified with SyncMe’s update signing key (SHA-256 + signature). Config.ps1 is preserved; previous-release rollback is kept under Logs.'
+        : '\n\nConfig.ps1 is preserved. Prefer official HTTPS feeds with a signature when available.';
+      notes.textContent = (info.notes ? String(info.notes) : '') + extra;
+      notes.classList.toggle('hidden', false);
     }
     if (status) setStatus(status, '', '');
     openModal('modalUpdate');
@@ -2224,11 +2238,11 @@
     const btn = $('btnInstallUpdate');
     try {
       if (btn) btn.disabled = true;
-      if (status) setStatus(status, 'Downloading and verifying… SyncMe will restart.', 'warn');
+      if (status) setStatus(status, 'Downloading and verifying (hash' + (state.updateInfo && state.updateInfo.signed ? ' + signature' : '') + ')… SyncMe will restart.', 'warn');
       const d = await api('/api/update/install', { method: 'POST', body: '{}' });
       if (status) setStatus(status, d.message || 'Installing…', 'ok');
       setTimeout(() => {
-        alert((d.message || 'Update started.') + '\n\nSyncMe will close and reopen. Your Config.ps1 was backed up.');
+        alert((d.message || 'Update started.') + '\n\nSyncMe will close and reopen. Config.ps1 is preserved. If health checks fail, SyncMe rolls back Logs\\previous-release automatically.');
       }, 200);
     } catch (e) {
       if (status) setStatus(status, e.message, 'danger');
@@ -2284,27 +2298,42 @@
   async function boot() {
     try {
       const d = await api('/api/status');
-      if (forceSetup || (!d.configured && !forceConsole)) {
+      const wantSetup = shotMode === 'setup' || forceSetup || (!d.configured && !forceConsole && shotMode !== 'dash' && shotMode !== 'ops');
+      const wantOps = shotMode === 'ops';
+      if (wantSetup) {
         renderSteps();
         renderSetupBody();
         show('view-setup');
         setTop('Needs setup', 'warn');
+      } else if (wantOps) {
+        show('view-ops');
+        await loadDash();
+        if (typeof refreshSnaps === 'function') refreshSnaps();
+        loadMonitorOptions();
       } else {
         show('view-dash');
         await loadDash();
         loadMonitorOptions();
-        checkForUpdates({ quiet: true });
+        if (!shotMode) checkForUpdates({ quiet: true });
       }
     } catch (e) {
       setTop('Host error', 'danger');
-      alert('Cannot reach SyncMe host: ' + e.message);
+      // Never alert() during marketing/docs shot captures; avoid popup storms if host is down.
+      if (!shotMode) {
+        console.error('Cannot reach SyncMe host:', e.message || e);
+        setTop('Cannot reach host — is SyncMe running?', 'danger');
+      }
     }
   }
 
   function runSplashThenBoot() {
     const splash = $('splash');
-    const holdMs = 2200;
-    const fadeMs = 600;
+    if (shotMode === 'splash') {
+      // Hold splash indefinitely for docs/marketing screenshots
+      return;
+    }
+    const holdMs = shotMode ? 0 : 2200;
+    const fadeMs = shotMode ? 0 : 600;
     window.setTimeout(() => {
       if (splash) {
         splash.classList.add('fade-out');

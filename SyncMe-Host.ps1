@@ -17,9 +17,17 @@ $UiRoot = Join-Path $ScriptRoot 'ui'
 $utf8Bom = New-Object System.Text.UTF8Encoding $true
 
 . (Join-Path $ScriptRoot 'Modules\Common.ps1')
+. (Join-Path $ScriptRoot 'Modules\Security.ps1')
+. (Join-Path $ScriptRoot 'Modules\Http.ps1')
+. (Join-Path $ScriptRoot 'Modules\Router.ps1')
+. (Join-Path $ScriptRoot 'Modules\ProcessRunner.ps1')
+. (Join-Path $ScriptRoot 'Modules\Logging.ps1')
+. (Join-Path $ScriptRoot 'Modules\Health.ps1')
+. (Join-Path $ScriptRoot 'Modules\ConfigMigrate.ps1')
 . (Join-Path $ScriptRoot 'Modules\Notify.ps1')
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
+. (Join-Path $ScriptRoot 'Modules\Jobs.ps1')
 . (Join-Path $ScriptRoot 'Modules\Report.ps1')
 foreach ($mod in @('Update.ps1', 'MonitorClient.ps1', 'LocalOpsClient.ps1', 'Migrate.ps1')) {
     $modPath = Join-Path $ScriptRoot ('Modules\' + $mod)
@@ -28,6 +36,8 @@ foreach ($mod in @('Update.ps1', 'MonitorClient.ps1', 'LocalOpsClient.ps1', 'Mig
     }
     . $modPath
 }
+. (Join-Path $ScriptRoot 'Modules\Controllers\ApiDispatch.ps1')
+. (Join-Path $ScriptRoot 'Modules\Controllers\RegisterRoutes.ps1')
 
 $script:BackupJob = @{
     Running  = $false
@@ -83,29 +93,6 @@ $script:MountJob = @{
 }
 $script:ResticMountProbe = $null
 
-function Write-SyncMeJson {
-    param($Object, [int]$StatusCode = 200, $Response)
-    $json = $Object | ConvertTo-Json -Depth 8 -Compress
-    $bytes = [Text.Encoding]::UTF8.GetBytes($json)
-    $Response.StatusCode = $StatusCode
-    $Response.ContentType = 'application/json; charset=utf-8'
-    $Response.ContentLength64 = $bytes.Length
-    $Response.OutputStream.Write($bytes, 0, $bytes.Length)
-    $Response.OutputStream.Close()
-}
-
-function Read-SyncMeBody {
-    param($Request)
-    if (-not $Request.HasEntityBody) { return $null }
-    $reader = New-Object IO.StreamReader($Request.InputStream, $Request.ContentEncoding)
-    try {
-        $raw = $reader.ReadToEnd()
-        if ([string]::IsNullOrWhiteSpace($raw)) { return $null }
-        return $raw | ConvertFrom-Json
-    } finally {
-        $reader.Close()
-    }
-}
 
 function Get-SyncMeConfigOrNull {
     return Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId ''
@@ -226,13 +213,77 @@ function Install-SyncMeRestic {
 }
 
 function Set-CmdKeyGeneric {
+    <#
+      Stores a GENERIC credential via CredWrite (no password on process argv).
+    #>
     param([string]$Target, [string]$User, [string]$Password)
-    $existing = cmdkey /list 2>&1 | Out-String
-    if ($existing -match [regex]::Escape($Target)) {
-        cmdkey /delete:$Target 2>$null | Out-Null
+    if ([string]::IsNullOrWhiteSpace($Target)) { throw 'Credential target name is required.' }
+    if ($null -eq $Password) { $Password = '' }
+
+    if (-not ('NativeCredWrite' -as [type])) {
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+
+public static class NativeCredWrite {
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    public struct CREDENTIAL {
+        public uint Flags;
+        public uint Type;
+        public string TargetName;
+        public string Comment;
+        public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
+        public uint CredentialBlobSize;
+        public IntPtr CredentialBlob;
+        public uint Persist;
+        public uint AttributeCount;
+        public IntPtr Attributes;
+        public string TargetAlias;
+        public string UserName;
     }
-    $result = cmdkey /generic:$Target /user:$User /pass:$Password 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "cmdkey failed for ${Target}: $result" }
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool CredWrite(ref CREDENTIAL userCredential, uint flags);
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    public static extern bool CredDelete(string target, uint type, uint flags);
+
+    public static void WriteGeneric(string target, string user, string password) {
+        byte[] blob = System.Text.Encoding.Unicode.GetBytes(password ?? "");
+        IntPtr blobPtr = IntPtr.Zero;
+        try {
+            blobPtr = Marshal.AllocHGlobal(blob.Length);
+            if (blob.Length > 0) Marshal.Copy(blob, 0, blobPtr, blob.Length);
+            CREDENTIAL cred = new CREDENTIAL();
+            cred.Flags = 0;
+            cred.Type = 1; // CRED_TYPE_GENERIC
+            cred.TargetName = target;
+            cred.Comment = "SyncMe";
+            cred.CredentialBlobSize = (uint)blob.Length;
+            cred.CredentialBlob = blobPtr;
+            cred.Persist = 2; // CRED_PERSIST_LOCAL_MACHINE-ish: 2 = local machine for services; use ENTERPRISE=3 or LOCAL_MACHINE=2; SESSION=1. Prefer LOCAL_MACHINE (2) for scheduled tasks.
+            cred.AttributeCount = 0;
+            cred.Attributes = IntPtr.Zero;
+            cred.TargetAlias = null;
+            cred.UserName = user ?? "";
+            if (!CredWrite(ref cred, 0)) {
+                int err = Marshal.GetLastWin32Error();
+                throw new InvalidOperationException("CredWrite failed for '" + target + "' (Win32 " + err + ").");
+            }
+        } finally {
+            if (blobPtr != IntPtr.Zero) Marshal.FreeHGlobal(blobPtr);
+            if (blob != null && blob.Length > 0) Array.Clear(blob, 0, blob.Length);
+        }
+    }
+}
+"@
+    }
+
+    try {
+        [NativeCredWrite]::WriteGeneric($Target, $User, $Password)
+    } catch {
+        throw "Failed to store credential '$Target': $($_.Exception.Message)"
+    }
 }
 
 function Escape-Sq {
@@ -404,22 +455,13 @@ function Invoke-SyncMeRclone {
     if (-not (Test-Path -LiteralPath $conf)) {
         '' | Set-Content -LiteralPath $conf -Encoding UTF8
     }
-    $outFile = Join-Path ([IO.Path]::GetTempPath()) ('syncme-rclone-out-' + [guid]::NewGuid().ToString('n') + '.txt')
-    $errFile = Join-Path ([IO.Path]::GetTempPath()) ('syncme-rclone-err-' + [guid]::NewGuid().ToString('n') + '.txt')
-    try {
-        $p = Start-Process -FilePath $rc.Path -ArgumentList (@('--config', $conf) + $Arguments) `
-            -NoNewWindow -PassThru -Wait -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-        $stdout = if (Test-Path $outFile) { Get-Content $outFile -Raw -ErrorAction SilentlyContinue } else { '' }
-        $stderr = if (Test-Path $errFile) { Get-Content $errFile -Raw -ErrorAction SilentlyContinue } else { '' }
-        return @{
-            ExitCode = $p.ExitCode
-            StdOut   = if ($stdout) { $stdout.Trim() } else { '' }
-            StdErr   = if ($stderr) { $stderr.Trim() } else { '' }
-            Path     = $rc.Path
-            Config   = $conf
-        }
-    } finally {
-        Remove-Item $outFile, $errFile -Force -ErrorAction SilentlyContinue
+    $r = Invoke-SyncMeExternalProcess -FilePath $rc.Path -ArgumentList (@('--config', $conf) + $Arguments) -NoWindow
+    return @{
+        ExitCode = $r.ExitCode
+        StdOut   = $r.StdOut
+        StdErr   = $r.StdErr
+        Path     = $rc.Path
+        Config   = $conf
     }
 }
 
@@ -1060,11 +1102,20 @@ function Start-SyncMeRestoreJob {
     if ($bakStatus.running) {
         throw 'Cannot restore while a backup is running (restic repository lock). Wait for the backup to finish.'
     }
+    Assert-SyncMeCanMutateRepository -ScriptRoot $ScriptRoot -Config $Config -Operation 'restore'
 
     $uncCheck = Test-SyncMeSnapshotHasUncPaths -Config $Config -Snapshot $Snapshot
     if ($uncCheck.HasUnc) { throw $uncCheck.Message }
 
-    $safe = Test-SyncMeRestoreTargetSafe -TargetPath $TargetPath -ResticRepo $Config.ResticRepo
+    $srcPaths = @()
+    if ($Config.PSObject.Properties['SourcePaths'] -and $Config.SourcePaths) {
+        $srcPaths = @($Config.SourcePaths)
+    } elseif ($Config.PSObject.Properties['SourcePath'] -and $Config.SourcePath) {
+        $srcPaths = @([string]$Config.SourcePath)
+    }
+    $arch = if ($Config.PSObject.Properties['ArchivePath']) { [string]$Config.ArchivePath } else { '' }
+    $safe = Test-SyncMeRestoreTargetSafe -TargetPath $TargetPath -ResticRepo $Config.ResticRepo `
+        -SourcePaths $srcPaths -ScriptRoot $ScriptRoot -ArchivePath $arch
     if (-not $safe.Ok) { throw $safe.Message }
 
     $statusDir = Join-Path $ScriptRoot ("Logs\sets\$SetId")
@@ -1082,7 +1133,8 @@ function Start-SyncMeRestoreJob {
         '-StatusFile', $statusFile
     )
     if (-not [string]::IsNullOrWhiteSpace($Include)) {
-        $args += @('-Include', $Include.Trim())
+        $inc = Assert-SyncMeRestoreInclude -Include $Include
+        $args += @('-Include', $inc)
     }
     $p = Start-Process -FilePath 'powershell.exe' -ArgumentList $args -PassThru -WindowStyle Hidden
     $script:RestoreJob = @{
@@ -1496,6 +1548,17 @@ function Invoke-SyncMeSetupApply {
     }
     if (-not $replaced) { $merged.Add($newSet) | Out-Null }
 
+    $wantRepo = Get-SyncMeCanonicalRepoKey -ResticRepo $resticRepo
+    if ($wantRepo) {
+        foreach ($s in @($merged)) {
+            if ($s.Id -eq $setId) { continue }
+            $other = Get-SyncMeCanonicalRepoKey -ResticRepo ([string]$s.ResticRepo)
+            if ($other -and $other -eq $wantRepo) {
+                throw "Repository path is already used by set '$($s.Id)'. Each backup set needs its own restic repository."
+            }
+        }
+    }
+
     Write-SyncMeSetsConfigFile -Sets @($merged)
 
     $taskName = if ($setId -eq 'set1') { 'SyncMe-Backup' } else { "SyncMe-Backup-$setId" }
@@ -1616,7 +1679,14 @@ function Start-SyncMeBackupJob {
     if ($script:BackupJob.Running -and $script:BackupJob.Process -and -not $script:BackupJob.Process.HasExited) {
         throw 'A backup is already running.'
     }
+    Update-SyncMeRestoreJob
+    if ($script:RestoreJob.Running -and $script:RestoreJob.Process -and -not $script:RestoreJob.Process.HasExited) {
+        throw 'Cannot start backup while a restore is running.'
+    }
     $set = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $SetId
+    if (-not $set) { throw "Unknown backup set: $SetId" }
+    Assert-SyncMeUniqueRepositories -ScriptRoot $ScriptRoot
+    Assert-SyncMeCanMutateRepository -ScriptRoot $ScriptRoot -Config $set -Operation 'backup'
     if ($set -and $set.EnableWakeOnLan -and $set.WakeMacAddress) {
         try { Send-SyncMeWakeOnLan -MacAddress ([string]$set.WakeMacAddress) | Out-Null } catch { }
         Start-Sleep -Seconds 8
@@ -1647,6 +1717,10 @@ function Start-SyncMeBackupJob {
         Process  = $p
         SetId    = $SetId
     }
+    try {
+        Write-SyncMeJobState -ScriptRoot $ScriptRoot -JobName 'backup' -Kind 'backup' -SetId $SetId -Phase 'starting' -Message $script:BackupJob.Message -Extra @{ pid = $p.Id; mode = $Mode }
+        Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level INFO -Message 'Backup job started' -Fields @{ setId = $SetId; mode = $Mode; pid = $p.Id }
+    } catch { }
     return $script:BackupJob.Message
 }
 
@@ -1788,6 +1862,19 @@ function Send-StaticFile {
 }
 
 # --- listener ---
+$script:SyncMeCsrfToken = New-SyncMeCsrfToken
+try {
+    $mig = Invoke-SyncMeConfigMigrate -ScriptRoot $ScriptRoot -TargetVersion 2
+    if (-not $mig.Skipped) {
+        Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level INFO -Message 'Config migration applied' -Fields @{ actions = ($mig.Actions -join '; ') }
+        Write-Host ("  Config schema migrated to v{0}" -f $mig.To) -ForegroundColor DarkCyan
+    }
+} catch {
+    Write-Host ("  Config migration warning: " + $_.Exception.Message) -ForegroundColor Yellow
+}
+Register-SyncMeControllerRoutes -ScriptRoot $ScriptRoot -Port $Port -CsrfToken $script:SyncMeCsrfToken
+Write-SyncMeStructuredLog -ScriptRoot $ScriptRoot -Level INFO -Message 'SyncMe host starting' -Fields @{ port = $Port }
+
 $url = "http://127.0.0.1:$Port/"
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add($url)
@@ -1815,13 +1902,28 @@ if (-not $NoBrowser) {
     Start-Process $openUrl
 }
 
+# LocalOps register is optional — never let network/module failures stop the listener.
 try {
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     $null = Send-SyncMeLocalOpsRegister -ScriptRoot $ScriptRoot
-} catch { }
+} catch {
+    Write-Host ("  LocalOps register skipped: " + $_.Exception.Message) -ForegroundColor DarkYellow
+} finally {
+    if ($null -ne $prevEap) { $ErrorActionPreference = $prevEap }
+}
 
+# Listener loop must not inherit Stop — one failed helper must not tear down the host.
+$ErrorActionPreference = 'Continue'
 try {
     while ($listener.IsListening) {
-        $ctx = $listener.GetContext()
+        $ctx = $null
+        try {
+            $ctx = $listener.GetContext()
+        } catch {
+            Start-Sleep -Milliseconds 200
+            continue
+        }
         $req = $ctx.Request
         $res = $ctx.Response
         try {
@@ -1837,996 +1939,36 @@ try {
                 continue
             }
 
-            if ($path -eq '/api/status' -and $req.HttpMethod -eq 'GET') {
-                $qSet = $req.QueryString['setId']
-                $sets = @(Get-SyncMeSetsFromConfigFile -ScriptRoot $ScriptRoot)
-                $cfg = if ($qSet) { Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $qSet } else { Get-SyncMeConfigOrNull }
-                $netMode = if ($cfg -and $cfg.NetworkMode) { [string]$cfg.NetworkMode } else { 'both' }
-                if ($netMode -eq 'lan') {
-                    $ts = @{ Ok = $true; Message = 'Skipped (LAN-only set)'; Detail = 'NetworkMode=lan' }
-                } else {
-                    $ts = Test-MonarchTailscale
-                }
-                $restic = Get-ResticOnPath
-                $stamp = ''
-                if ($cfg -and $cfg.LastSuccessStampFile) {
-                    $stampPath = Join-Path $ScriptRoot $cfg.LastSuccessStampFile
-                    if (Test-Path $stampPath) { $stamp = (Get-Content $stampPath -Raw).Trim() }
-                }
-                if (-not $stamp) {
-                    $stampPath = Join-Path $ScriptRoot 'Logs\last-success-utc.txt'
-                    if (Test-Path $stampPath) { $stamp = (Get-Content $stampPath -Raw).Trim() }
-                }
-                $lockAlive = $false
-                $lockRel = if ($cfg -and $cfg.BackupLockFile) { $cfg.BackupLockFile } else { 'Logs\backup.lock' }
-                $lockPath = Join-Path $ScriptRoot $lockRel
-                if (Test-Path $lockPath) {
-                    $raw = Get-Content $lockPath -ErrorAction SilentlyContinue
-                    foreach ($line in $raw) {
-                        if ($line -match '^PID=(\d+)$') {
-                            $lockAlive = [bool](Get-Process -Id ([int]$Matches[1]) -ErrorAction SilentlyContinue)
-                        }
-                    }
-                }
-                $defaultTarget = Join-Path $ScriptRoot ('Restores\' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
-                if ($cfg) {
-                    try { $defaultTarget = Get-SyncMeDefaultRestoreTarget -Config $cfg -ScriptRoot $ScriptRoot } catch { }
-                }
-                $setSummaries = @($sets | ForEach-Object {
-                    @{
-                        id                   = $_.Id
-                        displayName          = $(if ($_.DisplayName) { $_.DisplayName } else { $_.Id })
-                        runTime              = $(if ($_.RunTime) { $_.RunTime } else { '01:00' })
-                        scheduleStartDate    = $(if ($_.ScheduleStartDate) { $_.ScheduleStartDate } else { '' })
-                        scheduleRecurrence   = $(if ($_.ScheduleRecurrence) { $_.ScheduleRecurrence } else { 'Daily' })
-                        scheduleEndDate      = $(if ($_.ScheduleEndDate) { $_.ScheduleEndDate } else { '' })
-                        networkMode          = $(if ($_.NetworkMode) { $_.NetworkMode } else { 'both' })
-                        destinationType      = $(if ($_.DestinationType) { $_.DestinationType } else { 'local' })
-                    }
-                })
-                $disk1Info = if ($cfg) { Get-SyncMeDiskSpace -Path ([string]$cfg.ResticRepo) } else { $null }
-                $disk2Info = if ($cfg) { Get-SyncMeDiskSpace -Path ([string]$cfg.ArchivePath) } else { $null }
-                $rclone = Get-SyncMeRclone
-                $lastRun = $null
-                if ($cfg) {
-                    $lastRun = Read-SyncMeLastRun -ScriptRoot $ScriptRoot -SetId $(if ($cfg.Id) { $cfg.Id } else { 'set1' })
-                }
-                $lowDisk = $false
-                if ($disk1Info -and $null -ne $disk1Info.percentFree -and $disk1Info.percentFree -lt 15) { $lowDisk = $true }
-                if ($disk2Info -and $null -ne $disk2Info.percentFree -and $disk2Info.percentFree -lt 15) { $lowDisk = $true }
-                $opts = Get-SyncMeOptions -ScriptRoot $ScriptRoot
-                $showSkippedBanner = $false
-                if ($cfg -and $lastRun) {
-                    $showSkippedBanner = Test-SyncMeSkippedFilesBanner -ScriptRoot $ScriptRoot -SetId $(if ($cfg.Id) { $cfg.Id } else { 'set1' }) -LastRun $lastRun
-                }
-                Write-SyncMeJson @{
-                    ok                   = $true
-                    packageVersion       = (Get-SyncMePackageVersion)
-                    updateFeedUrl        = [string]$opts.UpdateFeedUrl
-                    monitorConfigured    = (-not [string]::IsNullOrWhiteSpace([string]$opts.MonitorUrl))
-                    configured           = [bool](Test-SyncMeConfigured)
-                    lastSuccess          = $stamp
-                    lastRun              = $lastRun
-                    skippedFilesBanner   = [bool]$showSkippedBanner
-                    tailscaleOk          = [bool]$ts.Ok
-                    tailscaleMessage     = $ts.Message
-                    resticOk             = [bool]$restic.Ok
-                    resticPath           = $restic.Path
-                    rcloneOk             = [bool]$rclone.Ok
-                    rclonePath           = $(if ($rclone.Ok) { $rclone.Path } else { '' })
-                    backupRunning        = ($script:BackupJob.Running -or $lockAlive)
-                    defaultRestoreTarget = $defaultTarget
-                    archivePath          = $(if ($cfg) { $cfg.ArchivePath } else { '' })
-                    resticRepo           = $(if ($cfg) { $cfg.ResticRepo } else { '' })
-                    disk1FreeGb          = $(if ($disk1Info) { $disk1Info.freeGb } else { $null })
-                    disk1TotalGb         = $(if ($disk1Info) { $disk1Info.totalGb } else { $null })
-                    disk1PercentFree     = $(if ($disk1Info) { $disk1Info.percentFree } else { $null })
-                    disk2FreeGb          = $(if ($disk2Info) { $disk2Info.freeGb } else { $null })
-                    disk2TotalGb         = $(if ($disk2Info) { $disk2Info.totalGb } else { $null })
-                    disk2PercentFree     = $(if ($disk2Info) { $disk2Info.percentFree } else { $null })
-                    lowDisk              = $lowDisk
-                    sets                 = $setSummaries
-                    activeSetId          = $(if ($cfg -and $cfg.Id) { $cfg.Id } elseif ($setSummaries.Count) { $setSummaries[0].id } else { 'set1' })
-                    runTime              = $(if ($cfg -and $cfg.RunTime) { $cfg.RunTime } else { '01:00' })
-                    scheduleStartDate    = $(if ($cfg -and $cfg.ScheduleStartDate) { $cfg.ScheduleStartDate } else { '' })
-                    scheduleRecurrence   = $(if ($cfg -and $cfg.ScheduleRecurrence) { $cfg.ScheduleRecurrence } else { 'Daily' })
-                    scheduleEndDate      = $(if ($cfg -and $cfg.ScheduleEndDate) { $cfg.ScheduleEndDate } else { '' })
-                    scheduleDaysOfWeek   = $(if ($cfg -and $cfg.ScheduleDaysOfWeek) { @($cfg.ScheduleDaysOfWeek) } else { @() })
-                    networkMode          = $(if ($cfg -and $cfg.NetworkMode) { $cfg.NetworkMode } else { 'both' })
-                } -Response $res
-                continue
-            }
-
-            if ($path -eq '/api/prereqs' -and $req.HttpMethod -eq 'GET') {
-                $cfg = Get-SyncMeConfigOrNull
-                $netMode = if ($cfg -and $cfg.NetworkMode) { [string]$cfg.NetworkMode } else { 'both' }
-                if ($netMode -eq 'lan') {
-                    $ts = @{ Ok = $true; Message = 'Skipped (LAN-only)'; Detail = 'NetworkMode=lan' }
-                } else {
-                    $ts = Test-MonarchTailscale
-                }
-                $restic = Get-ResticOnPath
-                $rclone = Get-SyncMeRclone
-                $winfsp = Test-SyncMeWinFsp
-                Write-SyncMeJson @{
-                    ok               = $true
-                    tailscaleOk      = [bool]$ts.Ok
-                    tailscaleMessage = $ts.Message
-                    resticOk         = [bool]$restic.Ok
-                    resticPath       = $(if ($restic.Ok) { $restic.Path } else { 'restic' })
-                    rcloneOk         = [bool]$rclone.Ok
-                    rclonePath       = $(if ($rclone.Ok) { $rclone.Path } else { '' })
-                    winfspOk         = [bool]$winfsp.Ok
-                    winfspMessage    = $winfsp.Message
-                    winfspUrl        = $(if ($winfsp.Url) { $winfsp.Url } else { 'https://winfsp.dev/rel/' })
-                } -Response $res
-                continue
-            }
-
-            if ($path -eq '/api/update/check' -and $req.HttpMethod -eq 'GET') {
+            if ($path.StartsWith('/api/')) {
                 try {
-                    $info = Get-SyncMeUpdateInfo -ScriptRoot $ScriptRoot -CurrentVersion (Get-SyncMePackageVersion)
-                    Write-SyncMeJson @{
-                        ok              = $true
-                        updateAvailable = [bool]$info.UpdateAvailable
-                        currentVersion  = $info.CurrentVersion
-                        version         = $info.Version
-                        file            = $info.File
-                        url             = $info.Url
-                        notes           = $info.Notes
-                        feedUrl         = $info.FeedUrl
-                    } -Response $res
+                    Assert-SyncMeApiRequestBasics -Request $req
                 } catch {
-                    Write-SyncMeJson @{
-                        ok              = $false
-                        updateAvailable = $false
-                        message         = $_.Exception.Message
-                        currentVersion  = (Get-SyncMePackageVersion)
-                    } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/update/install' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $info = Get-SyncMeUpdateInfo -ScriptRoot $ScriptRoot -CurrentVersion (Get-SyncMePackageVersion)
-                    if (-not $info.UpdateAvailable) {
-                        Write-SyncMeJson @{
-                            ok      = $false
-                            message = "Already on latest version ($($info.CurrentVersion))."
-                        } -StatusCode 400 -Response $res
-                        continue
-                    }
-                    $result = Start-SyncMeUpdateApply -ScriptRoot $ScriptRoot -UpdateInfo $info
-                    Write-SyncMeJson @{
-                        ok      = $true
-                        message = $result.Message
-                        version = $result.Version
-                        backup  = $result.Backup
-                        restart = $true
-                    } -Response $res
-                    $psExit = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-                    Start-Process -FilePath $psExit -ArgumentList @(
-                        '-NoProfile',
-                        '-Command', "Start-Sleep -Seconds 2; Stop-Process -Id $PID -Force -ErrorAction SilentlyContinue"
-                    ) -WindowStyle Hidden | Out-Null
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/options' -and $req.HttpMethod -eq 'GET') {
-                $opts = Get-SyncMeOptions -ScriptRoot $ScriptRoot
-                Write-SyncMeJson @{
-                    ok              = $true
-                    updateFeedUrl   = [string]$opts.UpdateFeedUrl
-                    monitorUrl      = [string]$opts.MonitorUrl
-                    monitorSiteId   = [string]$opts.MonitorSiteId
-                    monitorToken    = [string]$opts.MonitorToken
-                    localOpsUrl     = [string]$opts.LocalOpsUrl
-                    localOpsEnabled = [bool]$opts.LocalOpsEnabled
-                } -Response $res
-                continue
-            }
-
-            if ($path -eq '/api/options' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $body = Read-SyncMeBody $req
-                    if ($null -eq $body) {
-                        throw 'Request body is required (JSON with monitor / LocalOps fields).'
-                    }
-                    $propNames = @($body.PSObject.Properties | ForEach-Object { $_.Name })
-                    $saveArgs = @{ ScriptRoot = $ScriptRoot }
-                    if ($propNames -contains 'updateFeedUrl') { $saveArgs.UpdateFeedUrl = [string]$body.updateFeedUrl }
-                    if ($propNames -contains 'monitorUrl') { $saveArgs.MonitorUrl = [string]$body.monitorUrl }
-                    if ($propNames -contains 'monitorSiteId') { $saveArgs.MonitorSiteId = [string]$body.monitorSiteId }
-                    if ($propNames -contains 'monitorToken') { $saveArgs.MonitorToken = [string]$body.monitorToken }
-                    if ($propNames -contains 'localOpsUrl') { $saveArgs.LocalOpsUrl = [string]$body.localOpsUrl }
-                    if ($propNames -contains 'localOpsEnabled') { $saveArgs.LocalOpsEnabled = $body.localOpsEnabled }
-                    if (
-                        -not $saveArgs.ContainsKey('UpdateFeedUrl') -and
-                        -not $saveArgs.ContainsKey('MonitorUrl') -and
-                        -not $saveArgs.ContainsKey('MonitorSiteId') -and
-                        -not $saveArgs.ContainsKey('MonitorToken') -and
-                        -not $saveArgs.ContainsKey('LocalOpsUrl') -and
-                        -not $saveArgs.ContainsKey('LocalOpsEnabled')
-                    ) {
-                        throw 'No options fields provided to save.'
-                    }
-                    $saved = Save-SyncMeOptions @saveArgs
-                    $hb = $null
-                    $loc = $null
-                    if (-not [string]::IsNullOrWhiteSpace([string]$saved.MonitorUrl)) {
-                        try {
-                            $hb = Send-SyncMeMonitorTestHeartbeat -ScriptRoot $ScriptRoot
-                        } catch {
-                            $hb = @{ Ok = $false; Message = $_.Exception.Message }
-                        }
-                    }
-                    if ([bool]$saved.LocalOpsEnabled) {
-                        try {
-                            $loc = Send-SyncMeLocalOpsTestRegister -ScriptRoot $ScriptRoot
-                        } catch {
-                            $loc = @{ Ok = $false; Message = $_.Exception.Message }
-                        }
-                    }
-                    $msg = 'Options saved.'
-                    $parts = @()
-                    if ($hb) {
-                        if ($hb.Ok) { $parts += 'Monitor test heartbeat OK.' }
-                        else { $parts += ('Monitor test failed: ' + [string]$hb.Message) }
-                    }
-                    if ($loc) {
-                        if ($loc.Ok) { $parts += 'LocalOps register OK.' }
-                        elseif ($loc.Skipped) { $parts += ('LocalOps skipped: ' + [string]$loc.Message) }
-                        else { $parts += ('LocalOps register failed: ' + [string]$loc.Message) }
-                    }
-                    if ($parts.Count -gt 0) { $msg = 'Options saved. ' + ($parts -join ' ') }
-                    Write-SyncMeJson @{
-                        ok              = $true
-                        message         = $msg
-                        updateFeedUrl   = [string]$saved.UpdateFeedUrl
-                        monitorUrl      = [string]$saved.MonitorUrl
-                        monitorSiteId   = [string]$saved.MonitorSiteId
-                        monitorToken    = [string]$saved.MonitorToken
-                        localOpsUrl     = [string]$saved.LocalOpsUrl
-                        localOpsEnabled = [bool]$saved.LocalOpsEnabled
-                        heartbeatOk     = $(if ($hb) { [bool]$hb.Ok } else { $null })
-                        heartbeatMsg    = $(if ($hb) { [string]$hb.Message } else { '' })
-                        localOpsOk      = $(if ($loc) { [bool]$loc.Ok } else { $null })
-                        localOpsMsg     = $(if ($loc) { [string]$loc.Message } else { '' })
-                    } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/options/ack-skipped-files' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $body = Read-SyncMeBody $req
-                    $setId = if ($body -and $body.setId) { [string]$body.setId } else { 'set1' }
-                    $updatedUtc = if ($body -and $body.updatedUtc) { [string]$body.updatedUtc } else { '' }
-                    if ([string]::IsNullOrWhiteSpace($updatedUtc)) {
-                        $lr = Read-SyncMeLastRun -ScriptRoot $ScriptRoot -SetId $setId
-                        if ($lr -and $lr.updatedUtc) { $updatedUtc = [string]$lr.updatedUtc }
-                    }
-                    Set-SyncMeSkippedFilesAck -ScriptRoot $ScriptRoot -SetId $setId -UpdatedUtc $updatedUtc | Out-Null
-                    Write-SyncMeJson @{ ok = $true; message = 'Skipped-files warning acknowledged.' } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/prereqs/install-restic' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $result = Install-SyncMeRestic
-                    if ($result.Ok -and $result.Path) {
-                        try {
-                            $sets = @(Get-SyncMeSetsFromConfigFile -ScriptRoot $ScriptRoot)
-                            if ($sets.Count -gt 0) {
-                                $updated = foreach ($s in $sets) {
-                                    $s | Add-Member -NotePropertyName ResticPath -NotePropertyValue $result.Path -Force
-                                    $s
-                                }
-                                Write-SyncMeSetsConfigFile -Sets @($updated)
-                            }
-                        } catch { }
-                    }
-                    Write-SyncMeJson @{
-                        ok         = $true
-                        resticOk   = [bool]$result.Ok
-                        resticPath = $result.Path
-                        message    = $result.Message
-                    } -Response $res
-                } catch {
-                    Write-SyncMeJson @{
-                        ok         = $false
-                        resticOk   = $false
-                        resticPath = 'restic'
-                        message    = $_.Exception.Message
-                    } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/prereqs/install-rclone' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $result = Install-SyncMeRclone
-                    Write-SyncMeJson @{
-                        ok         = $true
-                        rcloneOk   = [bool]$result.Ok
-                        rclonePath = $result.Path
-                        message    = $result.Message
-                    } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/prereqs/install-winfsp' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $result = Install-SyncMeWinFsp
-                    Write-SyncMeJson @{
-                        ok           = [bool]$result.Ok
-                        winfspOk     = [bool]$result.Ok
-                        winfspPath   = $result.Path
-                        message      = $result.Message
-                        winfspUrl    = 'https://winfsp.dev/rel/'
-                    } -StatusCode $(if ($result.Ok) { 200 } else { 400 }) -Response $res
-                } catch {
-                    Write-SyncMeJson @{
-                        ok       = $false
-                        winfspOk = $false
-                        message  = $_.Exception.Message
-                        winfspUrl = 'https://winfsp.dev/rel/'
-                    } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/test-source' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                $msgs = New-Object System.Collections.Generic.List[string]
-                $hostName = ([string]$body.host).Trim()
-                $paths = @([string]$body.paths -split '[\r\n,]+' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-                $hasUnc = [bool]($paths | Where-Object { $_ -match '^\\\\[^\\]+\\[^\\]+' })
-                $allOk = $true
-                if ($hasUnc -or $hostName) {
-                    if ([string]::IsNullOrWhiteSpace($hostName)) {
-                        $msgs.Add('Host name required when testing UNC paths.')
-                        $allOk = $false
-                    } else {
-                        $ping = Test-Connection -ComputerName $hostName -Count 1 -Quiet -ErrorAction SilentlyContinue
-                        $msgs.Add($(if ($ping) { "Host reachable: $hostName" } else { "Host NOT reachable: $hostName" }))
-                        if (-not $ping) { $allOk = $false }
-                    }
-                } else {
-                    $msgs.Add('Local source paths - skipping host ping.')
-                }
-                foreach ($pp in $paths) {
-                    $ok = Test-Path -LiteralPath $pp
-                    $msgs.Add($(if ($ok) { "Path OK: $pp" } else { "Path NOT reachable: $pp" }))
-                    if (-not $ok) { $allOk = $false }
-                }
-                Write-SyncMeJson @{ ok = $true; allOk = $allOk; messages = @($msgs) } -Response $res
-                continue
-            }
-
-            if ($path -eq '/api/setup/apply' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $result = Invoke-SyncMeSetupApply -Body $body
-                    Write-SyncMeJson @{
-                        ok          = $true
-                        message     = $result.message
-                        setId       = $result.setId
-                        displayName = $result.displayName
-                    } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/schedule' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $msg = Invoke-SyncMeScheduleUpdate -Body $body
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/backup' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                $mode = if ($body.mode) { [string]$body.mode } else { '' }
-                $setId = if ($body.setId) { [string]$body.setId } else { 'set1' }
-                try {
-                    $msg = Start-SyncMeBackupJob -Mode $mode -SetId $setId
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/backup/status' -and $req.HttpMethod -eq 'GET') {
-                $qSet = $req.QueryString['setId']
-                Write-SyncMeJson (Get-SyncMeBackupStatusPayload -SetId $(if ($qSet) { [string]$qSet } else { '' })) -Response $res
-                continue
-            }
-
-            if ($path -eq '/api/snapshots' -and $req.HttpMethod -eq 'GET') {
-                $qSet = $req.QueryString['setId']
-                $cfg = if ($qSet) { Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $qSet } else { Get-SyncMeConfigOrNull }
-                if (-not $cfg) {
-                    Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
+                    $code = 400
+                    $msg = $_.Exception.Message
+                    if ($msg -match '(?i)Method Not Allowed') { $code = 405 }
+                    Write-SyncMeJson @{ ok = $false; message = $msg } -StatusCode $code -Response $res
                     continue
                 }
-                try {
-                    $tools = Join-Path $ScriptRoot 'tools'
-                    if (Test-Path $tools) { $env:PATH = "$tools;$env:PATH" }
-                    if ($cfg.RcloneConfigPath) { $env:RCLONE_CONFIG = [string]$cfg.RcloneConfigPath }
-                    elseif (Test-Path (Get-SyncMeRcloneConfigPath)) { $env:RCLONE_CONFIG = Get-SyncMeRcloneConfigPath }
-                    $snaps = @(Get-SyncMeSnapshots -Config $cfg)
-                    Write-SyncMeJson @{ ok = $true; snapshots = $snaps; setId = $(if ($cfg.Id) { $cfg.Id } else { 'set1' }) } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                } finally {
-                    Remove-Item Env:RCLONE_CONFIG -ErrorAction SilentlyContinue
-                }
-                continue
             }
 
-            if ($path -eq '/api/snapshot/ls' -and $req.HttpMethod -eq 'GET') {
-                $qSet = $req.QueryString['setId']
-                $qSnap = [string]$req.QueryString['snapshot']
-                $qPathRaw = $req.QueryString['path']
-                $qPath = if ($null -eq $qPathRaw) { '' } else { ([string]$qPathRaw).Trim() }
-                $setId = if ($qSet) { [string]$qSet } else { 'set1' }
-                $cfg = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId
-                if (-not $cfg) {
-                    Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
+            if ($path.StartsWith('/api/') -and $req.HttpMethod -notin @('GET', 'HEAD', 'OPTIONS')) {
+                try {
+                    Assert-SyncMeMutatingApiRequest -Request $req -ExpectedPort $Port -CsrfToken $script:SyncMeCsrfToken
+                } catch {
+                    $code = 403
+                    $msg = $_.Exception.Message
+                    if ($msg -match '(?i)Unsupported Media Type') { $code = 415 }
+                    elseif ($msg -match '(?i)too large') { $code = 413 }
+                    Write-SyncMeJson @{ ok = $false; message = $msg } -StatusCode $code -Response $res
                     continue
                 }
-                if ([string]::IsNullOrWhiteSpace($qSnap)) {
-                    Write-SyncMeJson @{ ok = $false; message = 'Query parameter snapshot is required.' } -StatusCode 400 -Response $res
-                    continue
-                }
-                try {
-                    Update-SyncMeBackupJob
-                    Update-SyncMeRestoreJob
-                    $bakStatus = Get-SyncMeBackupStatusPayload -SetId $setId
-                    if ($bakStatus.running) {
-                        Write-SyncMeJson @{
-                            ok = $false
-                            message = 'Cannot browse while a backup is running (restic repository lock). Wait for the backup to finish.'
-                        } -StatusCode 409 -Response $res
-                        continue
-                    }
-                    if ($script:RestoreJob.Running) {
-                        Write-SyncMeJson @{
-                            ok = $false
-                            message = 'Cannot browse while a restore is running. Wait or cancel the restore first.'
-                        } -StatusCode 409 -Response $res
-                        continue
-                    }
-
-                    $tools = Join-Path $ScriptRoot 'tools'
-                    if (Test-Path $tools) { $env:PATH = "$tools;$env:PATH" }
-                    if ($cfg.RcloneConfigPath) { $env:RCLONE_CONFIG = [string]$cfg.RcloneConfigPath }
-                    elseif (Test-Path (Get-SyncMeRcloneConfigPath)) { $env:RCLONE_CONFIG = Get-SyncMeRcloneConfigPath }
-
-                    $listing = Get-SyncMeSnapshotListing `
-                        -Config $cfg `
-                        -Snapshot $qSnap `
-                        -Path $qPath
-                    if ($listing -is [System.Array]) {
-                        $listing = @($listing) | Where-Object { $_ -is [hashtable] -and $_.ContainsKey('Ok') } | Select-Object -Last 1
-                    }
-                    if (-not $listing) {
-                        Write-SyncMeJson @{ ok = $false; message = 'Snapshot browse returned no result.' } -StatusCode 400 -Response $res
-                        continue
-                    }
-                    if (-not $listing.Ok) {
-                        Write-SyncMeJson @{
-                            ok         = $false
-                            message    = [string]$listing.Message
-                            path       = [string]$listing.Path
-                            entries    = @()
-                            truncated  = $false
-                            snapshotId = [string]$listing.SnapshotId
-                        } -StatusCode 400 -Response $res
-                        continue
-                    }
-                    Write-SyncMeJson @{
-                        ok         = $true
-                        message    = [string]$listing.Message
-                        path       = [string]$listing.Path
-                        entries    = @($listing.Entries)
-                        truncated  = [bool]$listing.Truncated
-                        snapshotId = [string]$listing.SnapshotId
-                        setId      = $setId
-                    } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = ('Snapshot browse failed: ' + $_.Exception.Message) } -StatusCode 400 -Response $res
-                } finally {
-                    Remove-Item Env:RCLONE_CONFIG -ErrorAction SilentlyContinue
-                }
-                continue
             }
 
-            if ($path -eq '/api/restore' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                $setId = if ($body.setId) { [string]$body.setId } else { 'set1' }
-                $cfg = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId
-                if (-not $cfg) {
-                    Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
-                    continue
-                }
-                try {
-                    $tools = Join-Path $ScriptRoot 'tools'
-                    if (Test-Path $tools) { $env:PATH = "$tools;$env:PATH" }
-                    if ($cfg.RcloneConfigPath) { $env:RCLONE_CONFIG = [string]$cfg.RcloneConfigPath }
-                    elseif (Test-Path (Get-SyncMeRcloneConfigPath)) { $env:RCLONE_CONFIG = Get-SyncMeRcloneConfigPath }
-                    $msg = Start-SyncMeRestoreJob `
-                        -Config $cfg `
-                        -Snapshot ([string]$body.snapshot) `
-                        -TargetPath ([string]$body.target) `
-                        -Include ([string]$body.include) `
-                        -SetId $setId
-                    Write-SyncMeJson @{ ok = $true; message = $msg; started = $true } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                } finally {
-                    Remove-Item Env:RCLONE_CONFIG -ErrorAction SilentlyContinue
-                }
-                continue
-            }
-
-            if ($path -eq '/api/restore/status' -and $req.HttpMethod -eq 'GET') {
-                Write-SyncMeJson (Get-SyncMeRestoreStatusPayload) -Response $res
-                continue
-            }
-
-            if ($path -eq '/api/restore/cancel' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $msg = Stop-SyncMeRestoreJob
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/snapshot/delete' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                $setId = if ($body.setId) { [string]$body.setId } else { 'set1' }
-                $cfg = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId
-                if (-not $cfg) {
-                    Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
-                    continue
-                }
-                if ($cfg.AppendOnly) {
-                    Write-SyncMeJson @{
-                        ok      = $false
-                        message = 'Append-Only Mode is enabled for this set. Snapshot deletion is blocked.'
-                    } -StatusCode 400 -Response $res
-                    continue
-                }
-                try {
-                    $tools = Join-Path $ScriptRoot 'tools'
-                    if (Test-Path $tools) { $env:PATH = "$tools;$env:PATH" }
-                    if ($cfg.RcloneConfigPath) { $env:RCLONE_CONFIG = [string]$cfg.RcloneConfigPath }
-                    elseif (Test-Path (Get-SyncMeRcloneConfigPath)) { $env:RCLONE_CONFIG = Get-SyncMeRcloneConfigPath }
-                    $result = Remove-SyncMeSnapshot -Config $cfg -SnapshotId ([string]$body.snapshot)
-                    Write-SyncMeJson @{ ok = $true; message = $result.Message } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                } finally {
-                    Remove-Item Env:RCLONE_CONFIG -ErrorAction SilentlyContinue
-                }
-                continue
-            }
-
-            if ($path -eq '/api/set' -and $req.HttpMethod -eq 'GET') {
-                $qSet = $req.QueryString['setId']
-                $cfg = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $(if ($qSet) { $qSet } else { '' })
-                if (-not $cfg) {
-                    Write-SyncMeJson @{ ok = $false; message = 'Set not found.' } -StatusCode 404 -Response $res
-                    continue
-                }
-                $repo = [string]$cfg.ResticRepo
-                $rcloneRemote = ''
-                $rclonePath = ''
-                if ($repo -match '^rclone:([^:]+):(.*)$') {
-                    $rcloneRemote = $Matches[1]
-                    $rclonePath = $Matches[2]
-                }
-                Write-SyncMeJson @{
-                    ok                   = $true
-                    id                   = $cfg.Id
-                    displayName          = $cfg.DisplayName
-                    networkMode          = $(if ($cfg.NetworkMode) { $cfg.NetworkMode } else { 'both' })
-                    destinationType      = $(if ($cfg.DestinationType) { $cfg.DestinationType } else { 'local' })
-                    sourceHost           = $cfg.SourceHost
-                    sourcePaths          = @($cfg.SourcePaths)
-                    resticRepo           = $cfg.ResticRepo
-                    archivePath          = $cfg.ArchivePath
-                    resticPath           = $cfg.ResticPath
-                    runTime              = $(if ($cfg.RunTime) { $cfg.RunTime } else { '01:00' })
-                    scheduleStartDate    = $(if ($cfg.ScheduleStartDate) { $cfg.ScheduleStartDate } else { '' })
-                    scheduleRecurrence   = $(if ($cfg.ScheduleRecurrence) { $cfg.ScheduleRecurrence } else { 'Daily' })
-                    scheduleEndDate      = $(if ($cfg.ScheduleEndDate) { $cfg.ScheduleEndDate } else { '' })
-                    scheduleDaysOfWeek   = $(if ($cfg.ScheduleDaysOfWeek) { @($cfg.ScheduleDaysOfWeek) } else { @('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday') })
-                    enableEmail          = [bool]$cfg.EnableEmailNotifications
-                    smtpServer           = $cfg.SmtpServer
-                    smtpPort             = $cfg.SmtpPort
-                    smtpSsl              = [bool]$cfg.SmtpUseSsl
-                    mailFrom             = $cfg.MailFrom
-                    mailTo               = @($cfg.MailTo) -join ', '
-                    enableToast          = [bool]$cfg.EnableToastNotifications
-                    useShadowCopy        = $(if ($null -ne $cfg.UseShadowCopySources) { [bool]$cfg.UseShadowCopySources } else { $true })
-                    enableWakeOnLan      = [bool]$cfg.EnableWakeOnLan
-                    wakeMac              = $(if ($cfg.WakeMacAddress) { $cfg.WakeMacAddress } else { '' })
-                    storeShare           = -not [string]::IsNullOrWhiteSpace([string]$cfg.ShareCredentialName)
-                    keepLast             = $(if ($null -ne $cfg.KeepLast) { [int]$cfg.KeepLast } else { 7 })
-                    keepDaily            = $(if ($null -ne $cfg.KeepDaily) { [int]$cfg.KeepDaily } else { 14 })
-                    keepWeekly           = $(if ($null -ne $cfg.KeepWeekly) { [int]$cfg.KeepWeekly } else { 8 })
-                    keepMonthly          = $(if ($null -ne $cfg.KeepMonthly) { [int]$cfg.KeepMonthly } else { 6 })
-                    enableRepoCheck      = $(if ($null -ne $cfg.EnableRepoCheck) { [bool]$cfg.EnableRepoCheck } else { $true })
-                    weeklyDataCheckDay   = $(if ($cfg.WeeklyDataCheckDay) { $cfg.WeeklyDataCheckDay } else { 'Sunday' })
-                    appendOnly           = $(if ($null -ne $cfg.AppendOnly) { [bool]$cfg.AppendOnly } else { $false })
-                    failJobOnRestoreDrillFailure = $(if ($null -ne $cfg.FailJobOnRestoreDrillFailure) { [bool]$cfg.FailJobOnRestoreDrillFailure } else { $false })
-                    preBackupScript      = $(if ($cfg.PreBackupScript) { [string]$cfg.PreBackupScript } else { '' })
-                    postBackupScript     = $(if ($cfg.PostBackupScript) { [string]$cfg.PostBackupScript } else { '' })
-                    resticLimitUploadKByte = $(if ($null -ne $cfg.ResticLimitUploadKByte) { [int]$cfg.ResticLimitUploadKByte } else { 0 })
-                    rcloneRemote         = $rcloneRemote
-                    rcloneSubPath        = $rclonePath
-                    rcloneBwLimit        = $(if ($cfg.RcloneBwLimit) { $cfg.RcloneBwLimit } else { 'off' })
-                    rcloneTransfers      = $(if ($null -ne $cfg.RcloneTransfers) { [int]$cfg.RcloneTransfers } else { 4 })
-                    rcloneCheckers       = $(if ($null -ne $cfg.RcloneCheckers) { [int]$cfg.RcloneCheckers } else { 8 })
-                    rcloneRetries        = $(if ($null -ne $cfg.RcloneRetries) { [int]$cfg.RcloneRetries } else { 3 })
-                    rcloneLowLevelRetries = $(if ($null -ne $cfg.RcloneLowLevelRetries) { [int]$cfg.RcloneLowLevelRetries } else { 10 })
-                    rcloneMultiThreadStreams = $(if ($null -ne $cfg.RcloneMultiThreadStreams) { [int]$cfg.RcloneMultiThreadStreams } else { 4 })
-                } -Response $res
-                continue
-            }
-
-            if ($path -eq '/api/rclone/status' -and $req.HttpMethod -eq 'GET') {
-                try {
-                    $rc = Get-SyncMeRclone
-                    $conf = Get-SyncMeRcloneConfigPath
-                    $remotes = @()
-                    $msg = ''
-                    if ($rc.Ok) {
-                        $list = Get-SyncMeRcloneRemotes
-                        $remotes = $list.Remotes
-                        $msg = $list.Message
-                    } else {
-                        $msg = 'rclone not installed'
-                    }
-                    Write-SyncMeJson @{
-                        ok         = $true
-                        rcloneOk   = [bool]$rc.Ok
-                        rclonePath = $rc.Path
-                        configPath = $conf
-                        remotes    = $remotes
-                        message    = $msg
-                    } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/rclone/authorize' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $type = if ($body.type) { [string]$body.type } else { 'onedrive' }
-                    $name = if ($body.name) { [string]$body.name } else { '' }
-                    $msg = Start-SyncMeRcloneAuthorize -Type $type -Name $name
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/rclone/authorize/cancel' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $msg = Stop-SyncMeRcloneAuthorize
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/rclone/authorize' -and $req.HttpMethod -eq 'GET') {
-                try {
-                    Write-SyncMeJson (Get-SyncMeRcloneAuthorizeStatus) -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/rclone/ls' -and $req.HttpMethod -eq 'GET') {
-                try {
-                    $rp = $req.QueryString['path']
-                    $dirs = @(Get-SyncMeRcloneLs -RemotePath $rp)
-                    Write-SyncMeJson @{ ok = $true; dirs = $dirs } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/rclone/test' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $msg = Test-SyncMeRcloneRemote -RemotePath ([string]$body.path)
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/set/rclone' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $msg = Update-SyncMeSetRclone -Body $body
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/set/policy' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $msg = Update-SyncMeSetPolicy -Body $body
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/set/rescue-kit' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                $setId = if ($body.setId) { [string]$body.setId } else { 'set1' }
-                $cfg = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId
-                if (-not $cfg) {
-                    Write-SyncMeJson @{ ok = $false; message = 'Not configured yet.' } -StatusCode 400 -Response $res
-                    continue
-                }
-                try {
-                    $cfg = ConvertTo-SyncMeSetObject -Config $cfg -Id $(if ($cfg.Id) { [string]$cfg.Id } else { $setId })
-                    $outPath = Export-SyncMeRescueKit -Config $cfg -ScriptRoot $ScriptRoot
-                    Write-SyncMeJson @{
-                        ok      = $true
-                        path    = $outPath
-                        message = "Rescue kit written to $outPath"
-                    } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/migrate/export' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $body = Read-SyncMeBody $req
-                    $pw = if ($body.password) { [string]$body.password } else { '' }
-                    $includeSecrets = $false
-                    if ($null -ne $body.includeSecrets) { $includeSecrets = [bool]$body.includeSecrets }
-                    $result = Export-SyncMeMigrationPackage -ScriptRoot $ScriptRoot -Password $pw -IncludeSecrets:$includeSecrets
-                    Write-SyncMeJson @{
-                        ok       = $true
-                        path     = [string]$result.Path
-                        setCount = [int]$result.SetCount
-                        secrets  = [int]$result.Secrets
-                        message  = [string]$result.Message
-                    } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/migrate/import' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $body = Read-SyncMeBody $req
-                    $pw = if ($body.password) { [string]$body.password } else { '' }
-                    $pkg = if ($body.path) { [string]$body.path } else { '' }
-                    $restoreSecrets = $true
-                    if ($null -ne $body.restoreSecrets) { $restoreSecrets = [bool]$body.restoreSecrets }
-                    $winPass = if ($body.windowsPassword) { [string]$body.windowsPassword } else { '' }
-                    $result = Import-SyncMeMigrationPackage -ScriptRoot $ScriptRoot -Password $pw -PackagePath $pkg -RestoreSecrets:$restoreSecrets
-                    $scheduleNotes = @()
-                    if (-not [string]::IsNullOrEmpty($winPass)) {
-                        foreach ($s in @($result.Sets)) {
-                            try {
-                                $schedBody = [pscustomobject]@{
-                                    setId              = $s.id
-                                    runTime            = $(if ($s.runTime) { $s.runTime } else { '01:00' })
-                                    windowsPassword    = $winPass
-                                    logonType          = 'Password'
-                                }
-                                $full = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $s.id
-                                if ($full) {
-                                    $schedBody | Add-Member -NotePropertyName scheduleStartDate -NotePropertyValue $(if ($full.ScheduleStartDate) { $full.ScheduleStartDate } else { (Get-Date).ToString('yyyy-MM-dd') }) -Force
-                                    $schedBody | Add-Member -NotePropertyName scheduleRecurrence -NotePropertyValue $(if ($full.ScheduleRecurrence) { $full.ScheduleRecurrence } else { 'Daily' }) -Force
-                                    $schedBody | Add-Member -NotePropertyName scheduleEndDate -NotePropertyValue $(if ($full.ScheduleEndDate) { $full.ScheduleEndDate } else { '' }) -Force
-                                    $schedBody | Add-Member -NotePropertyName scheduleDaysOfWeek -NotePropertyValue $(if ($full.ScheduleDaysOfWeek) { @($full.ScheduleDaysOfWeek) } else { @('Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday') }) -Force
-                                }
-                                $scheduleNotes += (Invoke-SyncMeScheduleUpdate -Body $schedBody)
-                            } catch {
-                                $scheduleNotes += ("Schedule $($s.id): " + $_.Exception.Message)
-                            }
-                        }
-                    } else {
-                        $scheduleNotes += 'Sets imported. Provide Windows password to re-register Task Scheduler jobs.'
-                    }
-                    Write-SyncMeJson @{
-                        ok              = $true
-                        setCount        = [int]$result.SetCount
-                        secretsRestored = [int]$result.SecretsRestored
-                        message         = [string]$result.Message
-                        schedule        = $scheduleNotes
-                    } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/mount/status' -and $req.HttpMethod -eq 'GET') {
-                $qSet = [string]$req.QueryString['setId']
-                Write-SyncMeJson (Get-SyncMeMountStatus -SetId $qSet) -Response $res
-                continue
-            }
-
-            if ($path -eq '/api/mount/start' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $sid = if ($body.setId) { [string]$body.setId } else { 'set1' }
-                    $mp = if ($body.mountPoint) { [string]$body.mountPoint } else { '' }
-                    $msg = Start-SyncMeMount -SetId $sid -MountPoint $mp
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/mount/stop' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $msg = Stop-SyncMeMount
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/set/delete' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $msg = Remove-SyncMeBackupSet -SetId ([string]$body.setId)
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/set/restic-path' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $sid = if ($body.setId) { [string]$body.setId } else { 'set1' }
-                    $msg = Update-SyncMeSetResticPath -SetId $sid -ResticPath ([string]$body.resticPath)
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/set/restic-password' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $sid = if ($body.setId) { [string]$body.setId } else { 'set1' }
-                    $msg = Set-SyncMeResticPassword -SetId $sid -Password ([string]$body.password)
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/backup/cancel' -and $req.HttpMethod -eq 'POST') {
-                try {
-                    $msg = Stop-SyncMeBackupJob
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/wake' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                try {
-                    $mac = [string]$body.mac
-                    if (-not $mac) {
-                        $sid = if ($body.setId) { [string]$body.setId } else { 'set1' }
-                        $s = Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $sid
-                        $mac = if ($s) { [string]$s.WakeMacAddress } else { '' }
-                    }
-                    $msg = Send-SyncMeWakeOnLan -MacAddress $mac
-                    Write-SyncMeJson @{ ok = $true; message = $msg } -Response $res
-                } catch {
-                    Write-SyncMeJson @{ ok = $false; message = $_.Exception.Message } -StatusCode 400 -Response $res
-                }
-                continue
-            }
-
-            if ($path -eq '/api/open' -and $req.HttpMethod -eq 'POST') {
-                $body = Read-SyncMeBody $req
-                $kind = [string]$body.kind
-                $setId = if ($body.setId) { [string]$body.setId } else { '' }
-                $cfg = if ($setId) { Get-SyncMeSetById -ScriptRoot $ScriptRoot -SetId $setId } else { Get-SyncMeConfigOrNull }
-                $target = $null
-                switch ($kind) {
-                    'reports' { $target = Join-Path $ScriptRoot 'Reports' }
-                    'logs' { $target = Join-Path $ScriptRoot 'Logs' }
-                    'archive' {
-                        if (-not $cfg) { throw 'Not configured.' }
-                        $target = [string]$cfg.ArchivePath
-                        if ([string]::IsNullOrWhiteSpace($target)) {
-                            throw 'Disk 2 (archive) path is not set for this backup set. Edit the set to add one, or leave Disk 2 empty for restic-only backups.'
-                        }
-                    }
-                    'checklist' { $target = Join-Path $ScriptRoot 'RecoveryChecklist.txt' }
-                    'officeagent' { $target = Join-Path $ScriptRoot 'OfficeAgent' }
-                    'file' {
-                        $target = [string]$body.path
-                        if ([string]::IsNullOrWhiteSpace($target)) { throw 'path is required for kind=file.' }
-                        if (-not (Test-Path -LiteralPath $target)) { throw "File not found: $target" }
-                    }
-                    'mount' {
-                        throw 'Browse-as-folder Mount is not available on Windows. Use Restore selected (or Restore latest) instead.'
-                    }
-                    default { throw "Unknown open kind: $kind" }
-                }
-                if ($kind -eq 'checklist') {
-                    if (Test-Path $target) { Start-Process notepad.exe -ArgumentList $target }
-                } elseif ($kind -eq 'file') {
-                    Start-Process -FilePath $target
-                } else {
-                    if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null }
-                    Start-Process explorer.exe -ArgumentList $target
-                }
-                Write-SyncMeJson @{ ok = $true; message = "Opened $kind" } -Response $res
-                continue
-            }
-
-            if ($path -eq '/api/shutdown' -and $req.HttpMethod -eq 'POST') {
-                Write-SyncMeJson @{ ok = $true; message = 'Stopping' } -Response $res
-                $listener.Stop()
-                break
-            }
+            $handled = Invoke-SyncMeControllerPipeline -Request $req -Response $res -ScriptRoot $ScriptRoot -Port $Port -CsrfToken $script:SyncMeCsrfToken -Listener $listener
+            # IMPORTANT: do not use `$handled -eq 'shutdown'` — in PowerShell, $true -eq 'shutdown' is $true
+            # (non-empty string coerces to bool), which stopped the host after every successful API call.
+            if ($handled -is [string] -and $handled -eq 'shutdown') { break }
+            if ($handled) { continue }
 
             $res.StatusCode = 404
             Write-SyncMeJson @{ ok = $false; message = 'Not found' } -StatusCode 404 -Response $res
@@ -2836,6 +1978,8 @@ try {
             } catch { }
         }
     }
+} catch {
+    Write-Host ("  Listener loop error: " + $_.Exception.Message) -ForegroundColor Red
 } finally {
     if ($listener.IsListening) { $listener.Stop() }
     $listener.Close()

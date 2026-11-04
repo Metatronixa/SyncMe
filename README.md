@@ -39,7 +39,7 @@ Simple **file-level** backup from source PCs to a Backup PC using **restic**, ma
 | Package | What it is |
 |---|---|
 | **`SyncMe-Setup-<ver>.zip`** | Backup PC console - wizard, backups, restore, schedule, HTTPS in-app updates. Unzip and run `SyncMe-Setup.cmd` (admin recommended on Windows Server). |
-| **`SyncMe-Monitor-Setup-<ver>.zip`** | Optional **SyncMe Monitor** add-on - self-hosted fleet dashboard (see below). Separate install; not required for backups. |
+| **`SyncMe-Monitor-Setup-<ver>.zip`** | **Deprecated** optional SyncMe Monitor add-on (still built this release). Prefer LocalOps Console fleet ingest — see below. |
 
 Both zips (plus a short `START-HERE.txt`) are produced under `dist\SyncMe-Release-<ver>\`. Build:
 
@@ -59,7 +59,7 @@ Both zips (plus a short `START-HERE.txt`) are produced under `dist\SyncMe-Releas
 | Schedule | Windows Task Scheduler (+ SyncMe-Watchdog) |
 | UI | Static HTML5 + CSS + vanilla JavaScript (`ui/`), dark slate + cyan ops theme (Segoe UI + Consolas) |
 | Config / secrets | `Config.ps1` (no database); Windows Credential Manager; `Config\rclone.conf` |
-| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source), SyncMe Monitor (fleet heartbeats; **upcoming:** role moves to LocalOps Console - [docs/LOCALOPS_INTEGRATION.md](docs/LOCALOPS_INTEGRATION.md)), LocalOps Console (SyncMe tab registration) |
+| Optional | [Tailscale](https://tailscale.com/) (offsite SMB), OfficeAgent (VSS on source), **LocalOps Console** (SyncMe tab + fleet heartbeats — [docs/LOCALOPS_INTEGRATION.md](docs/LOCALOPS_INTEGRATION.md)), SyncMe Monitor (deprecated dual-write package) |
 | Platform | Windows 10/11 or Windows Server (Backup PC) |
 
 SyncMe is an **orchestration frontend** - not a replacement for restic or rclone. Third-party notices: [`THIRD-PARTY-NOTICES.txt`](THIRD-PARTY-NOTICES.txt).
@@ -92,34 +92,29 @@ SyncMe is an **orchestration frontend** - not a replacement for restic or rclone
 | SyncMe Monitor | Optional self-hosted fleet dashboard via post-backup (and Save) heartbeats. **Upcoming:** absorb this role into LocalOps Console ([docs/LOCALOPS_INTEGRATION.md](docs/LOCALOPS_INTEGRATION.md)); Monitor package remains until dual-write cutover |
 | LocalOps Console | Optional: when LocalOps runs on the same PC, SyncMe registers so the SyncMe tab finds the install + last run. **Upcoming:** also host backup-fleet heartbeats (replacing Monitor) |
 
-## SyncMe Monitor (optional add-on)
+## SyncMe Monitor (deprecated add-on)
 
-**Upcoming:** the Monitor fleet-dashboard role is planned to move into **LocalOps Console** (same heartbeat client; LocalOps becomes the ingest/UI). Until that ships, Monitor remains the supported multi-PC dashboard. Design and cutover: [`docs/LOCALOPS_INTEGRATION.md`](docs/LOCALOPS_INTEGRATION.md) (LocalOps: `LocalOpsConsole/docs/SYNCME_INTEGRATION.md`).
+**Deprecated:** prefer **LocalOps Console** for multi-site backup status (Operations → SyncMe fleet list). Monitor setup is still built for one dual-write release. Design: [`docs/LOCALOPS_INTEGRATION.md`](docs/LOCALOPS_INTEGRATION.md).
 
-**What it is:** a small, self-hosted Windows package that shows which Backup PCs last reported a backup - success, failure, stale, or running. It is **not** installed on a public web server. Run it on a PC on your **LAN or Tailscale** network. Read-only in this release (no remote start/stop/restore). No restic passwords are sent.
-
-**What it is not:** a replacement for SyncMe, restic, or email reports. Backups still run only on each Backup PC. Monitor only receives lightweight status heartbeats.
-
-**How it works**
-
-1. Unzip **`SyncMe-Monitor-Setup-<ver>.zip`** on the Monitor PC. Edit `Config\Monitor.json` - set a shared `Token` (not `change-me`) and `Port` (default **17846**).
-2. Run **`SyncMe-Monitor.bat`** (Run as Administrator once if binding to `http://+:port` fails). Open `http://127.0.0.1:17846/` (or `http://THIS-PC:17846/` from another machine).
-3. On each **Backup PC**, SyncMe console → **Operations** → **Fleet dashboards** → SyncMe Monitor: - **Monitor URL** - e.g. `http://MONITOR-PC:17846` (same PC: `http://127.0.0.1:17846`) - **Site id** - friendly name for that Backup PC - **Shared token** - same value as `Monitor.json` - Click **Save fleet settings** - SyncMe sends a **test heartbeat** immediately so the site should appear on the dashboard.
-4. After each backup finishes, SyncMe also POSTs a heartbeat (Bearer token). The Monitor UI refreshes on a short interval.
-
-Keep Monitor off the public internet. Heartbeat ingest requires the shared token.
+**Legacy install:** Unzip **`SyncMe-Monitor-Setup-<ver>.zip`**, set `Config\Monitor.json` Token / Port (**17846**), run **`SyncMe-Monitor.bat`**. On each Backup PC set Fleet heartbeat URL to `http://MONITOR-PC:17846` with the shared token.
 
 ## LocalOps Console (optional sibling)
 
-**LocalOps Console** is a separate ops tool (sibling folder `LocalOpsConsole`). When both run on the Backup PC:
+**LocalOps Console** is a separate ops tool (sibling folder `LocalOpsConsole`).
+
+### Same-host registration
 
 1. Start LocalOps (`http://127.0.0.1:8787`).
-2. In SyncMe → **Operations** → **Fleet dashboards** → LocalOps Console: leave URL blank (defaults to localhost:8787) and keep registration enabled, then **Save**.
-3. SyncMe POSTs `/api/v1/syncme/register` (loopback) with install path + optional last-run summary so the LocalOps **SyncMe** tab can open the console / start backup without manually setting `syncMePath`.
+2. SyncMe → **Operations** → **Fleet dashboards** → LocalOps Console: leave URL blank (defaults to localhost:8787), keep registration enabled, **Save**.
+3. SyncMe POSTs `/api/v1/syncme/register` (loopback) so LocalOps can open the console / start backup.
 
-Registration is non-fatal: if LocalOps is not running, backups still succeed. Monitor and LocalOps can both be enabled.
+### Fleet heartbeats (preferred)
 
-**Upcoming:** LocalOps will also accept Monitor-compatible fleet heartbeats (Bearer token) so one ops console can replace the separate Monitor package after a dual-write release. See [`docs/LOCALOPS_INTEGRATION.md`](docs/LOCALOPS_INTEGRATION.md).
+1. In LocalOps **Settings**, set **SyncMe fleet token** (`syncMeFleetToken`).
+2. On each Backup PC → **Fleet dashboards**: set Monitor / LocalOps URL to `http://OPS-PC:8787` (or localhost), Site id, and the **same token**, then **Save**.
+3. SyncMe POSTs `/api/heartbeat` (and dual-writes loopback `/api/v1/syncme/sites/heartbeat` when LocalOps is on this PC). View sites under LocalOps **Operations → SyncMe**.
+
+Registration and heartbeats are non-fatal: if LocalOps is down, backups still succeed. See [`docs/LOCALOPS_INTEGRATION.md`](docs/LOCALOPS_INTEGRATION.md).
 
 ## Screenshots
 
@@ -198,7 +193,11 @@ Data added on later runs can be tiny (KB) even when Total bytes processed is lar
 
 ### Versioning
 
-Current release: **1.5.0**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (SyncMe setup + Monitor zips).
+Current release: **1.8.0**. `VERSION.txt` uses semantic versioning. Customer packages: `dist\SyncMe-Release-<version>\` (setup + Monitor zips + `SHA256SUMS.txt`).
+
+**1.8.0** starts the 2.1 backlog: Watchdog restore verification with SHA-256/read evidence, SECRET log class, stronger reparse path rejects. **1.7.0** closed audit Phase 4. Track remaining 2.1 work in [docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md) §0. Tests: `Tests\Run-SyncMeTests.ps1`. DR proof: `Scripts\Prove-SyncMeDisasterRecovery.ps1`.
+
+**1.5.1** LocalOps fleet cutover dual-write: heartbeats to LocalOps (`/api/heartbeat` + loopback sites ingest), Monitor package marked deprecated, Fleet dashboards copy prefers LocalOps.
 
 **1.5.0** trust and recovery: exit-3 skipped-files banner (acknowledge), optional hard-fail restore drill, encrypted config migration package (secondary Backup PC), Monitor webhook alerts on fail/stale, Tailscale beginner guide, "set and periodically check" framing.
 
@@ -220,7 +219,7 @@ Current release: **1.5.0**. `VERSION.txt` uses semantic versioning. Customer pac
 
 **1.2.0** fixes snapshot browse on Windows PowerShell 5.1 (`Argument types do not match` when opening a snapshot’s root folders).
 
-### Console layout - **Setup wizard** - configure sets (including schedule and optional dry run at the end). - **Dashboard** - status cards (restic/rclone/disk), live activity, last-run details, Cloud & Retention modals; update popup when a newer package is published. - **Operations** - backup actions, set list (edit/delete), snapshot browse and restore, Check for updates, Fleet dashboards (LocalOps Console + SyncMe Monitor).
+### Console layout - **Setup wizard** - configure sets (including schedule and optional dry run at the end). - **Dashboard** - status cards (restic/rclone/disk), live activity, last-run details, Cloud & Retention modals; update popup when a newer package is published. - **Operations** - backup actions, set list (edit/delete), snapshot browse and restore, Check for updates, Fleet dashboards (LocalOps preferred; Monitor deprecated).
 
 ## Prerequisites - Windows 10/11 or Windows Server Backup PC - Source SMB share(s) reachable as UNC (LAN and/or [Tailscale](https://tailscale.com/)) - [restic](https://restic.net/) (wizard can install into `tools\`) - Optional: rclone (console can install) for cloud destinations - Optional: Tailscale for offsite UNC; OfficeAgent for locked files on the source - Optional: SyncMe Monitor package on a LAN/Tailscale PC for a fleet status dashboard
 

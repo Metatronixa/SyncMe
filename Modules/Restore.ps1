@@ -4,6 +4,11 @@
   Snapshot list and restore helpers for SyncMe (restic).
 #>
 
+if (-not (Get-Command Assert-SyncMeSafePath -ErrorAction SilentlyContinue)) {
+    $sec = Join-Path $PSScriptRoot 'Security.ps1'
+    if (Test-Path -LiteralPath $sec) { . $sec }
+}
+
 function Resolve-SyncMeResticExe {
     <#
       Finds restic.exe for SyncMe.
@@ -162,39 +167,111 @@ function Get-SyncMeSnapshots {
     }
 }
 
+function Test-SyncMeIsDriveRoot {
+    param([string]$FullPath)
+    if ([string]::IsNullOrWhiteSpace($FullPath)) { return $true }
+    $p = $FullPath.TrimEnd('\')
+    # C: or C:\
+    if ($p -match '^[A-Za-z]:$') { return $true }
+    if ($p -match '^[A-Za-z]:\\?$') { return $true }
+    return $false
+}
+
+function Test-SyncMePathUnderOrEqual {
+    param([string]$Candidate, [string]$Root)
+    if ([string]::IsNullOrWhiteSpace($Candidate) -or [string]::IsNullOrWhiteSpace($Root)) { return $false }
+    try {
+        $c = [System.IO.Path]::GetFullPath($Candidate).TrimEnd('\')
+        $r = [System.IO.Path]::GetFullPath($Root).TrimEnd('\')
+    } catch { return $false }
+    if ($c -ieq $r) { return $true }
+    return $c.StartsWith($r + '\', [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Test-SyncMeRestoreTargetSafe {
     param(
         [string]$TargetPath,
-        [string]$ResticRepo
+        [string]$ResticRepo,
+        [string[]]$SourcePaths = @(),
+        [string]$ScriptRoot = '',
+        [string]$ArchivePath = '',
+        [switch]$AllowNonEmpty
     )
     if ([string]::IsNullOrWhiteSpace($TargetPath)) {
-        return @{ Ok = $false; Message = 'Target folder is empty.' }
+        return @{ Ok = $false; Message = 'Target folder is empty.'; NonEmpty = $false }
     }
-    if ($ResticRepo -match '^rclone:') {
-        # Cloud repo - only ensure target is a normal local/UNC path
-        if ($TargetPath -match '^rclone:') {
-            return @{ Ok = $false; Message = 'Restore target must be a local or UNC folder, not rclone:.' }
+    if ($TargetPath -match '^rclone:') {
+        return @{ Ok = $false; Message = 'Restore target must be a local or UNC folder, not rclone:.'; NonEmpty = $false }
+    }
+    try {
+        $targetFull = Assert-SyncMeSafePath -Path $TargetPath -AllowUnc
+    } catch {
+        return @{ Ok = $false; Message = $_.Exception.Message; NonEmpty = $false }
+    }
+    if (Test-SyncMeIsDriveRoot -FullPath $targetFull) {
+        return @{ Ok = $false; Message = 'Refusing to restore into a drive root. Use an empty subfolder.'; NonEmpty = $false; FullPath = $targetFull }
+    }
+    if (Get-Command Test-SyncMeDangerousWindowsRoot -ErrorAction SilentlyContinue) {
+        if (Test-SyncMeDangerousWindowsRoot -FullPath $targetFull) {
+            return @{ Ok = $false; Message = 'Refusing to restore into Windows, Program Files, or ProgramData.'; NonEmpty = $false; FullPath = $targetFull }
         }
-        $targetFull = [System.IO.Path]::GetFullPath($TargetPath)
-        $nonEmpty = $false
-        if (Test-Path -LiteralPath $targetFull) {
-            $any = Get-ChildItem -LiteralPath $targetFull -Force -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($any) { $nonEmpty = $true }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ScriptRoot)) {
+        try {
+            $install = [System.IO.Path]::GetFullPath($ScriptRoot).TrimEnd('\')
+            $restoresAllowed = Join-Path $install 'Restores'
+            $underInstall = Test-SyncMePathUnderOrEqual -Candidate $targetFull -Root $install
+            $underRestores = Test-SyncMePathUnderOrEqual -Candidate $targetFull -Root $restoresAllowed
+            # Only Restores\<stamp> under the install is an allowed scratch target; never modules/config/logs.
+            if ($underInstall -and -not $underRestores) {
+                return @{ Ok = $false; Message = 'Refusing to restore into the SyncMe install folder (use Restores\ or an empty folder outside SyncMe).'; NonEmpty = $false; FullPath = $targetFull }
+            }
+            if ($underRestores -and (Test-SyncMeIsDriveRoot -FullPath $targetFull) -eq $false) {
+                # Restores root itself is not a restore target; require a subfolder.
+                $rf = [System.IO.Path]::GetFullPath($restoresAllowed).TrimEnd('\')
+                if ($targetFull.TrimEnd('\') -ieq $rf) {
+                    return @{ Ok = $false; Message = 'Choose a new empty subfolder under Restores\, not Restores itself.'; NonEmpty = $false; FullPath = $targetFull }
+                }
+            }
+        } catch { }
+    }
+    foreach ($src in @($SourcePaths)) {
+        if ([string]::IsNullOrWhiteSpace($src)) { continue }
+        try {
+            if (Test-SyncMePathUnderOrEqual -Candidate $targetFull -Root $src) {
+                return @{ Ok = $false; Message = "Refusing to restore into a configured source path ($src)."; NonEmpty = $false; FullPath = $targetFull }
+            }
+        } catch { }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($ArchivePath) -and $ArchivePath -notmatch '^rclone:') {
+        try {
+            if (Test-SyncMePathUnderOrEqual -Candidate $targetFull -Root $ArchivePath) {
+                return @{ Ok = $false; Message = 'Refusing to restore into the archive destination path.'; NonEmpty = $false; FullPath = $targetFull }
+            }
+        } catch { }
+    }
+    if ($ResticRepo -and $ResticRepo -notmatch '^rclone:') {
+        try {
+            $repoFull = [System.IO.Path]::GetFullPath($ResticRepo)
+            if (Test-SyncMePathUnderOrEqual -Candidate $targetFull -Root $repoFull) {
+                return @{ Ok = $false; Message = 'Refusing to restore into the live restic repository path.'; NonEmpty = $false; FullPath = $targetFull }
+            }
+        } catch {
+            return @{ Ok = $false; Message = 'Repository path is invalid.'; NonEmpty = $false }
         }
-        return @{ Ok = $true; Message = ''; NonEmpty = $nonEmpty; FullPath = $targetFull }
-    }
-    $targetFull = [System.IO.Path]::GetFullPath($TargetPath)
-    $repoFull = [System.IO.Path]::GetFullPath($ResticRepo)
-    if ($targetFull.TrimEnd('\') -ieq $repoFull.TrimEnd('\')) {
-        return @{ Ok = $false; Message = 'Refusing to restore into the live restic repository path.' }
-    }
-    if ($targetFull.StartsWith($repoFull.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
-        return @{ Ok = $false; Message = 'Refusing to restore into a folder inside the restic repository.' }
     }
     $nonEmpty = $false
     if (Test-Path -LiteralPath $targetFull) {
         $any = Get-ChildItem -LiteralPath $targetFull -Force -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($any) { $nonEmpty = $true }
+    }
+    if ($nonEmpty -and -not $AllowNonEmpty) {
+        return @{
+            Ok       = $false
+            Message  = 'Restore target must be an empty folder (contains existing files). Choose a new empty directory.'
+            NonEmpty = $true
+            FullPath = $targetFull
+        }
     }
     return @{ Ok = $true; Message = ''; NonEmpty = $nonEmpty; FullPath = $targetFull }
 }
@@ -283,13 +360,34 @@ function Invoke-SyncMeRestore {
         return @{ Success = $false; ExitCode = 1; Message = $uncCheck.Message; TargetPath = $TargetPath }
     }
 
-    $safe = Test-SyncMeRestoreTargetSafe -TargetPath $TargetPath -ResticRepo $Config.ResticRepo
+    $srcPaths = @()
+    if ($Config.PSObject.Properties['SourcePaths'] -and $Config.SourcePaths) {
+        $srcPaths = @($Config.SourcePaths)
+    } elseif ($Config.PSObject.Properties['SourcePath'] -and $Config.SourcePath) {
+        $srcPaths = @([string]$Config.SourcePath)
+    }
+    $arch = if ($Config.PSObject.Properties['ArchivePath']) { [string]$Config.ArchivePath } else { '' }
+    $installRoot = Split-Path -Parent $PSScriptRoot
+    $safe = Test-SyncMeRestoreTargetSafe -TargetPath $TargetPath -ResticRepo $Config.ResticRepo `
+        -SourcePaths $srcPaths -ScriptRoot $installRoot -ArchivePath $arch
     if (-not $safe.Ok) {
         return @{ Success = $false; ExitCode = 1; Message = $safe.Message; TargetPath = $TargetPath }
     }
 
+    # Re-check emptiness immediately before restic (TOCTOU).
+    $recheck = Test-SyncMeRestoreTargetSafe -TargetPath $safe.FullPath -ResticRepo $Config.ResticRepo `
+        -SourcePaths $srcPaths -ScriptRoot $installRoot -ArchivePath $arch
+    if (-not $recheck.Ok) {
+        return @{ Success = $false; ExitCode = 1; Message = $recheck.Message; TargetPath = $TargetPath }
+    }
+
     if (-not (Test-Path -LiteralPath $safe.FullPath)) {
         New-Item -ItemType Directory -Path $safe.FullPath -Force | Out-Null
+        $final = Test-SyncMeRestoreTargetSafe -TargetPath $safe.FullPath -ResticRepo $Config.ResticRepo `
+            -SourcePaths $srcPaths -ScriptRoot $installRoot -ArchivePath $arch
+        if (-not $final.Ok) {
+            return @{ Success = $false; ExitCode = 1; Message = $final.Message; TargetPath = $TargetPath }
+        }
     }
 
     $resticExe = Get-SyncMeResticExePath -Config $Config -ScriptRoot (Split-Path -Parent $PSScriptRoot)
@@ -298,8 +396,13 @@ function Invoke-SyncMeRestore {
 
     $args = @('restore', $Snapshot, '--target', $safe.FullPath)
     if (-not [string]::IsNullOrWhiteSpace($Include)) {
-        $includeRestic = ConvertTo-SyncMeResticAbsPath -Path $Include.Trim()
-        if ([string]::IsNullOrWhiteSpace($includeRestic)) { $includeRestic = $Include.Trim() }
+        try {
+            $incSafe = Assert-SyncMeRestoreInclude -Include $Include
+        } catch {
+            return @{ Success = $false; ExitCode = 1; Message = $_.Exception.Message; TargetPath = $TargetPath }
+        }
+        $includeRestic = ConvertTo-SyncMeResticAbsPath -Path $incSafe
+        if ([string]::IsNullOrWhiteSpace($includeRestic)) { $includeRestic = $incSafe }
         $args += @('--include', $includeRestic)
     }
 
@@ -668,12 +771,37 @@ function Get-SyncMeSnapshotListing {
     }
 }
 
+function Write-SyncMeRestoreVerifyEvidence {
+    param(
+        [string]$ScriptRoot,
+        [string]$SetId,
+        [hashtable]$Evidence
+    )
+    $dir = Join-Path $ScriptRoot ("Logs\sets\$SetId")
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $path = Join-Path $dir 'restore-verify-evidence.json'
+    $obj = [ordered]@{}
+    foreach ($k in @($Evidence.Keys)) { $obj[[string]$k] = $Evidence[$k] }
+    if (-not $obj.Contains('verifiedUtc')) {
+        $obj['verifiedUtc'] = (Get-Date).ToUniversalTime().ToString('o')
+    }
+    [IO.File]::WriteAllText($path, (($obj | ConvertTo-Json -Depth 6) + "`r`n"), (New-Object System.Text.UTF8Encoding $false))
+    return $path
+}
+
+function Get-SyncMeRestoreVerifyEvidence {
+    param([string]$ScriptRoot, [string]$SetId = 'set1')
+    $path = Join-Path $ScriptRoot ("Logs\sets\$SetId\restore-verify-evidence.json")
+    if (-not (Test-Path -LiteralPath $path)) { return $null }
+    try { return ((Get-Content -LiteralPath $path -Raw) | ConvertFrom-Json) } catch { return $null }
+}
+
 function Test-SyncMeRestoreDrill {
     <#
-      Restore drill: dump up to 3 random files from the latest snapshot and verify bytes.
+      Restore verification: dump sample file(s) from the latest snapshot, hash + read-test,
+      write evidence under Logs\sets\<id>\restore-verify-evidence.json, delete temp restore.
       Uses restic dump (not restore --include) to avoid Windows UNC-root restore failures.
-      Returns Ok / Skipped / Message. By default the backup job treats Ok=$false as advisory;
-      callers may fail the job when FailJobOnRestoreDrillFailure is enabled on the set.
+      Returns Ok / Skipped / Message / Evidence. Advisory unless FailJobOnRestoreDrillFailure.
     #>
     [CmdletBinding()]
     param(
@@ -820,7 +948,51 @@ function Test-SyncMeRestoreDrill {
                     $lastErr = "restic dump produced empty file for path='$pick'"
                     continue
                 }
-                $msg = "Restore drill OK: snapshot=$snapId path=$pick size=$len (restic dump)"
+                $sha = (Get-FileHash -LiteralPath $outFile -Algorithm SHA256).Hash.ToLowerInvariant()
+                $readOk = $false
+                $readBytes = 0
+                try {
+                    $fs = [IO.File]::OpenRead($outFile)
+                    try {
+                        $buf = New-Object byte[] ([Math]::Min(4096, [int][Math]::Min($len, 4096)))
+                        $readBytes = $fs.Read($buf, 0, $buf.Length)
+                        $readOk = ($readBytes -gt 0)
+                    } finally { $fs.Dispose() }
+                } catch {
+                    $lastErr = "read test failed for path='$pick': $($_.Exception.Message)"
+                    continue
+                }
+                if (-not $readOk) {
+                    $lastErr = "read test returned 0 bytes for path='$pick'"
+                    continue
+                }
+
+                $evidence = @{
+                    ok          = $true
+                    setId       = $SetId
+                    snapshotId  = $snapId
+                    path        = $pick
+                    size        = $len
+                    sha256      = $sha
+                    readBytes   = $readBytes
+                    readOk      = $true
+                    method      = 'restic-dump'
+                    verifiedUtc = (Get-Date).ToUniversalTime().ToString('o')
+                }
+                try {
+                    $evPath = Write-SyncMeRestoreVerifyEvidence -ScriptRoot $scriptRoot -SetId $SetId -Evidence $evidence
+                    $evidence['evidencePath'] = $evPath
+                } catch { }
+
+                if (Get-Command Write-SyncMeStructuredLog -ErrorAction SilentlyContinue) {
+                    try {
+                        Write-SyncMeStructuredLog -ScriptRoot $scriptRoot -Level AUDIT -Message 'Restore verification evidence recorded' -Fields @{
+                            setId = $SetId; snapshotId = $snapId; size = $len; sha256 = $sha
+                        }
+                    } catch { }
+                }
+
+                $msg = "Restore verification OK: snapshot=$snapId path=$pick size=$len sha256=$sha readBytes=$readBytes"
                 if ($LogPath) {
                     try { Add-Content -LiteralPath $LogPath -Value "$(Get-Date -Format o) $msg" -ErrorAction SilentlyContinue } catch { }
                 }
@@ -831,13 +1003,16 @@ function Test-SyncMeRestoreDrill {
                     Path       = $pick
                     Size       = $len
                     SnapshotId = $snapId
+                    Sha256     = $sha
+                    ReadOk     = $true
+                    Evidence   = $evidence
                 }
             } catch {
                 $lastErr = "restic dump failed for path='$pick': $($_.Exception.Message)"
             }
         }
 
-        throw "Restore drill failed after $attempts dump attempt(s). Last: $lastErr"
+        throw "Restore verification failed after $attempts dump attempt(s). Last: $lastErr"
     } catch {
         $err = [string]$_.Exception.Message
         if ($LogPath) {

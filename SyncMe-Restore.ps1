@@ -15,6 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $ScriptRoot = $PSScriptRoot
 . (Join-Path $ScriptRoot 'Modules\Common.ps1')
+. (Join-Path $ScriptRoot 'Modules\Security.ps1')
 . (Join-Path $ScriptRoot 'Modules\Notify.ps1')
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')

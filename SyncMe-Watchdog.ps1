@@ -13,6 +13,8 @@ $ScriptRoot = $PSScriptRoot
 . (Join-Path $ScriptRoot 'Config.ps1')
 . (Join-Path $ScriptRoot 'Modules\Notify.ps1')
 . (Join-Path $ScriptRoot 'Modules\Sets.ps1')
+$restoreMod = Join-Path $ScriptRoot 'Modules\Restore.ps1'
+if (Test-Path -LiteralPath $restoreMod) { . $restoreMod }
 
 $sets = @(Get-SyncMeSetsFromConfigFile -ScriptRoot $ScriptRoot)
 if ($sets.Count -eq 0) {
@@ -22,6 +24,7 @@ if ($sets.Count -eq 0) {
 }
 
 $maxDaysDefault = 2
+$verifyMaxDaysDefault = 14
 $overdueItems = New-Object System.Collections.Generic.List[string]
 $okItems = New-Object System.Collections.Generic.List[string]
 $emailConfig = $null
@@ -64,18 +67,53 @@ foreach ($Config in $sets) {
     }
 
     $raw = (Get-Content -LiteralPath $stampPath -Raw).Trim()
+    $backupOk = $false
     try {
         $last = [datetime]::Parse($raw, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind)
         $age = ((Get-Date).ToUniversalTime() - $last.ToUniversalTime()).TotalDays
         if ($age -gt $maxDays) {
             [void]$overdueItems.Add("[$setLabel] Last success $([math]::Round($age, 1)) days ago (limit $maxDays). Stamp: $raw")
         } else {
+            $backupOk = $true
             $msg = "[$setLabel] OK: last success $raw ($([math]::Round($age, 2)) days ago)."
             [void]$okItems.Add($msg)
             Write-Host $msg
         }
     } catch {
         [void]$overdueItems.Add("[$setLabel] Could not parse last-success stamp: $raw")
+    }
+
+    # Restore verification evidence (hash/read) — Watchdog expects periodic proof of restorability.
+    $verifyMaxDays = $verifyMaxDaysDefault
+    if ($Config.PSObject.Properties.Name -contains 'WatchdogVerifyMaxAgeDays' -and $null -ne $Config.WatchdogVerifyMaxAgeDays) {
+        $verifyMaxDays = [double]$Config.WatchdogVerifyMaxAgeDays
+    }
+    $ev = $null
+    if (Get-Command Get-SyncMeRestoreVerifyEvidence -ErrorAction SilentlyContinue) {
+        $ev = Get-SyncMeRestoreVerifyEvidence -ScriptRoot $ScriptRoot -SetId $setId
+    }
+    if (-not $ev) {
+        [void]$overdueItems.Add("[$setLabel] No restore-verify evidence (Logs\\sets\\$setId\\restore-verify-evidence.json). Run a weekly data check / restore drill.")
+    } else {
+        $evUtc = $null
+        try {
+            if ($ev.verifiedUtc) {
+                $evUtc = [datetime]::Parse([string]$ev.verifiedUtc, $null, [Globalization.DateTimeStyles]::RoundtripKind)
+            }
+        } catch { }
+        if (-not $evUtc) {
+            [void]$overdueItems.Add("[$setLabel] Restore-verify evidence missing verifiedUtc.")
+        } else {
+            $evAge = ((Get-Date).ToUniversalTime() - $evUtc.ToUniversalTime()).TotalDays
+            $shaShort = if ($ev.sha256) { ([string]$ev.sha256).Substring(0, [Math]::Min(12, ([string]$ev.sha256).Length)) + '…' } else { '?' }
+            if ($evAge -gt $verifyMaxDays) {
+                [void]$overdueItems.Add("[$setLabel] Restore verification evidence is $([math]::Round($evAge, 1)) days old (limit $verifyMaxDays). Last sha256=$shaShort")
+            } elseif ($backupOk) {
+                $vm = "[$setLabel] Restore verify OK: age=$([math]::Round($evAge, 1))d size=$($ev.size) sha256=$shaShort"
+                [void]$okItems.Add($vm)
+                Write-Host $vm
+            }
+        }
     }
 }
 

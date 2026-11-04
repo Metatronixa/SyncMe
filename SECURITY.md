@@ -50,6 +50,26 @@ The security posture is **orchestration on a trusted Backup PC**, with strong en
 
 Operators remain responsible for verifying backups, protecting credentials, hardening the Backup PC, and keeping offline copies of the restic password.
 
+### Toward SyncMe 2.1
+
+The **1.x** trust model above still applies. Frozen architecture: [docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md) (see **§0 Shipped vs remaining**).
+
+**Shipped in 1.7.0 (audit Phases 1–4):** Product completion docs (DR, support matrix, release checklist/notes), Rescue Kit Health/Help, SHA256SUMS, DR prove script. Plus:
+
+**Shipped in 1.6.0 (audit Phases 1–3):** Host Router/controllers, ProcessRunner, JobState, config schema migrate, structured logs, `/api/health`. Plus Phase 1–2:
+
+**Shipped in 1.5.4 (audit Phases 1–2):**
+
+- Path / restore guards; empty targets; CSRF/Origin; CredWrite; atomic locks; fleet degraded; Monitor hardening
+- DPAPI elevation handoff for scheduled-task registration (fail-closed ACL)
+- Repo uniqueness + idle checks (`Modules\Jobs.ps1`)
+- HTTPS update URLs + RSA-signed manifests (`Modules\UpdatePublicKey.xml`); SHA-256 retained
+- Staged update apply with `Logs\update-state.json` and merge-error rollback
+- Pester suite + GitHub Actions workflow
+- `RescueKit\SyncMe-Rescue.ps1`
+
+**Not shipped yet (do not assume in audits):** full session/login model beyond CSRF, Graph permission fingerprints / Sites.Selected enforcement, per-device fleet certificates, split restic destructive credentials. Watchdog restore-evidence (hash/read) ships in **1.8.0** (still advisory for job success unless FailJobOnRestoreDrillFailure).
+
 ## Trust boundary: localhost console
 
 The HTML console and JSON API are served by `SyncMe-Host.ps1` using .NET `HttpListener` bound to:
@@ -63,7 +83,7 @@ Important consequences:
 3. **Do not reverse-proxy or port-forward** SyncMe to the internet or to untrusted networks. If you expose `:17845`, you are expanding the trust boundary beyond what SyncMe was designed for.
 4. **Firewall / remote desktop.** Protect interactive and remote access to the Backup PC with normal Windows hardening (least privilege accounts, RDP restrictions, patching, disk encryption where appropriate).
 
-Reports that SyncMe “has no web login” on localhost are generally **out of scope** as vulnerabilities unless you also show a way to reach the API from outside the local machine contrary to the bind address, or a clear privilege escalation beyond the local-user trust model.
+Reports that SyncMe “has no web login” on localhost are generally **out of scope** as vulnerabilities unless you also show a way to reach the API from outside the local machine contrary to the bind address, or a clear privilege escalation beyond the local-user trust model. **1.5.3** treats cross-origin browser requests as untrusted for mutating APIs (CSRF + Origin/Host); there is still no SyncMe username/password wall for a local operator on the Backup PC.
 
 ### Optional LocalOps Console registration
 
@@ -72,9 +92,9 @@ When LocalOps Console is running on the same Backup PC, SyncMe may POST a lightw
 Security constraints for this path:
 
 1. SyncMe only allows a **loopback** LocalOps URL (`127.0.0.1`, `localhost`, `::1`). Non-loopback URLs are rejected / skipped.
-2. LocalOps accepts register/heartbeat only from **loopback clients** in this release.
+2. LocalOps accepts **loopback** `register` without a token. **Fleet** heartbeats (`/api/v1/syncme/sites/heartbeat` or `/api/heartbeat`) require Bearer `syncMeFleetToken` and are not loopback-only.
 3. The payload contains install path, version, hostname, site id, console URL, and optional last-run summary - **never** restic passwords, SMTP secrets, or rclone OAuth tokens.
-4. SyncMe **Monitor** remains a separate optional product (Bearer token heartbeats to a self-hosted Monitor host). Monitor tokens are not sent to LocalOps.
+4. Fleet heartbeats to LocalOps (1.5.1+) reuse the **Monitor/shared token** as Bearer (`syncMeFleetToken` on LocalOps). That token is **not** a restic or Graph secret. **2.1** intends per-device credentials for command-capable fleet channels ([docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md)); 1.x shared Bearer remains impersonable if leaked.
 
 ## Secrets and credentials
 
@@ -140,6 +160,10 @@ SyncMe adds operator-facing controls that affect integrity and recoverability:
 
 When enabled, SyncMe skips prune and blocks snapshot delete from the console for that set. This reduces accidental or hostile deletion of snapshots **through SyncMe’s UI/API paths**. It is **not** a full WORM / object-lock guarantee on every storage backend. Cloud buckets, NAS ACLs, and disk access outside SyncMe can still delete or encrypt data if those layers are compromised.
 
+**2.1 direction:** treat append-only / immutable storage and **separate backup-write vs destructive repository credentials** as headline ransomware *resilience* (not a SyncMe antivirus product). See [docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md). Until then, prefer append-only on important sets and lock down who can log onto the Backup PC.
+
+**2.1 direction:** treat append-only / immutable storage and **separate backup-write vs destructive repository credentials** as headline ransomware *resilience* (not a SyncMe antivirus product). See [docs/V2.1-SECURITY.md](docs/V2.1-SECURITY.md). Until then, prefer append-only on important sets and lock down who can log onto the Backup PC.
+
 ### Stale lock handling
 
 Restic repository locks can block jobs after a crash. SyncMe may unlock only after an intended restic operation fails with lock-related errors and after checking that other SyncMe/restic processes do not appear to be running. Aggressive unlock of a live repository can corrupt concurrent writers. Reports should distinguish “unlock helped recovery” from “unlock raced a live backup.”
@@ -178,12 +202,13 @@ Use this as a practical baseline, not a certification:
 2. Use a dedicated Windows account for scheduled backups; align Task Scheduler and Credential Manager to that account.
 3. Keep the restic password in a password manager or offline vault; export a Rescue Kit and store it with that vault entry.
 4. Prefer local disk or trusted NAS for primary repositories when possible; treat consumer cloud as capacity with throttling and account-risk caveats.
-5. Enable Append-Only Mode for sets where prune/delete should be rare.
+5. Enable Append-Only Mode for sets where prune/delete should be rare; keep restic destructive operations off the same identity as routine backup where you can.
 6. Restrict who can log on interactively to the Backup PC.
 7. Do not publish port 17845 or reverse-proxy the console without an additional authenticated gateway you fully control and accept responsibility for.
 8. Keep Windows, restic, and rclone reasonably up to date.
 9. Verify restores on a schedule, not only after a disaster.
 10. After a Backup PC rebuild, restore secrets deliberately; do not invent a new restic password against an existing repository.
+11. Treat the fleet shared token like a site credential: unique enough for 1.x, rotate if leaked; do not use it as Graph or restic password.
 
 ## Third-party software
 

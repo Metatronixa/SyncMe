@@ -31,6 +31,48 @@ $ErrorActionPreference = 'Stop'
 $ScriptRoot = $PSScriptRoot
 . (Join-Path $ScriptRoot 'Modules\Common.ps1')
 
+function Protect-SyncMeElevationSecret {
+    param([Parameter(Mandatory)][string]$PlainText, [Parameter(Mandatory)][string]$OutPath)
+    Add-Type -AssemblyName System.Security -ErrorAction Stop
+    $bytes = [Text.Encoding]::UTF8.GetBytes($PlainText)
+    try {
+        $protected = [Security.Cryptography.ProtectedData]::Protect(
+            $bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+        [IO.File]::WriteAllBytes($OutPath, $protected)
+    } finally {
+        if ($bytes) { [Array]::Clear($bytes, 0, $bytes.Length) }
+    }
+    $acl = Get-Acl -LiteralPath $OutPath
+    $acl.SetAccessRuleProtection($true, $false)
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+        [System.Security.Principal.WindowsIdentity]::GetCurrent().Name,
+        'FullControl',
+        'Allow'
+    )
+    $acl.SetAccessRule($rule)
+    Set-Acl -LiteralPath $OutPath -AclObject $acl
+    # Fail closed: ensure only the current user remains on the DACL
+    $ident = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+    foreach ($ace in @($acl.Access)) {
+        if ($ace.IdentityReference.Value -ne $ident) {
+            throw 'Failed to restrict elevation secret ACL to the current user only.'
+        }
+    }
+}
+
+function Unprotect-SyncMeElevationSecret {
+    param([Parameter(Mandatory)][string]$Path)
+    Add-Type -AssemblyName System.Security -ErrorAction Stop
+    $raw = [IO.File]::ReadAllBytes($Path)
+    try {
+        $plainBytes = [Security.Cryptography.ProtectedData]::Unprotect(
+            $raw, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
+        return [Text.Encoding]::UTF8.GetString($plainBytes)
+    } finally {
+        if ($raw) { [Array]::Clear($raw, 0, $raw.Length) }
+    }
+}
+
 function Get-SyncMeTaskPasswordPlain {
     if ($UserPassword) {
         $cred = New-Object System.Management.Automation.PSCredential ('x', $UserPassword)
@@ -38,9 +80,25 @@ function Get-SyncMeTaskPasswordPlain {
     }
     if (-not [string]::IsNullOrWhiteSpace($TaskPasswordFile) -and (Test-Path -LiteralPath $TaskPasswordFile)) {
         try {
+            # DPAPI blob (preferred) or legacy plaintext cleanup path
+            $isDpapi = $TaskPasswordFile -match '\.dpapi$'
+            if ($isDpapi) {
+                return (Unprotect-SyncMeElevationSecret -Path $TaskPasswordFile)
+            }
             return (Get-Content -LiteralPath $TaskPasswordFile -Raw -ErrorAction Stop).TrimEnd("`r", "`n")
         } finally {
-            Remove-Item -LiteralPath $TaskPasswordFile -Force -ErrorAction SilentlyContinue
+            try {
+                # Overwrite then delete
+                if (Test-Path -LiteralPath $TaskPasswordFile) {
+                    $len = (Get-Item -LiteralPath $TaskPasswordFile).Length
+                    if ($len -gt 0 -and $len -lt 1MB) {
+                        [IO.File]::WriteAllBytes($TaskPasswordFile, (New-Object byte[] $len))
+                    }
+                    Remove-Item -LiteralPath $TaskPasswordFile -Force -ErrorAction SilentlyContinue
+                }
+            } catch {
+                Remove-Item -LiteralPath $TaskPasswordFile -Force -ErrorAction SilentlyContinue
+            }
         }
     }
     if (-not [string]::IsNullOrWhiteSpace($TaskPassword)) {
@@ -56,19 +114,20 @@ if (-not (Test-MonarchIsAdmin)) {
             Write-Host "For 'run whether logged on or not', provide the Windows account password and run elevated." -ForegroundColor Yellow
             exit 1
         }
-        $pwdFile = Join-Path $env:TEMP ('syncme-task-pwd-' + [guid]::NewGuid().ToString('n') + '.txt')
-        Set-Content -LiteralPath $pwdFile -Value $plainForElevate -Encoding UTF8 -NoNewline
+        $secureDir = Join-Path $env:LOCALAPPDATA 'SyncMe\elevate'
+        if (-not (Test-Path -LiteralPath $secureDir)) {
+            New-Item -ItemType Directory -Path $secureDir -Force | Out-Null
+        }
+        $pwdFile = Join-Path $secureDir ('task-' + [guid]::NewGuid().ToString('n') + '.dpapi')
         try {
-            $acl = Get-Acl -LiteralPath $pwdFile
-            $acl.SetAccessRuleProtection($true, $false)
-            $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
-                [System.Security.Principal.WindowsIdentity]::GetCurrent().Name,
-                'FullControl',
-                'Allow'
-            )
-            $acl.SetAccessRule($rule)
-            Set-Acl -LiteralPath $pwdFile -AclObject $acl
-        } catch { }
+            Protect-SyncMeElevationSecret -PlainText $plainForElevate -OutPath $pwdFile
+        } catch {
+            if (Test-Path -LiteralPath $pwdFile) { Remove-Item -LiteralPath $pwdFile -Force -ErrorAction SilentlyContinue }
+            Write-Host ("Elevation secret handoff failed (fail-closed): " + $_.Exception.Message) -ForegroundColor Red
+            exit 1
+        } finally {
+            $plainForElevate = $null
+        }
 
         $passArgs = [System.Collections.Generic.List[string]]::new()
         $passArgs.Add('-TaskName'); $passArgs.Add($TaskName)
@@ -89,9 +148,18 @@ if (-not (Test-MonarchIsAdmin)) {
             $passArgs.Add('-WatchdogTime'); $passArgs.Add($WatchdogTime)
         }
         if ($SetId) { $passArgs.Add('-SetId'); $passArgs.Add($SetId) }
-        $code = Request-MonarchElevation -ScriptPath $PSCommandPath -ArgumentList $passArgs.ToArray()
-        if (Test-Path -LiteralPath $pwdFile) {
-            Remove-Item -LiteralPath $pwdFile -Force -ErrorAction SilentlyContinue
+        try {
+            $code = Request-MonarchElevation -ScriptPath $PSCommandPath -ArgumentList $passArgs.ToArray()
+        } finally {
+            if (Test-Path -LiteralPath $pwdFile) {
+                try {
+                    $len = (Get-Item -LiteralPath $pwdFile).Length
+                    if ($len -gt 0 -and $len -lt 1MB) {
+                        [IO.File]::WriteAllBytes($pwdFile, (New-Object byte[] $len))
+                    }
+                } catch { }
+                Remove-Item -LiteralPath $pwdFile -Force -ErrorAction SilentlyContinue
+            }
         }
         exit $(if ($null -eq $code) { 0 } else { $code })
     }

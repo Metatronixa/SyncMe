@@ -1,0 +1,21 @@
+﻿SyncMe Release 1.8.0
+======================
+This folder contains both customer packages:
+
+1) SyncMe-Setup-1.8.0.zip
+   Backup PC console (wizard, backups, restore, schedule, signed HTTPS updates).
+   Unzip, then run SyncMe-Setup.cmd (admin recommended on Windows Server).
+   Verify: SHA256SUMS.txt
+
+2) SyncMe-Monitor-Setup-1.8.0.zip  (DEPRECATED optional add-on)
+   Prefer LocalOps Console fleet ingest (Operations → SyncMe). This zip is still built for dual-write cutover.
+   Legacy: unzip to a Monitor PC, edit Config\Monitor.json token, run SyncMe-Monitor.bat.
+
+Update feed (website): upload dist\updates\latest.json, SHA256SUMS.txt, SyncMe-Setup-1.8.0.zip, and SyncMe-Monitor-Setup-1.8.0.zip
+to https://www.syncme.co.za/updates/
+
+Manifest signature present: yes
+SHA256 (SyncMe-Setup-1.8.0.zip): 20a3622dc688910ac4aa1436e6036cd05094e22e4753ff0e87843097421482e9
+SHA256 (SyncMe-Monitor-Setup-1.8.0.zip): 20f39dea60bc1ee29ee316034172167f9aaa14fba051ee8138bcafabb7aa505c
+
+Also see RELEASE-NOTES.md and RELEASE-CHECKLIST.md in this folder.

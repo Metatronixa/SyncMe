@@ -19,22 +19,60 @@ if (-not (Test-Path -LiteralPath $DataRoot)) {
     New-Item -ItemType Directory -Path $DataRoot -Force | Out-Null
 }
 
+function New-MonitorToken {
+    $bytes = New-Object byte[] 32
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try { $rng.GetBytes($bytes) } finally { $rng.Dispose() }
+    $b64 = [Convert]::ToBase64String($bytes).TrimEnd('=')
+    return (('sm_' + $b64) -replace '\+', '-') -replace '/', '_'
+}
+
+function Test-MonitorTokenWeak {
+    param([string]$Token)
+    if ([string]::IsNullOrWhiteSpace($Token)) { return $true }
+    $t = $Token.Trim()
+    if ($t -eq 'change-me') { return $true }
+    if ($t.Length -lt 24) { return $true }
+    return $false
+}
+
+function Save-MonitorConfigFile {
+    param($Config)
+    $path = Join-Path $ScriptRoot 'Config\Monitor.json'
+    $dir = Split-Path $path -Parent
+    if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+    $ordered = [ordered]@{
+        Token                  = [string]$Config.Token
+        Port                   = [int]$Config.Port
+        Bind                   = [string]$Config.Bind
+        WebhookUrl             = [string]$Config.WebhookUrl
+        WebhookOnFail          = [bool]$Config.WebhookOnFail
+        WebhookOnStale         = [bool]$Config.WebhookOnStale
+        StaleHours             = [int]$Config.StaleHours
+        WebhookCooldownMinutes = [int]$Config.WebhookCooldownMinutes
+    }
+    [IO.File]::WriteAllText($path, (($ordered | ConvertTo-Json) + "`r`n"), $utf8)
+}
+
 function Get-MonitorConfig {
     $path = Join-Path $ScriptRoot 'Config\Monitor.json'
     $defaults = [ordered]@{
-        Token            = 'change-me'
+        Token            = ''
         Port             = $Port
+        Bind             = 'loopback'  # loopback | lan
         WebhookUrl       = ''
         WebhookOnFail    = $true
         WebhookOnStale   = $true
         StaleHours       = 36
         WebhookCooldownMinutes = 60
     }
+    $created = $false
     if (Test-Path -LiteralPath $path) {
         try {
             $obj = (Get-Content -LiteralPath $path -Raw) | ConvertFrom-Json
-            if ($obj.Token) { $defaults.Token = [string]$obj.Token }
+            if ($null -ne $obj.PSObject.Properties['Token']) { $defaults.Token = [string]$obj.Token }
             if ($obj.Port) { $defaults.Port = [int]$obj.Port }
+            if ($null -ne $obj.PSObject.Properties['Bind'] -and $obj.Bind) { $defaults.Bind = [string]$obj.Bind }
             if ($null -ne $obj.PSObject.Properties['WebhookUrl']) { $defaults.WebhookUrl = [string]$obj.WebhookUrl }
             if ($null -ne $obj.PSObject.Properties['WebhookOnFail']) { $defaults.WebhookOnFail = [bool]$obj.WebhookOnFail }
             if ($null -ne $obj.PSObject.Properties['WebhookOnStale']) { $defaults.WebhookOnStale = [bool]$obj.WebhookOnStale }
@@ -44,10 +82,16 @@ function Get-MonitorConfig {
             }
         } catch { }
     } else {
-        $dir = Split-Path $path -Parent
-        if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-        [IO.File]::WriteAllText($path, (($defaults | ConvertTo-Json) + "`r`n"), $utf8)
+        $created = $true
     }
+
+    if (Test-MonitorTokenWeak -Token ([string]$defaults.Token)) {
+        $defaults.Token = New-MonitorToken
+        $created = $true
+        Write-Host "Monitor token was missing/placeholder; generated a new token and saved Config\Monitor.json" -ForegroundColor Yellow
+    }
+    if ([string]$defaults.Bind -notin @('loopback', 'lan')) { $defaults.Bind = 'loopback' }
+    if ($created) { Save-MonitorConfigFile -Config ([pscustomobject]$defaults) }
     return [pscustomobject]$defaults
 }
 
@@ -169,15 +213,28 @@ function Read-Body {
     try { return $reader.ReadToEnd() } finally { $reader.Close() }
 }
 
+function Test-MonitorConstantTimeEquals {
+    param([string]$A, [string]$B)
+    if ($null -eq $A) { $A = '' }
+    if ($null -eq $B) { $B = '' }
+    $ba = [Text.Encoding]::UTF8.GetBytes($A)
+    $bb = [Text.Encoding]::UTF8.GetBytes($B)
+    $diff = $ba.Length -bxor $bb.Length
+    $len = [Math]::Min($ba.Length, $bb.Length)
+    for ($i = 0; $i -lt $len; $i++) {
+        $diff = $diff -bor ($ba[$i] -bxor $bb[$i])
+    }
+    return ($diff -eq 0 -and $ba.Length -eq $bb.Length)
+}
+
 function Test-MonitorAuth {
     param($Request, [string]$Token)
-    if ([string]::IsNullOrWhiteSpace($Token)) { return $false }
+    if (Test-MonitorTokenWeak -Token $Token) { return $false }
     $hdr = [string]$Request.Headers['Authorization']
     if ($hdr -match '^\s*Bearer\s+(.+)\s*$') {
-        return ($Matches[1].Trim() -eq $Token)
+        return (Test-MonitorConstantTimeEquals -A $Matches[1].Trim() -B $Token)
     }
-    $q = [string]$Request.QueryString['token']
-    if (-not [string]::IsNullOrWhiteSpace($q) -and $q -eq $Token) { return $true }
+    # Query-string tokens are rejected (leaked via logs/Referer/history).
     return $false
 }
 
@@ -202,6 +259,16 @@ function Save-MonitorHeartbeat {
     if (Test-Path -LiteralPath $path) {
         try { $prev = (Get-Content -LiteralPath $path -Raw) | ConvertFrom-Json } catch { }
     }
+    $exitCode = $(if ($null -ne $BodyObj.exitCode) { [string]$BodyObj.exitCode } else { '' })
+    $status = $(if ($BodyObj.status) { [string]$BodyObj.status } else { '' })
+    $phase = $(if ($BodyObj.phase) { [string]$BodyObj.phase } else { '' })
+    if ([string]::IsNullOrWhiteSpace($status)) {
+        if ($exitCode -eq '3' -or $phase -eq 'degraded') { $status = 'degraded' }
+        elseif ([bool]$BodyObj.success) { $status = 'ok' }
+        else { $status = 'failed' }
+    }
+    if ($status -eq 'degraded' -and [string]::IsNullOrWhiteSpace($phase)) { $phase = 'degraded' }
+
     $rec = [ordered]@{
         siteId     = $siteId
         hostname   = $(if ($BodyObj.hostname) { [string]$BodyObj.hostname } else { '' })
@@ -209,10 +276,11 @@ function Save-MonitorHeartbeat {
         setId      = $(if ($BodyObj.setId) { [string]$BodyObj.setId } else { '' })
         setName    = $(if ($BodyObj.setName) { [string]$BodyObj.setName } else { '' })
         success    = [bool]$BodyObj.success
+        status     = $status
         summary    = $(if ($BodyObj.summary) { [string]$BodyObj.summary } else { '' })
         snapshotId = $(if ($BodyObj.snapshotId) { [string]$BodyObj.snapshotId } else { '' })
-        exitCode   = $(if ($null -ne $BodyObj.exitCode) { [string]$BodyObj.exitCode } else { '' })
-        phase      = $(if ($BodyObj.phase) { [string]$BodyObj.phase } else { '' })
+        exitCode   = $exitCode
+        phase      = $phase
         percent    = $(if ($null -ne $BodyObj.percent) { [int]$BodyObj.percent } else { 0 })
         endedUtc   = $(if ($BodyObj.endedUtc) { [string]$BodyObj.endedUtc } else { (Get-Date).ToUniversalTime().ToString('o') })
         receivedUtc = (Get-Date).ToUniversalTime().ToString('o')
@@ -242,7 +310,24 @@ function Save-MonitorHeartbeat {
 
 function Send-Static {
     param([string]$RelPath, $Response)
-    $full = Join-Path $UiRoot ($RelPath -replace '/', '\')
+    if ([string]::IsNullOrWhiteSpace($RelPath)) {
+        $Response.StatusCode = 404
+        $Response.Close()
+        return
+    }
+    $safe = ($RelPath -replace '/', '\').TrimStart('\')
+    if ($safe -match '(^|[\\/])\.\.([\\/]|$)') {
+        $Response.StatusCode = 403
+        $Response.Close()
+        return
+    }
+    $full = [IO.Path]::GetFullPath((Join-Path $UiRoot $safe))
+    $rootFull = [IO.Path]::GetFullPath($UiRoot)
+    if (-not $full.StartsWith($rootFull, [StringComparison]::OrdinalIgnoreCase)) {
+        $Response.StatusCode = 403
+        $Response.Close()
+        return
+    }
     if (-not (Test-Path -LiteralPath $full)) {
         $Response.StatusCode = 404
         $Response.Close()
@@ -267,18 +352,30 @@ function Send-Static {
 
 $cfg = Get-MonitorConfig
 if ($cfg.Port -gt 0) { $Port = [int]$cfg.Port }
+if (Test-MonitorTokenWeak -Token ([string]$cfg.Token)) {
+    throw 'Monitor refused to start: token is missing, placeholder (change-me), or shorter than 24 characters. Edit Config\Monitor.json.'
+}
+
+$bindMode = ([string]$cfg.Bind).ToLowerInvariant()
+if ($bindMode -eq 'lan') {
+    $prefixCandidates = @("http://+:$Port/", "http://127.0.0.1:$Port/")
+} else {
+    $prefixCandidates = @("http://127.0.0.1:$Port/")
+}
 
 $listener = New-Object System.Net.HttpListener
 $bound = $false
-foreach ($p in @("http://+:$Port/", "http://127.0.0.1:$Port/")) {
+$boundPrefix = ''
+foreach ($p in $prefixCandidates) {
     try {
         $listener.Prefixes.Clear()
         $listener.Prefixes.Add($p)
         $listener.Start()
         $bound = $true
+        $boundPrefix = $p
         Write-Host "SyncMe Monitor listening on $p" -ForegroundColor Green
         if ($p.StartsWith('http://+:')) {
-            Write-Host "LAN/Tailscale: http://<this-pc>:$Port/" -ForegroundColor Cyan
+            Write-Host "LAN/Tailscale: http://<this-pc>:$Port/ (Bind=lan). Protect with firewall; keep Token secret." -ForegroundColor Cyan
         }
         break
     } catch {
@@ -287,10 +384,15 @@ foreach ($p in @("http://+:$Port/", "http://127.0.0.1:$Port/")) {
     }
 }
 if (-not $bound) {
-    throw "Failed to bind port $Port. Run as Administrator once, or: netsh http add urlacl url=http://+:$Port/ user=Everyone"
+    if ($bindMode -eq 'lan') {
+        throw "Failed to bind port $Port. Run as Administrator once, or: netsh http add urlacl url=http://+:$Port/ user=Everyone"
+    }
+    throw "Failed to bind loopback port $Port (http://127.0.0.1:$Port/)."
 }
 
-Write-Host "Token configured: $(if ($cfg.Token -and $cfg.Token -ne 'change-me') { 'yes' } else { 'DEFAULT - edit Config\Monitor.json' })" -ForegroundColor Yellow
+Write-Host "Token configured: yes (Authorization: Bearer …). Bind=$bindMode" -ForegroundColor Green
+$tokenPreview = if ($cfg.Token.Length -gt 10) { $cfg.Token.Substring(0, 6) + '…' } else { '(set)' }
+Write-Host "Token preview: $tokenPreview (full value in Config\Monitor.json)" -ForegroundColor DarkGray
 
 $prefix = "http://127.0.0.1:$Port/"
 if (-not $NoBrowser) {

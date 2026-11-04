@@ -29,9 +29,16 @@ CUSTOMER PACKAGE (minimal)
   Build with: .\Build-SyncMeSetup.ps1
   Setup unpacks into C:\SyncMe and launches the wizard. Existing Config.ps1 is kept.
 
-UPDATES (1.4.0+)
-  The console can check https://www.syncme.co.za/updates/latest.json and offer Install.
-  Config.ps1 is backed up and preserved. Or re-run SyncMe-Setup.cmd from a newer zip.
+UPDATES
+  The console checks https://www.syncme.co.za/updates/latest.json (HTTPS + SHA-256 + RSA signature).
+  Install from Operations when offered. Config.ps1 is preserved; Logs\previous-release enables rollback.
+  Or re-run SyncMe-Setup.cmd from a newer zip. Verify SHA256SUMS.txt when downloading manually.
+
+RESCUE / DISASTER RECOVERY
+  RescueKit\SyncMe-Rescue.ps1 — stop Host, restore previous release, diagnostics, safe mode.
+  docs\DISASTER-RECOVERY.md — rebuild a Backup PC and prove restore.
+  Scripts\Prove-SyncMeDisasterRecovery.ps1 — automated structure/health/guard checks.
+  RecoveryChecklist.txt — printable operator checklist.
 
 FLEET DASHBOARDS (optional)
   SyncMe Monitor - separate package SyncMe-Monitor-Setup-<ver>.zip (same version as SyncMe).

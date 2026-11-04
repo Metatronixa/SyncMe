@@ -7,6 +7,10 @@ Config.ps1.bak-*
 Config/rclone.conf
 *.bak
 
+# Update signing private key (public key in Modules/UpdatePublicKey.xml is shipped)
+Tools/syncme-update-private.xml
+Tools/*-private.xml
+
 # Build output (track customer release folders only)
 dist/*
 !dist/SyncMe-Release-*/

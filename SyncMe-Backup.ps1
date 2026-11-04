@@ -35,6 +35,7 @@ $ErrorActionPreference = 'Stop'
 $ScriptRoot = $PSScriptRoot
 . (Join-Path $ScriptRoot 'Config.ps1')
 . (Join-Path $ScriptRoot 'Modules\Common.ps1')
+. (Join-Path $ScriptRoot 'Modules\Security.ps1')
 . (Join-Path $ScriptRoot 'Modules\Notify.ps1')
 . (Join-Path $ScriptRoot 'Modules\Restore.ps1')
 . (Join-Path $ScriptRoot 'Modules\Report.ps1')
@@ -381,38 +382,71 @@ function Enter-BackupRunLock {
     if ($dir -and -not (Test-Path -LiteralPath $dir)) {
         New-Item -ItemType Directory -Path $dir -Force | Out-Null
     }
-    if (Test-Path -LiteralPath $LockPath) {
-        $raw = Get-Content -LiteralPath $LockPath -ErrorAction SilentlyContinue
-        $oldPid = $null
-        $started = $null
-        foreach ($line in $raw) {
-            if ($line -match '^PID=(.+)$') { $oldPid = [int]$Matches[1] }
-            if ($line -match '^StartedUtc=(.+)$') {
-                try { $started = [datetime]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) } catch { }
-            }
-        }
-        $alive = $false
-        if ($oldPid) {
-            $alive = [bool](Get-Process -Id $oldPid -ErrorAction SilentlyContinue)
-        }
-        $stale = $false
-        if ($started) {
-            $stale = ((Get-Date).ToUniversalTime() - $started.ToUniversalTime()).TotalHours -gt $StaleHours
-        } elseif (-not $alive) {
-            $stale = $true
-        }
-        if ($alive -and -not $stale) {
-            return @{ Acquired = $false; Message = "Backup already running (PID $oldPid, started $started)." }
-        }
-        Write-Log "Removing stale lock (PID=$oldPid alive=$alive stale=$stale)" $LogPath 'WARN'
-        Remove-Item -LiteralPath $LockPath -Force -ErrorAction SilentlyContinue
-    }
-    @(
+
+    $payload = @(
         "PID=$PID"
         "StartedUtc=$((Get-Date).ToUniversalTime().ToString('o'))"
         "Computer=$env:COMPUTERNAME"
-    ) | Set-Content -LiteralPath $LockPath -Encoding UTF8
-    return @{ Acquired = $true; Message = "Lock acquired: $LockPath" }
+        "ProcessName=$((Get-Process -Id $PID).ProcessName)"
+    ) -join "`r`n"
+
+    function New-ExclusiveLockFile {
+        param([string]$Path, [string]$Content)
+        try {
+            $fs = [System.IO.File]::Open($Path, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+            try {
+                $bytes = [Text.Encoding]::UTF8.GetBytes($Content + "`r`n")
+                $fs.Write($bytes, 0, $bytes.Length)
+            } finally {
+                $fs.Dispose()
+            }
+            return $true
+        } catch [System.IO.IOException] {
+            return $false
+        }
+    }
+
+    if (New-ExclusiveLockFile -Path $LockPath -Content $payload) {
+        return @{ Acquired = $true; Message = "Lock acquired: $LockPath" }
+    }
+
+    # Existing lock: inspect ownership; never steal from a live SyncMe/PowerShell owner based on age alone.
+    $raw = Get-Content -LiteralPath $LockPath -ErrorAction SilentlyContinue
+    $oldPid = $null
+    $started = $null
+    $oldName = ''
+    foreach ($line in @($raw)) {
+        if ($line -match '^PID=(.+)$') {
+            try { $oldPid = [int]$Matches[1] } catch { $oldPid = $null }
+        }
+        if ($line -match '^StartedUtc=(.+)$') {
+            try { $started = [datetime]::Parse($Matches[1], [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind) } catch { }
+        }
+        if ($line -match '^ProcessName=(.+)$') { $oldName = [string]$Matches[1] }
+    }
+    $ownerProc = $null
+    if ($oldPid) {
+        $ownerProc = Get-Process -Id $oldPid -ErrorAction SilentlyContinue
+    }
+    if ($ownerProc) {
+        $nameOk = $true
+        if ($oldName -and $ownerProc.ProcessName -and ($ownerProc.ProcessName -ne $oldName)) {
+            $nameOk = $false
+        }
+        if ($nameOk) {
+            return @{ Acquired = $false; Message = "Backup already running (PID $oldPid, started $started)." }
+        }
+        Write-Log "Lock PID $oldPid alive but process name mismatch (expected '$oldName', got '$($ownerProc.ProcessName)'); treating as stale." $LogPath 'WARN'
+    } else {
+        $ageNote = if ($started) { " started $started" } else { '' }
+        Write-Log "Removing stale lock (PID=$oldPid dead$ageNote; StaleHours=$StaleHours unused for live steal)" $LogPath 'WARN'
+    }
+
+    Remove-Item -LiteralPath $LockPath -Force -ErrorAction SilentlyContinue
+    if (New-ExclusiveLockFile -Path $LockPath -Content $payload) {
+        return @{ Acquired = $true; Message = "Lock acquired after stale cleanup: $LockPath" }
+    }
+    return @{ Acquired = $false; Message = "Could not acquire backup lock (contended): $LockPath" }
 }
 
 function Exit-BackupRunLock {
@@ -1245,7 +1279,8 @@ function Recover-ResticBackupStats {
         try {
             $env:RESTIC_REPOSITORY = $Repo
             $env:RESTIC_PASSWORD = $Password
-            $snapJson = & $ResticExe snapshots --latest --json 2>$null | Out-String
+            # restic --latest requires a count (N); bare `--latest --json` treats --json as N and fails.
+            $snapJson = & $ResticExe snapshots --latest 1 --json 2>$null | Out-String
             $lec = Get-Variable -Name LASTEXITCODE -ErrorAction SilentlyContinue
             $code = if ($null -ne $lec -and $null -ne $lec.Value) { [int]$lec.Value } else { 1 }
             if ($code -eq 0 -and -not [string]::IsNullOrWhiteSpace($snapJson)) {
@@ -1253,10 +1288,10 @@ function Recover-ResticBackupStats {
                 $latest = @($snaps) | Select-Object -First 1
                 if ($latest -and $latest.short_id) {
                     $RunInfo.SnapshotId = [string]$latest.id
-                    try { Write-Log "Recovered snapshot id from restic snapshots --latest: $($RunInfo.SnapshotId)" $LogPath 'WARN' } catch { }
+                    try { Write-Log "Recovered snapshot id from restic snapshots --latest 1: $($RunInfo.SnapshotId)" $LogPath 'WARN' } catch { }
                 } elseif ($latest -and $latest.id) {
                     $RunInfo.SnapshotId = [string]$latest.id
-                    try { Write-Log "Recovered snapshot id from restic snapshots --latest: $($RunInfo.SnapshotId)" $LogPath 'WARN' } catch { }
+                    try { Write-Log "Recovered snapshot id from restic snapshots --latest 1: $($RunInfo.SnapshotId)" $LogPath 'WARN' } catch { }
                 }
             }
         } catch {

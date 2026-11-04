@@ -8,6 +8,93 @@ function Get-SyncMeDefaultUpdateFeedUrl {
     return 'https://www.syncme.co.za/updates/latest.json'
 }
 
+function Assert-SyncMeHttpsUrl {
+    param(
+        [Parameter(Mandatory)][string]$Url,
+        [string]$Label = 'URL',
+        [switch]$AllowLoopbackHttp
+    )
+    $u = $Url.Trim()
+    if ($u -match '^(?i)https://') { return $u }
+    if ($AllowLoopbackHttp -and $u -match '^(?i)http://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(/|$)') {
+        return $u
+    }
+    throw "$Label must use HTTPS (got: $u)."
+}
+
+function Get-SyncMeUpdateCanonicalPayload {
+    param(
+        [string]$Version,
+        [string]$File,
+        [string]$Sha256,
+        [string]$Url
+    )
+    $sha = ([string]$Sha256).Trim().ToLowerInvariant()
+    return ("{0}`n{1}`n{2}`n{3}" -f ([string]$Version).Trim(), ([string]$File).Trim(), $sha, ([string]$Url).Trim())
+}
+
+function Get-SyncMeUpdatePublicKeyXml {
+    param([string]$ScriptRoot)
+    $candidates = @(
+        (Join-Path $ScriptRoot 'Modules\UpdatePublicKey.xml')
+        (Join-Path $PSScriptRoot 'UpdatePublicKey.xml')
+    )
+    foreach ($p in $candidates) {
+        if ($p -and (Test-Path -LiteralPath $p)) {
+            return (Get-Content -LiteralPath $p -Raw -ErrorAction Stop).Trim()
+        }
+    }
+    throw 'Update public key missing (Modules\UpdatePublicKey.xml).'
+}
+
+function Test-SyncMeUpdateManifestSignature {
+    param(
+        [string]$ScriptRoot,
+        [string]$Version,
+        [string]$File,
+        [string]$Sha256,
+        [string]$Url,
+        [string]$SignatureBase64
+    )
+    if ([string]::IsNullOrWhiteSpace($SignatureBase64)) { return $false }
+    $xml = Get-SyncMeUpdatePublicKeyXml -ScriptRoot $ScriptRoot
+    $payload = Get-SyncMeUpdateCanonicalPayload -Version $Version -File $File -Sha256 $Sha256 -Url $Url
+    $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider
+    try {
+        $rsa.FromXmlString($xml)
+        $data = [Text.Encoding]::UTF8.GetBytes($payload)
+        $sig = [Convert]::FromBase64String($SignatureBase64.Trim())
+        $oid = [Security.Cryptography.CryptoConfig]::MapNameToOID('SHA256')
+        return [bool]$rsa.VerifyData($data, $oid, $sig)
+    } finally {
+        $rsa.PersistKeyInCsp = $false
+        $rsa.Dispose()
+    }
+}
+
+function New-SyncMeUpdateManifestSignature {
+    param(
+        [string]$PrivateKeyXmlPath,
+        [string]$Version,
+        [string]$File,
+        [string]$Sha256,
+        [string]$Url
+    )
+    $xml = (Get-Content -LiteralPath $PrivateKeyXmlPath -Raw -ErrorAction Stop).Trim()
+    $payload = Get-SyncMeUpdateCanonicalPayload -Version $Version -File $File -Sha256 $Sha256 -Url $Url
+    $rsa = New-Object System.Security.Cryptography.RSACryptoServiceProvider
+    try {
+        $rsa.FromXmlString($xml)
+        $data = [Text.Encoding]::UTF8.GetBytes($payload)
+        $oid = [Security.Cryptography.CryptoConfig]::MapNameToOID('SHA256')
+        $sig = $rsa.SignData($data, $oid)
+        return [Convert]::ToBase64String($sig)
+    } finally {
+        $rsa.PersistKeyInCsp = $false
+        $rsa.Dispose()
+    }
+}
+
 function Get-SyncMeOptionsPath {
     param([string]$ScriptRoot)
     return (Join-Path $ScriptRoot 'Config\SyncMeOptions.json')
@@ -87,6 +174,7 @@ function Save-SyncMeOptions {
         $feed = if (-not [string]::IsNullOrWhiteSpace($UpdateFeedUrl)) { $UpdateFeedUrl.Trim() } else { Get-SyncMeDefaultUpdateFeedUrl }
     }
     if ([string]::IsNullOrWhiteSpace($feed)) { $feed = Get-SyncMeDefaultUpdateFeedUrl }
+    $feed = Assert-SyncMeHttpsUrl -Url $feed -Label 'UpdateFeedUrl' -AllowLoopbackHttp
 
     $locEnabled = [bool]$current.LocalOpsEnabled
     if ($PSBoundParameters.ContainsKey('LocalOpsEnabled')) {
@@ -219,6 +307,7 @@ function Get-SyncMeUpdateInfo {
     $opts = Get-SyncMeOptions -ScriptRoot $ScriptRoot
     $feedUrl = [string]$opts.UpdateFeedUrl
     if ([string]::IsNullOrWhiteSpace($feedUrl)) { $feedUrl = Get-SyncMeDefaultUpdateFeedUrl }
+    $feedUrl = Assert-SyncMeHttpsUrl -Url $feedUrl -Label 'Update feed URL' -AllowLoopbackHttp
 
     try {
         [Net.ServicePointManager]::SecurityProtocol =
@@ -244,8 +333,8 @@ function Get-SyncMeUpdateInfo {
     }
 
     $sha = ([string]$manifest.sha256).Trim().ToLowerInvariant()
-    if ([string]::IsNullOrWhiteSpace($sha)) {
-        throw 'Update feed is missing sha256.'
+    if ([string]::IsNullOrWhiteSpace($sha) -or $sha -notmatch '^[a-f0-9]{64}$') {
+        throw 'Update feed is missing a valid sha256.'
     }
 
     $downloadUrl = [string]$manifest.url
@@ -258,6 +347,22 @@ function Get-SyncMeUpdateInfo {
         }
         $downloadUrl = $base.TrimEnd('/') + '/' + $fileName.TrimStart('/')
     }
+    $downloadUrl = Assert-SyncMeHttpsUrl -Url $downloadUrl -Label 'Update package URL' -AllowLoopbackHttp
+
+    $sig = ''
+    if ($manifest.PSObject.Properties['signature'] -and $manifest.signature) {
+        $sig = [string]$manifest.signature
+    }
+    $isOfficialHost = ($feedUrl -match '(?i)^https://([a-z0-9-]+\.)*syncme\.co\.za(/|$)')
+    $requireSig = $isOfficialHost -or (-not [string]::IsNullOrWhiteSpace($sig))
+    if ($requireSig) {
+        if ([string]::IsNullOrWhiteSpace($sig)) {
+            throw 'Update feed is missing signature (required for official SyncMe feeds).'
+        }
+        if (-not (Test-SyncMeUpdateManifestSignature -ScriptRoot $ScriptRoot -Version $remoteVer -File $fileName -Sha256 $sha -Url $downloadUrl -SignatureBase64 $sig)) {
+            throw 'Update feed signature verification failed. Refusing update.'
+        }
+    }
 
     $cmp = Compare-SyncMeVersion -Left $CurrentVersion -Right $remoteVer
     return @{
@@ -268,6 +373,8 @@ function Get-SyncMeUpdateInfo {
         File            = $fileName
         Url             = $downloadUrl
         Sha256          = $sha
+        Signature       = $sig
+        Signed          = (-not [string]::IsNullOrWhiteSpace($sig))
         Notes           = $(if ($manifest.notes) { [string]$manifest.notes } else { '' })
         FeedUrl         = $feedUrl
     }
@@ -293,6 +400,17 @@ function Start-SyncMeUpdateApply {
     }
     if ([string]::IsNullOrWhiteSpace([string]$UpdateInfo.Sha256)) {
         throw 'Update SHA-256 is missing.'
+    }
+    $null = Assert-SyncMeHttpsUrl -Url ([string]$UpdateInfo.Url) -Label 'Update package URL' -AllowLoopbackHttp
+    $isOfficial = ([string]$UpdateInfo.FeedUrl -match '(?i)^https://([a-z0-9-]+\.)*syncme\.co\.za(/|$)') -or
+        ([string]$UpdateInfo.Url -match '(?i)^https://([a-z0-9-]+\.)*syncme\.co\.za(/|$)')
+    if (($isOfficial -or $UpdateInfo.Signed) -and [string]::IsNullOrWhiteSpace([string]$UpdateInfo.Signature)) {
+        throw 'Refusing to install an unsigned official update package.'
+    }
+    if (-not [string]::IsNullOrWhiteSpace([string]$UpdateInfo.Signature)) {
+        if (-not (Test-SyncMeUpdateManifestSignature -ScriptRoot $ScriptRoot -Version ([string]$UpdateInfo.Version) -File ([string]$UpdateInfo.File) -Sha256 ([string]$UpdateInfo.Sha256) -Url ([string]$UpdateInfo.Url) -SignatureBase64 ([string]$UpdateInfo.Signature))) {
+            throw 'Update signature verification failed before download. Refusing update.'
+        }
     }
 
     try {
@@ -338,13 +456,44 @@ function Start-SyncMeUpdateApply {
 `$workRoot = '$workEsc'
 `$stamp = '$stamp'
 `$log = Join-Path `$install 'Logs\update-apply.log'
+`$statePath = Join-Path `$install 'Logs\update-state.json'
+`$merged = `$false
+`$prev = Join-Path `$install 'Logs\previous-release'
 
 function Write-UpdateLog([string]`$msg) {
     `$line = ('[{0}] {1}' -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), `$msg)
     try { Add-Content -LiteralPath `$log -Value `$line -Encoding UTF8 } catch { }
 }
+function Write-UpdateState([string]`$phase, [string]`$detail = '') {
+    `$obj = [ordered]@{
+        phase     = `$phase
+        detail    = `$detail
+        stamp     = `$stamp
+        updatedUtc = (Get-Date).ToUniversalTime().ToString('o')
+    }
+    try {
+        [IO.File]::WriteAllText(`$statePath, ((`$obj | ConvertTo-Json -Compress) + "`r`n"), (New-Object System.Text.UTF8Encoding `$false))
+    } catch { }
+}
+function Restore-PreviousReleaseTree {
+    param([string]`$PrevRoot, [string]`$InstallRoot)
+    if (-not (Test-Path -LiteralPath `$PrevRoot)) { return `$false }
+    foreach (`$rel in @('SyncMe-Host.ps1','SyncMe-Backup.ps1','SyncMe-Restore.ps1','VERSION.txt','Modules','ui','RescueKit')) {
+        `$from = Join-Path `$PrevRoot `$rel
+        `$to = Join-Path `$InstallRoot `$rel
+        if (-not (Test-Path -LiteralPath `$from)) { continue }
+        if (Test-Path -LiteralPath `$from -PathType Container) {
+            if (Test-Path -LiteralPath `$to) { Remove-Item -LiteralPath `$to -Recurse -Force }
+            Copy-Item -LiteralPath `$from -Destination `$to -Recurse -Force
+        } else {
+            Copy-Item -LiteralPath `$from -Destination `$to -Force
+        }
+    }
+    return `$true
+}
 
 try {
+    Write-UpdateState 'waiting-host'
     Write-UpdateLog 'Waiting for SyncMe host to exit...'
     for (`$i = 0; `$i -lt 60; `$i++) {
         `$alive = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
@@ -353,6 +502,17 @@ try {
         Start-Sleep -Seconds 1
     }
     Start-Sleep -Seconds 2
+
+    Write-UpdateState 'snapshot'
+    if (Test-Path -LiteralPath `$prev) { Remove-Item -LiteralPath `$prev -Recurse -Force -ErrorAction SilentlyContinue }
+    New-Item -ItemType Directory -Path `$prev -Force | Out-Null
+    foreach (`$rel in @('SyncMe-Host.ps1','SyncMe-Backup.ps1','SyncMe-Restore.ps1','VERSION.txt','Modules','ui','RescueKit')) {
+        `$from = Join-Path `$install `$rel
+        if (Test-Path -LiteralPath `$from) {
+            Copy-Item -LiteralPath `$from -Destination (Join-Path `$prev `$rel) -Recurse -Force
+        }
+    }
+    Write-UpdateLog ('Previous release snapshot at ' + `$prev)
 
     `$cfg = Join-Path `$install 'Config.ps1'
     `$bak = Join-Path `$install ("Config.ps1.bak-" + `$stamp)
@@ -364,6 +524,7 @@ try {
         Write-UpdateLog ("Backed up Config.ps1 to " + `$bak)
     }
 
+    Write-UpdateState 'stage-extract'
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     `$extract = Join-Path `$workRoot 'extracted'
     if (Test-Path -LiteralPath `$extract) { Remove-Item -LiteralPath `$extract -Recurse -Force }
@@ -379,21 +540,25 @@ try {
         [IO.Compression.ZipFile]::ExtractToDirectory(`$payload.FullName, `$payloadExtract)
         Write-UpdateLog 'Extracted SyncMe-Payload.zip from setup package.'
     } else {
-        # Flat tree zip fallback
         Get-ChildItem -LiteralPath `$extract -Force | ForEach-Object {
             Copy-Item -LiteralPath `$_.FullName -Destination (Join-Path `$payloadExtract `$_.Name) -Recurse -Force
         }
         Write-UpdateLog 'Extracted flat package tree.'
     }
 
-    `$mergePs1 = Join-Path `$payloadExtract 'Modules\InstallMerge.ps1'
-    if (-not (Test-Path -LiteralPath `$mergePs1)) {
-        throw 'Update package missing Modules\\InstallMerge.ps1'
+    foreach (`$req in @('SyncMe-Host.ps1','Modules\Update.ps1','Modules\InstallMerge.ps1','Modules\Security.ps1','ui\js\app.js','VERSION.txt')) {
+        if (-not (Test-Path -LiteralPath (Join-Path `$payloadExtract `$req))) {
+            throw ('Staged update missing required file: ' + `$req)
+        }
     }
+
+    `$mergePs1 = Join-Path `$payloadExtract 'Modules\InstallMerge.ps1'
     . `$mergePs1
+    Write-UpdateState 'merging'
     Copy-SyncMeTreeMerge -SourceRoot `$payloadExtract -DestRoot `$install -SkipNames @('Config.ps1')
+    `$merged = `$true
     Clear-SyncMeNestedInstallJunk -InstallRoot `$install
-    foreach (`$req in @('SyncMe-Host.ps1','Modules\Update.ps1','Modules\MonitorClient.ps1','Modules\InstallMerge.ps1','ui\js\app.js')) {
+    foreach (`$req in @('SyncMe-Host.ps1','Modules\Update.ps1','Modules\MonitorClient.ps1','Modules\InstallMerge.ps1','Modules\Security.ps1','Modules\Jobs.ps1','Modules\UpdatePublicKey.xml','ui\js\app.js')) {
         if (-not (Test-Path -LiteralPath (Join-Path `$install `$req))) {
             throw ('Update incomplete: missing ' + `$req)
         }
@@ -406,13 +571,55 @@ try {
         Write-UpdateLog 'Restored Config.ps1 from preserve copy.'
     }
 
-    Write-UpdateLog 'Update apply finished. Starting SyncMe...'
+    `$parseFail = `$false
+    foreach (`$check in @('SyncMe-Host.ps1','SyncMe-Backup.ps1','Modules\Security.ps1','Modules\Update.ps1','Modules\Jobs.ps1')) {
+        `$cf = Join-Path `$install `$check
+        if (-not (Test-Path -LiteralPath `$cf)) { continue }
+        `$errs = `$null
+        `$null = [System.Management.Automation.Language.Parser]::ParseFile(`$cf, [ref]`$null, [ref]`$errs)
+        if (`$errs -and `$errs.Count -gt 0) {
+            Write-UpdateLog ('Health FAIL parse ' + `$check + ': ' + `$errs[0].Message)
+            `$parseFail = `$true
+            break
+        }
+    }
+    if (`$parseFail) {
+        Write-UpdateState 'rollback' 'parse-health'
+        Write-UpdateLog 'Rolling back to previous-release snapshot...'
+        if (-not (Restore-PreviousReleaseTree -PrevRoot `$prev -InstallRoot `$install)) {
+            throw 'Update health check failed and previous-release snapshot was missing.'
+        }
+        Write-UpdateLog 'Rollback complete. Starting previous SyncMe...'
+        Write-UpdateState 'rolled-back' 'parse-health'
+        `$bat = Join-Path `$install 'SyncMe.bat'
+        if (Test-Path -LiteralPath `$bat) { Start-Process -FilePath `$bat }
+        throw 'Update health check failed; rolled back to previous release.'
+    }
+
+    Write-UpdateState 'complete'
+    Write-UpdateLog 'Update apply finished (health OK). Starting SyncMe...'
     `$bat = Join-Path `$install 'SyncMe.bat'
     if (Test-Path -LiteralPath `$bat) {
         Start-Process -FilePath `$bat
     }
 } catch {
     Write-UpdateLog ('ERROR: ' + `$_.Exception.Message)
+    if (`$merged) {
+        try {
+            Write-UpdateState 'rollback' `$_.Exception.Message
+            if (Restore-PreviousReleaseTree -PrevRoot `$prev -InstallRoot `$install) {
+                Write-UpdateLog 'Error after merge; restored previous-release snapshot.'
+                Write-UpdateState 'rolled-back' `$_.Exception.Message
+                `$bat = Join-Path `$install 'SyncMe.bat'
+                if (Test-Path -LiteralPath `$bat) { Start-Process -FilePath `$bat }
+            }
+        } catch {
+            Write-UpdateLog ('ROLLBACK ERROR: ' + `$_.Exception.Message)
+            Write-UpdateState 'rollback-failed' `$_.Exception.Message
+        }
+    } else {
+        Write-UpdateState 'failed' `$_.Exception.Message
+    }
 } finally {
     try { Remove-Item -LiteralPath `$workRoot -Recurse -Force -ErrorAction SilentlyContinue } catch { }
 }
@@ -427,8 +634,9 @@ try {
 
     return @{
         Ok      = $true
-        Message = "Update $($UpdateInfo.Version) downloaded and verified. SyncMe will restart to finish installing. Your Config.ps1 was backed up first."
+        Message = "Update $($UpdateInfo.Version) downloaded and verified (SHA-256$(if ($UpdateInfo.Signed) { ' + signature' } else { '' })). SyncMe will restart to finish installing. A previous-release snapshot is kept under Logs\previous-release for rollback; Config.ps1 is preserved."
         Version = $UpdateInfo.Version
         Backup  = ("Config.ps1.bak-" + $stamp)
+        Signed  = [bool]$UpdateInfo.Signed
     }
 }
